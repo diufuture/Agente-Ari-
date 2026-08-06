@@ -75,6 +75,15 @@ CREATE TABLE IF NOT EXISTS cobros (
   creado_en  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
+CREATE TABLE IF NOT EXISTS abonos (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  cotizacion_id INTEGER NOT NULL REFERENCES cotizaciones(id) ON DELETE CASCADE,
+  monto         REAL NOT NULL,
+  fecha         TEXT,                        -- 'YYYY-MM-DD'
+  nota          TEXT,
+  creado_en     TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
 CREATE TABLE IF NOT EXISTS notas (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
@@ -86,6 +95,7 @@ CREATE INDEX IF NOT EXISTS idx_citas_inicio  ON citas(inicio);
 CREATE INDEX IF NOT EXISTS idx_rec_vence     ON recordatorios(vence_en);
 CREATE INDEX IF NOT EXISTS idx_cot_cliente   ON cotizaciones(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_cob_cliente   ON cobros(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_abo_cot       ON abonos(cotizacion_id);
 `);
 
 /* ------------------------------------------------------------------ */
@@ -101,6 +111,7 @@ export const ENTIDADES = {
   cotizaciones: { tabla: 'cotizaciones', orden: 't.id DESC' },
   cobros: { tabla: 'cobros', orden: "COALESCE(t.vence_en,'9999') ASC" },
   notas: { tabla: 'notas', orden: 't.id DESC' },
+  abonos: { tabla: 'abonos', orden: "COALESCE(t.fecha, t.creado_en) DESC" },
 };
 
 const all = (sql, params = []) => db.prepare(sql).all(...params);
@@ -110,8 +121,27 @@ const run = (sql, params = []) => db.prepare(sql).run(...params);
 export const hoy = () => new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
 
 /** Une el nombre del cliente a cualquier fila que tenga cliente_id. */
+const SUMA_ABONOS = "COALESCE((SELECT SUM(a.monto) FROM abonos a WHERE a.cotizacion_id = t.id), 0)";
+
 function selectConCliente(tabla) {
   if (tabla === 'clientes') return 'SELECT * FROM clientes';
+
+  // Una cotización siempre se lee con lo abonado y lo que falta.
+  if (tabla === 'cotizaciones') {
+    return `SELECT t.*, c.nombre AS cliente,
+                   ${SUMA_ABONOS} AS abonado,
+                   t.monto - ${SUMA_ABONOS} AS saldo
+            FROM cotizaciones t LEFT JOIN clientes c ON c.id = t.cliente_id`;
+  }
+
+  // Un abono cuelga de la cotización, y el cliente se hereda de ella.
+  if (tabla === 'abonos') {
+    return `SELECT t.*, q.titulo AS cotizacion, q.moneda AS moneda, c.nombre AS cliente
+            FROM abonos t
+            LEFT JOIN cotizaciones q ON q.id = t.cotizacion_id
+            LEFT JOIN clientes c ON c.id = q.cliente_id`;
+  }
+
   return `SELECT t.*, c.nombre AS cliente
           FROM ${tabla} t LEFT JOIN clientes c ON c.id = t.cliente_id`;
 }
@@ -184,6 +214,52 @@ export function resolverCliente(texto, { crearSiNoExiste = false } = {}) {
   return { error: `No existe ningún cliente llamado "${q}".`, sugerencias: [] };
 }
 
+/**
+ * Encuentra una cotización a partir de un id, o de un texto y opcionalmente un
+ * cliente ("la del sistema POS"). Devuelve { id } o { error, sugerencias }.
+ */
+export function resolverCotizacion(texto, clienteId = null) {
+  const cond = clienteId ? 'AND t.cliente_id = ?' : '';
+  const extra = clienteId ? [clienteId] : [];
+
+  if (typeof texto === 'number' || /^\d+$/.test(String(texto ?? '').trim())) {
+    const c = one(`${selectConCliente('cotizaciones')} WHERE t.id = ?`, [Number(texto)]);
+    if (c) return { id: c.id, cotizacion: c };
+  }
+
+  const q = String(texto ?? '').trim();
+
+  // Sin texto pero con cliente: si tiene una sola cotización abierta, es esa.
+  if (!q && clienteId) {
+    const abiertas = all(
+      `${selectConCliente('cotizaciones')} WHERE t.cliente_id = ? AND t.monto > ${SUMA_ABONOS}`,
+      [clienteId],
+    );
+    if (abiertas.length === 1) return { id: abiertas[0].id, cotizacion: abiertas[0] };
+    if (abiertas.length > 1) {
+      return {
+        error: 'Ese cliente tiene varias cotizaciones con saldo.',
+        sugerencias: abiertas.map((c) => `#${c.id} ${c.titulo}`),
+      };
+    }
+    return { error: 'Ese cliente no tiene cotizaciones con saldo pendiente.', sugerencias: [] };
+  }
+
+  const parecidas = all(
+    `${selectConCliente('cotizaciones')} WHERE t.titulo LIKE ? COLLATE NOCASE ${cond}
+     ORDER BY t.id DESC LIMIT 5`,
+    [`%${q}%`, ...extra],
+  );
+  if (parecidas.length === 1) return { id: parecidas[0].id, cotizacion: parecidas[0] };
+  if (parecidas.length > 1) {
+    return {
+      error: `Hay varias cotizaciones que coinciden con "${q}".`,
+      sugerencias: parecidas.map((c) => `#${c.id} ${c.titulo} (${c.cliente ?? 'sin cliente'})`),
+    };
+  }
+  return { error: `No encontré ninguna cotización que coincida con "${q}".`, sugerencias: [] };
+}
+
 /* ------------------------------------------------------------------ */
 /* Inserciones genéricas                                               */
 /* ------------------------------------------------------------------ */
@@ -234,8 +310,14 @@ export function consultar(entidad, filtros = {}) {
   const params = [];
 
   if (filtros.cliente_id) {
-    where.push(entidad === 'clientes' ? 'id = ?' : `${t}cliente_id = ?`);
+    if (entidad === 'clientes') where.push('id = ?');
+    else if (entidad === 'abonos') where.push('q.cliente_id = ?');
+    else where.push(`${t}cliente_id = ?`);
     params.push(filtros.cliente_id);
+  }
+  if (filtros.cotizacion_id) {
+    where.push(`${t}cotizacion_id = ?`);
+    params.push(filtros.cotizacion_id);
   }
 
   if (filtros.estado && entidad !== 'clientes' && entidad !== 'notas') {
@@ -251,13 +333,14 @@ export function consultar(entidad, filtros = {}) {
       cotizaciones: ['titulo', 'descripcion'],
       cobros: ['concepto'],
       notas: ['texto'],
+      abonos: ['nota'],
     }[entidad];
     where.push(`(${campos.map((c) => `${t}${c} LIKE ? COLLATE NOCASE`).join(' OR ')})`);
     campos.forEach(() => params.push(`%${filtros.texto}%`));
   }
 
   // Campo de fecha relevante por entidad
-  const campoFecha = { citas: 'inicio', recordatorios: 'vence_en', cobros: 'vence_en', cotizaciones: 'vence_en' }[entidad];
+  const campoFecha = { citas: 'inicio', recordatorios: 'vence_en', cobros: 'vence_en', cotizaciones: 'vence_en', abonos: 'fecha' }[entidad];
 
   if (campoFecha) {
     const d = hoy();
@@ -321,6 +404,12 @@ export function resumen() {
       porCobrar: one(
         "SELECT COALESCE(SUM(monto),0) n FROM cobros WHERE estado='pendiente'",
       ).n,
+      // Lo que falta por recibir de las cotizaciones que no fueron rechazadas
+      saldoCotizado: one(`
+        SELECT COALESCE(SUM(saldo), 0) n FROM (
+          SELECT t.monto - ${SUMA_ABONOS} AS saldo
+          FROM cotizaciones t WHERE t.estado <> 'rechazada'
+        ) WHERE saldo > 0`).n,
     },
   };
 }

@@ -154,6 +154,11 @@ async function api(req, res, url) {
   if (ENTIDADES_VALIDAS.has(recurso)) {
     const tabla = db.ENTIDADES[recurso].tabla;
 
+    if (req.method === 'GET' && id) {
+      const fila = db.obtenerPorId(tabla, Number(id));
+      return fila ? json(res, 200, fila) : json(res, 404, { error: 'No encontrado' });
+    }
+
     if (req.method === 'GET') {
       const f = Object.fromEntries(url.searchParams);
       if (f.cliente) {
@@ -232,7 +237,16 @@ async function estatico(req, res, url) {
     });
     res.end(contenido);
   } catch {
-    // SPA: cualquier ruta desconocida devuelve el index (o el acceso)
+    // Un archivo con extensión que no existe es un 404 de verdad; así el
+    // navegador puede reaccionar (por ejemplo, buscar el logo de respaldo).
+    const ext = extname(destino);
+    if (ext && ext !== '.html') {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('No encontrado');
+      return;
+    }
+
+    // SPA: cualquier otra ruta desconocida devuelve el index (o el acceso)
     try {
       const respaldo = auth.sesionValida(req) ? 'index.html' : 'login.html';
       const html = await readFile(join(PUBLICO, respaldo));

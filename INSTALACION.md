@@ -167,6 +167,16 @@ Ferretería El Tornillo, teléfono 3105554433»*.
 
 ---
 
+## Poner tu logo
+
+Copiá el archivo de tu logo dentro de la carpeta `public` del proyecto, con el
+nombre **`logo.png`**. La aplicación lo toma sola la próxima vez que la abras:
+aparece en la barra lateral y en la pantalla de acceso.
+
+Si no ponés ninguno, se usa una versión dibujada con los colores de la marca.
+
+---
+
 ## Uso de todos los días
 
 Ya no tenés que repetir la instalación. Cada vez que quieras usarla:

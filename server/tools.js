@@ -162,6 +162,26 @@ export const HERRAMIENTAS = [
     },
   },
   {
+    name: 'registrar_abono',
+    description:
+      'Registra un abono o pago parcial que un cliente hace sobre una cotización. Úsala para "me abonó", "me dio un adelanto sobre", "pagó una parte de". Descuenta del saldo de la cotización.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cliente: clienteProp,
+        cotizacion: {
+          type: 'string',
+          description:
+            'Cotización sobre la que abona: su número, o parte del título. Si el cliente tiene una sola con saldo, puedes omitirlo.',
+        },
+        monto: { type: 'number', description: 'Cuánto abonó.' },
+        fecha: { type: 'string', description: 'Cuándo, en formato YYYY-MM-DD. Si no lo dicen, hoy.' },
+        nota: { type: 'string', description: 'Detalle: medio de pago, referencia, etc.' },
+      },
+      required: ['cliente', 'monto'],
+    },
+  },
+  {
     name: 'agregar_nota',
     description:
       'Guarda una nota libre asociada a un cliente. Úsala cuando el usuario cuente algo del cliente que no es cita, cobro ni cotización.',
@@ -180,7 +200,7 @@ export const HERRAMIENTAS = [
       properties: {
         entidad: {
           type: 'string',
-          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas'],
+          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos'],
         },
         cliente: clienteProp,
         estado: {
@@ -221,7 +241,7 @@ export const HERRAMIENTAS = [
       properties: {
         entidad: {
           type: 'string',
-          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas'],
+          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos'],
         },
         id: { type: 'integer' },
       },
@@ -238,9 +258,10 @@ const COLUMNAS = {
   clientes: ['nombre', 'empresa', 'telefono', 'email'],
   citas: ['inicio', 'titulo', 'cliente', 'lugar', 'estado'],
   recordatorios: ['vence_en', 'texto', 'cliente', 'prioridad', 'estado'],
-  cotizaciones: ['creado_en', 'titulo', 'cliente', 'monto', 'estado'],
+  cotizaciones: ['creado_en', 'titulo', 'cliente', 'monto', 'abonado', 'saldo', 'estado'],
   cobros: ['vence_en', 'concepto', 'cliente', 'monto', 'estado'],
   notas: ['creado_en', 'texto', 'cliente'],
+  abonos: ['fecha', 'cotizacion', 'cliente', 'monto', 'nota'],
 };
 
 const vistaDe = (entidad, titulo, filas) => ({
@@ -323,7 +344,7 @@ export function ejecutar(nombre, args) {
         vence_en: normalizarFecha(args.vence_en),
       });
       return {
-        resumen: `Cotización creada. id=${c.id}, ${c.titulo}, ${dinero(c.monto, c.moneda)}, cliente=${c.cliente}`,
+        resumen: `Cotización creada. id=${c.id}, ${c.titulo}, ${dinero(c.monto, c.moneda)}, cliente=${c.cliente}. Saldo ${dinero(c.saldo ?? c.monto, c.moneda)}.`,
         vista: vistaDe('cotizaciones', 'Cotización creada', [c]),
         cambio: true,
       };
@@ -341,6 +362,35 @@ export function ejecutar(nombre, args) {
       return {
         resumen: `Cobro registrado. id=${c.id}, ${dinero(c.monto, c.moneda)}, cliente=${c.cliente}`,
         vista: vistaDe('cobros', 'Cobro registrado', [c]),
+        cambio: true,
+      };
+    }
+
+    case 'registrar_abono': {
+      const { id: cliente_id } = exigirCliente(args.cliente);
+      const r = db.resolverCotizacion(args.cotizacion ?? '', cliente_id);
+      if (r.error) {
+        const sug = r.sugerencias?.length ? ` Opciones: ${r.sugerencias.join(', ')}.` : '';
+        throw new Error(`${r.error}${sug}`);
+      }
+      if (!(Number(args.monto) > 0)) throw new Error('El abono tiene que ser un monto mayor que cero.');
+
+      db.insertar('abonos', {
+        cotizacion_id: r.id,
+        monto: args.monto,
+        fecha: normalizarFecha(args.fecha) ?? db.hoy(),
+        nota: args.nota ?? null,
+      });
+
+      // Se relee la cotización para informar el saldo ya actualizado.
+      const cot = db.obtenerPorId('cotizaciones', r.id);
+      const abonos = db.consultar('abonos', { cotizacion_id: r.id });
+      return {
+        resumen:
+          `Abono de ${dinero(args.monto, cot.moneda)} registrado en la cotización #${cot.id} "${cot.titulo}". ` +
+          `Abonado ${dinero(cot.abonado, cot.moneda)} de ${dinero(cot.monto, cot.moneda)}, ` +
+          (cot.saldo > 0 ? `saldo ${dinero(cot.saldo, cot.moneda)}.` : 'queda saldada.'),
+        vista: vistaDe('abonos', `Abonos de "${cot.titulo}" · saldo ${dinero(cot.saldo, cot.moneda)}`, abonos),
         cambio: true,
       };
     }
@@ -375,9 +425,13 @@ export function ejecutar(nombre, args) {
       // Sólo un resumen numérico + las 5 primeras filas abreviadas viajan al
       // modelo. El resto se renderiza en el dashboard sin costo de tokens.
       const muestra = filas.slice(0, 5).map((f) => resumirFila(args.entidad, f)).join(' | ');
-      const total = args.entidad === 'cobros'
-        ? ` Total: ${dinero(filas.reduce((s, f) => s + (f.monto || 0), 0))}.`
-        : '';
+      const suma = (campo) => filas.reduce((s, f) => s + (Number(f[campo]) || 0), 0);
+      const total =
+        args.entidad === 'cobros' || args.entidad === 'abonos'
+          ? ` Total: ${dinero(suma('monto'))}.`
+          : args.entidad === 'cotizaciones'
+            ? ` Cotizado ${dinero(suma('monto'))}, abonado ${dinero(suma('abonado'))}, saldo ${dinero(suma('saldo'))}.`
+            : '';
       return {
         resumen: `${filas.length} resultado(s).${total}${muestra ? ` Muestra: ${muestra}` : ''}`,
         vista: vistaDe(args.entidad, tituloConsulta(args, filas.length), filas),
@@ -414,7 +468,10 @@ function resumirFila(entidad, f) {
     case 'recordatorios':
       return `#${f.id} ${f.vence_en ?? 's/f'} ${f.texto}`;
     case 'cotizaciones':
-      return `#${f.id} ${f.titulo} ${dinero(f.monto, f.moneda)}`;
+      return `#${f.id} ${f.titulo} ${dinero(f.monto, f.moneda)}` +
+        (f.saldo !== undefined ? ` (saldo ${dinero(f.saldo, f.moneda)})` : '');
+    case 'abonos':
+      return `#${f.id} ${f.fecha ?? ''} ${dinero(f.monto, f.moneda)} sobre "${f.cotizacion ?? ''}"`;
     case 'cobros':
       return `#${f.id} ${f.cliente ?? ''} ${dinero(f.monto, f.moneda)}`;
     default:

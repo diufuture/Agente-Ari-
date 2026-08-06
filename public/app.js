@@ -10,6 +10,7 @@ const estado = {
   historial: [],       // últimos turnos de conversación (texto plano)
   resumen: null,
   vistaAsistente: null, // resultado de la última consulta por voz
+  cotizacionAbierta: null, // id de la cotización cuyo detalle se está viendo
 };
 
 /* ─────────── Formateo ─────────── */
@@ -79,6 +80,7 @@ const ENCABEZADOS = {
   inicio: 'Cuándo', titulo: 'Asunto', cliente: 'Cliente', lugar: 'Lugar',
   estado: 'Estado', vence_en: 'Vence', texto: 'Detalle', prioridad: 'Prioridad',
   creado_en: 'Fecha', monto: 'Valor', concepto: 'Concepto', direccion: 'Dirección',
+  abonado: 'Abonado', saldo: 'Saldo', cotizacion: 'Cotización', nota: 'Nota', fecha: 'Fecha',
 };
 
 /** Cómo se pinta cada columna. */
@@ -93,7 +95,15 @@ function celda(columna, fila) {
       return `<span style="${rojo ? 'color:var(--alerta);font-weight:600' : ''}">${escapar(texto)}</span>`;
     }
     case 'monto':
+    case 'abonado':
       return fmtDinero(v, fila.moneda);
+    case 'saldo': {
+      const saldado = Number(v) <= 0;
+      return `<span style="color:${saldado ? 'var(--verde)' : 'var(--ambar)'};font-weight:600">${
+        saldado ? 'saldada' : fmtDinero(v, fila.moneda)}</span>`;
+    }
+    case 'fecha':
+      return escapar(fmtFecha(v));
     case 'estado':
     case 'prioridad':
       return `<span class="pastilla ${escapar(v)}">${escapar(v)}</span>`;
@@ -136,6 +146,9 @@ function tabla(entidad, columnas, filas, { vacio } = {}) {
 
     const listo = accionable && f.estado !== 'pendiente' && f.estado !== 'enviada';
     const acciones = `<td class="num acciones"><div class="acciones-fila">
+      ${entidad === 'cotizaciones'
+        ? `<button class="mini destacado" data-accion="abrir-cotizacion" data-id="${f.id}">Abonos</button>`
+        : ''}
       ${accionable && !listo
         ? `<button class="mini" data-accion="estado" data-entidad="${entidad}" data-id="${f.id}" data-estado="${NUEVO_ESTADO[entidad]}">${
             entidad === 'cobros' ? 'Pagado' : 'Listo'}</button>`
@@ -178,11 +191,84 @@ function lineaTiempo(citas) {
     </div>`).join('')}</div></div>`;
 }
 
+/** Ficha de una cotización: lo cotizado, lo abonado, lo que falta y sus abonos. */
+function detalleCotizacion(cot, abonos) {
+  const saldado = Number(cot.saldo) <= 0;
+
+  const filas = abonos.length
+    ? abonos.map((a) => `
+        <div class="abono">
+          <div class="abono-fecha">${escapar(fmtFecha(a.fecha || a.creado_en))}</div>
+          <div class="abono-nota">${escapar(a.nota || 'Abono')}</div>
+          <div class="abono-monto">${fmtDinero(a.monto, cot.moneda)}</div>
+          <button class="mini peligro" data-accion="borrar-abono" data-id="${a.id}">Quitar</button>
+        </div>`).join('')
+    : '<div class="vacio"><strong>Sin abonos todavía</strong>Registrá el primero acá abajo o pedíselo a Ari.</div>';
+
+  return `
+    <button class="volver" data-accion="cerrar-cotizacion">← Cotizaciones</button>
+
+    <div class="tarjeta ficha">
+      <div class="ficha-cabecera">
+        <div>
+          <h2>${escapar(cot.titulo)}</h2>
+          <p>${escapar(cot.cliente || 'Sin cliente')} · creada ${escapar(fmtFecha(String(cot.creado_en || '').slice(0, 10)))}</p>
+        </div>
+        <span class="pastilla ${escapar(cot.estado)}">${escapar(cot.estado)}</span>
+      </div>
+
+      <div class="ficha-cifras">
+        <div><span>Cotizado</span><strong>${fmtDinero(cot.monto, cot.moneda)}</strong></div>
+        <div><span>Abonado</span><strong class="ok">${fmtDinero(cot.abonado, cot.moneda)}</strong></div>
+        <div><span>Saldo</span><strong class="${saldado ? 'ok' : 'pend'}">${
+          saldado ? 'Saldada' : fmtDinero(cot.saldo, cot.moneda)}</strong></div>
+      </div>
+
+      <div class="barra-saldo" title="${Math.round((cot.abonado / (cot.monto || 1)) * 100)}% abonado">
+        <span style="width:${Math.min(100, Math.round((cot.abonado / (cot.monto || 1)) * 100))}%"></span>
+      </div>
+
+      ${cot.descripcion ? `<p class="ficha-desc">${escapar(cot.descripcion)}</p>` : ''}
+    </div>
+
+    ${bloque('Abonos', `<div class="tarjeta"><div class="lista-abonos">${filas}</div></div>`)}
+
+    ${bloque('Registrar un abono', `
+      <div class="tarjeta">
+        <form class="form-abono" id="form-abono">
+          <label><span>Monto</span>
+            <input name="monto" type="number" min="1" step="1" required placeholder="500000" /></label>
+          <label><span>Fecha</span>
+            <input name="fecha" type="date" value="${new Date().toLocaleDateString('sv-SE')}" /></label>
+          <label class="ancho"><span>Nota</span>
+            <input name="nota" type="text" placeholder="Transferencia, efectivo, referencia…" /></label>
+          <button type="submit">Registrar abono</button>
+        </form>
+      </div>`)}
+  `;
+}
+
 /* ─────────── Vistas ─────────── */
 
 async function pintar() {
   const contenedor = $('#contenido');
   const v = estado.vista;
+
+  // Ficha de una cotización (tiene prioridad sobre todo lo demás)
+  if (estado.cotizacionAbierta) {
+    contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
+    try {
+      const [cot, { filas }] = await Promise.all([
+        api(`/cotizaciones/${estado.cotizacionAbierta}`),
+        api(`/abonos?cotizacion_id=${estado.cotizacionAbierta}`),
+      ]);
+      $('#titulo-vista').textContent = 'Cotización';
+      contenedor.innerHTML = detalleCotizacion(cot, filas);
+    } catch (e) {
+      contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
+    }
+    return;
+  }
 
   $('#titulo-vista').textContent = estado.vistaAsistente?.titulo || TITULOS[v] || v;
 
@@ -204,6 +290,7 @@ async function pintar() {
       ${metrica(c.cotizaciones, 'Cotizaciones')}
       ${metrica(c.clientes, 'Clientes')}
       ${metrica(fmtDinero(c.porCobrar), 'Por cobrar', 'dinero')}
+      ${metrica(fmtDinero(c.saldoCotizado), 'Saldo cotizado', 'dinero')}
     </div>`;
 
     contenedor.innerHTML = metricas
@@ -223,7 +310,7 @@ async function pintar() {
   const CONSULTAS = {
     agenda: { entidad: 'citas', filtros: 'rango=proximos', columnas: ['inicio', 'titulo', 'cliente', 'lugar', 'estado'] },
     clientes: { entidad: 'clientes', filtros: '', columnas: ['nombre', 'empresa', 'telefono', 'email'] },
-    cotizaciones: { entidad: 'cotizaciones', filtros: '', columnas: ['creado_en', 'titulo', 'cliente', 'monto', 'estado'] },
+    cotizaciones: { entidad: 'cotizaciones', filtros: '', columnas: ['creado_en', 'titulo', 'cliente', 'monto', 'abonado', 'saldo', 'estado'] },
     cobros: { entidad: 'cobros', filtros: '', columnas: ['vence_en', 'concepto', 'cliente', 'monto', 'estado'] },
     recordatorios: { entidad: 'recordatorios', filtros: '', columnas: ['vence_en', 'texto', 'cliente', 'prioridad', 'estado'] },
   }[v];
@@ -488,6 +575,7 @@ $('#nav').addEventListener('click', (e) => {
   boton.classList.add('activo');
   estado.vista = boton.dataset.vista;
   estado.vistaAsistente = null;
+  estado.cotizacionAbierta = null;
   cerrarHoja();
   pintar();
   $('#contenido').scrollTop = 0;
@@ -498,7 +586,30 @@ $('#contenido').addEventListener('click', async (e) => {
   if (!boton) return;
   const { accion, entidad, id } = boton.dataset;
 
+  if (accion === 'abrir-cotizacion') {
+    estado.cotizacionAbierta = Number(id);
+    estado.vistaAsistente = null;
+    await pintar();
+    $('#contenido').scrollTop = 0;
+    return;
+  }
+  if (accion === 'cerrar-cotizacion') {
+    estado.cotizacionAbierta = null;
+    estado.vista = 'cotizaciones';
+    $$('.nav-item').forEach((b) => b.classList.toggle('activo', b.dataset.vista === 'cotizaciones'));
+    await pintar();
+    return;
+  }
+
   try {
+    if (accion === 'borrar-abono') {
+      if (!confirm('¿Quitar este abono?')) return;
+      await api(`/abonos/${id}`, { method: 'DELETE' });
+      avisar('Abono eliminado');
+      await refrescarResumen();
+      await pintar();
+      return;
+    }
     if (accion === 'estado') {
       await api(`/${entidad}/${id}`, { method: 'PATCH', body: { estado: boton.dataset.estado } });
       avisar('Actualizado ✓');
@@ -510,6 +621,31 @@ $('#contenido').addEventListener('click', async (e) => {
     // Si estábamos viendo un resultado de Ari, lo recargamos desde cero.
     estado.vistaAsistente = null;
     await refrescarTodo();
+  } catch (err) {
+    avisar(err.message, true);
+  }
+});
+
+$('#contenido').addEventListener('submit', async (e) => {
+  if (e.target.id !== 'form-abono') return;
+  e.preventDefault();
+  const d = Object.fromEntries(new FormData(e.target));
+  const monto = Number(d.monto);
+  if (!(monto > 0)) return avisar('El abono tiene que ser mayor que cero.', true);
+
+  try {
+    await api('/abonos', {
+      method: 'POST',
+      body: {
+        cotizacion_id: estado.cotizacionAbierta,
+        monto,
+        fecha: d.fecha || undefined,
+        nota: d.nota || undefined,
+      },
+    });
+    avisar('Abono registrado ✓');
+    await refrescarResumen();
+    await pintar();
   } catch (err) {
     avisar(err.message, true);
   }

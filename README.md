@@ -68,6 +68,7 @@ sin barra del navegador.
 | «agendame / tengo una reunión / visita el jueves» | Crea la cita con fecha, hora, lugar y cliente |
 | «recordame / no se me olvide…» | Crea un pendiente con fecha y prioridad |
 | «hacele una cotización a…» | Registra la cotización con valor y estado |
+| «me abonó / me dio un adelanto sobre…» | Registra el abono y descuenta del saldo de la cotización |
 | «me quedó de dar / me debe…» | Registra el cobro con vencimiento |
 | «mostrame / cuáles / cuánto…» | Consulta y **pinta el resultado en el dashboard** |
 | «ya me pagó / ya quedó lista» | Cambia el estado del registro |
@@ -141,7 +142,33 @@ Anthropic. SQLite viene incluido en Node 22.
 | `PATCH` | `/api/:entidad/:id` | Edita |
 | `DELETE` | `/api/:entidad/:id` | Borra |
 
-Entidades: `clientes`, `citas`, `recordatorios`, `cotizaciones`, `cobros`, `notas`.
+Entidades: `clientes`, `citas`, `recordatorios`, `cotizaciones`, `cobros`,
+`notas`, `abonos`.
+
+## Cotizaciones y abonos
+
+Cada cotización lleva su propio control de pagos parciales. Al consultarla, el
+servidor devuelve tres cifras calculadas sobre la marcha:
+
+| Campo | Qué es |
+|---|---|
+| `monto` | Lo cotizado |
+| `abonado` | La suma de sus abonos |
+| `saldo` | Lo que falta por recibir |
+
+Los abonos se registran por voz («la panadería me abonó 500 mil sobre la
+cotización del POS») o desde la ficha de la cotización, que los lista con fecha,
+nota y monto, y muestra una barra de avance. Si el cliente tiene una sola
+cotización con saldo, Ari sabe a cuál aplicar el abono sin que se lo digas.
+
+Borrar una cotización borra sus abonos; el saldo nunca queda desincronizado
+porque no se guarda: se calcula al leer.
+
+## Logo
+
+Si colocás tu logo en `public/logo.png` (o `logo.svg`), la barra lateral y la
+pantalla de acceso lo usan automáticamente. Si no hay archivo, se dibuja una
+versión de respaldo con los colores de la marca.
 
 ---
 
