@@ -129,11 +129,13 @@ function tabla(entidad, columnas, filas, { vacio } = {}) {
   const cuerpo = filas.map((f) => {
     const celdas = columnas.map((c, i) => {
       const clases = [c === 'monto' ? 'num' : '', i === 1 || (entidad === 'clientes' && i === 0) ? 'principal-col' : ''].filter(Boolean).join(' ');
-      return `<td${clases ? ` class="${clases}"` : ''}>${celda(c, f)}</td>`;
+      // data-rotulo alimenta el ::before que muestra el nombre de la columna
+      // cuando la tabla se apila como ficha en pantallas angostas.
+      return `<td${clases ? ` class="${clases}"` : ''} data-rotulo="${ENCABEZADOS[c] || c}">${celda(c, f)}</td>`;
     }).join('');
 
     const listo = accionable && f.estado !== 'pendiente' && f.estado !== 'enviada';
-    const acciones = `<td class="num"><div class="acciones-fila">
+    const acciones = `<td class="num acciones"><div class="acciones-fila">
       ${accionable && !listo
         ? `<button class="mini" data-accion="estado" data-entidad="${entidad}" data-id="${f.id}" data-estado="${NUEVO_ESTADO[entidad]}">${
             entidad === 'cobros' ? 'Pagado' : 'Listo'}</button>`
@@ -268,6 +270,29 @@ async function refrescarTodo() {
    Conversación con Ari
    ══════════════════════════════════════════════════════════════════ */
 
+/* ─────────── Hoja deslizante de conversación (celular) ─────────── */
+
+const esCelular = () => window.matchMedia('(max-width: 900px)').matches;
+
+function abrirHoja({ enfocarTexto = false } = {}) {
+  if (!esCelular()) {
+    if (enfocarTexto) $('#texto').focus();
+    return;
+  }
+  $('.voz').classList.add('abierta');
+  $('#telon').classList.add('visible');
+  $('.fabs').classList.add('oculto');
+  if (enfocarTexto) setTimeout(() => $('#texto').focus(), 280);
+  requestAnimationFrame(() => { $('#conversacion').scrollTop = $('#conversacion').scrollHeight; });
+}
+
+function cerrarHoja() {
+  $('.voz').classList.remove('abierta');
+  $('#telon').classList.remove('visible');
+  $('.fabs').classList.remove('oculto');
+  $('#texto').blur();
+}
+
 function burbuja(clase, html) {
   const div = document.createElement('div');
   div.className = `burbuja ${clase}`;
@@ -282,6 +307,7 @@ async function enviar(texto) {
   if (!texto) return;
 
   $('#texto').value = '';
+  abrirHoja();
   burbuja('yo', escapar(texto));
 
   const cargando = burbuja('ari', '<div class="pensando"><i></i><i></i><i></i></div>');
@@ -312,6 +338,10 @@ async function enviar(texto) {
     await pintar();
 
     hablar(r.respuesta);
+
+    // Si pediste ver algo, en celular la hoja se aparta para dejar el
+    // resultado a la vista; la respuesta queda en la conversación.
+    if (r.vista && esCelular()) setTimeout(cerrarHoja, 1500);
   } catch (e) {
     cargando.className = 'burbuja ari error';
     cargando.innerHTML = escapar(e.message);
@@ -347,13 +377,23 @@ function hablar(texto) {
 /* ─────────── Voz a texto ─────────── */
 
 const Reconocimiento = window.SpeechRecognition || window.webkitSpeechRecognition;
+// En pantallas táctiles no hay barra espaciadora que mencionar.
+const PISTA_INICIAL = window.matchMedia('(pointer: coarse)').matches
+  ? 'Tocá el micrófono para hablarle a Ari.'
+  : 'Tocá el micrófono (o la barra espaciadora) para hablar.';
 let reconocedor = null;
 let escuchando = false;
+
+/** El micrófono existe dos veces: en el panel (escritorio) y flotante (celular). */
+const marcarGrabando = (activo) =>
+  ['#mic', '#fab-mic'].forEach((s) => $(s).classList.toggle('grabando', activo));
 
 function iniciarVoz() {
   if (!Reconocimiento) {
     $('#mic').disabled = true;
-    $('#pista').textContent = 'Tu navegador no soporta dictado por voz. Usá Chrome o Edge, o escribí abajo.';
+    $('#fab-mic').disabled = true;
+    $('#fab-mic').style.opacity = '.45';
+    $('#pista').textContent = 'Este navegador no dicta por voz. Usá Chrome, Edge o Safari, o escribí acá abajo.';
     return;
   }
 
@@ -368,7 +408,7 @@ function iniciarVoz() {
   reconocedor.onstart = () => {
     escuchando = true;
     acumulado = '';
-    $('#mic').classList.add('grabando');
+    marcarGrabando(true);
     $('#pista').textContent = 'Escuchando… hablá con naturalidad.';
   };
 
@@ -383,6 +423,7 @@ function iniciarVoz() {
   };
 
   reconocedor.onerror = (e) => {
+    abrirHoja(); // que el aviso sea visible aunque la hoja estuviera cerrada
     $('#pista').textContent = {
       'not-allowed': 'Necesito permiso para usar el micrófono.',
       'no-speech': 'No escuché nada. Probá de nuevo.',
@@ -393,13 +434,13 @@ function iniciarVoz() {
 
   reconocedor.onend = () => {
     escuchando = false;
-    $('#mic').classList.remove('grabando');
+    marcarGrabando(false);
     const texto = $('#texto').value.trim();
     if (texto) {
       $('#pista').textContent = '';
       enviar(texto);
     } else if (!$('#pista').textContent.startsWith('Error') && !$('#pista').textContent.includes('permiso')) {
-      $('#pista').textContent = 'Tocá el micrófono para hablar.';
+      $('#pista').textContent = PISTA_INICIAL;
     }
   };
 }
@@ -424,7 +465,9 @@ $('#nav').addEventListener('click', (e) => {
   boton.classList.add('activo');
   estado.vista = boton.dataset.vista;
   estado.vistaAsistente = null;
+  cerrarHoja();
   pintar();
+  $('#contenido').scrollTop = 0;
 });
 
 $('#contenido').addEventListener('click', async (e) => {
@@ -450,6 +493,13 @@ $('#contenido').addEventListener('click', async (e) => {
 });
 
 $('#mic').addEventListener('click', alternarMicrofono);
+
+// Botones flotantes de celular
+$('#fab-mic').addEventListener('click', () => { abrirHoja(); alternarMicrofono(); });
+$('#fab-teclado').addEventListener('click', () => abrirHoja({ enfocarTexto: true }));
+$('#cerrar-hoja').addEventListener('click', cerrarHoja);
+$('#telon').addEventListener('click', cerrarHoja);
+
 $('#enviar').addEventListener('click', () => enviar($('#texto').value));
 $('#texto').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') enviar($('#texto').value);
@@ -460,19 +510,23 @@ $('#btn-refrescar').addEventListener('click', () => {
   avisar('Actualizado');
 });
 
-// Barra espaciadora = hablar (si no estás escribiendo)
 document.addEventListener('keydown', (e) => {
+  // Barra espaciadora = hablar (si no estás escribiendo)
   if (e.code === 'Space' && document.activeElement !== $('#texto') && !e.repeat) {
     e.preventDefault();
     alternarMicrofono();
   }
+  if (e.key === 'Escape') cerrarHoja();
 });
+
+// Al girar el teléfono o pasar a escritorio, la hoja vuelve a su sitio.
+window.addEventListener('resize', () => { if (!esCelular()) cerrarHoja(); });
 
 /* ─────────── Arranque ─────────── */
 
 (async function arrancar() {
   iniciarVoz();
-  if (Reconocimiento) $('#pista').textContent = 'Tocá el micrófono (o la barra espaciadora) para hablar.';
+  if (Reconocimiento) $('#pista').textContent = PISTA_INICIAL;
 
   try {
     const s = await api('/estado');

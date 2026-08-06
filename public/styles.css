@@ -327,9 +327,10 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
   background: var(--panel); border: 1px solid var(--borde);
   box-shadow: var(--sombra); border-radius: 12px;
   padding: 11px 18px; font-size: 13px; z-index: 50;
-  transition: transform .3s cubic-bezier(.2, .9, .3, 1.2);
+  opacity: 0; visibility: hidden;
+  transition: transform .3s cubic-bezier(.2, .9, .3, 1.2), opacity .2s, visibility .3s;
 }
-.aviso.visible { transform: translate(-50%, 0); }
+.aviso.visible { transform: translate(-50%, 0); opacity: 1; visibility: visible; }
 .aviso.error { border-color: var(--alerta); color: var(--alerta); }
 
 /* Scrollbars */
@@ -338,37 +339,208 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
 ::-webkit-scrollbar-thumb:hover { background: var(--texto-3); }
 ::-webkit-scrollbar-track { background: transparent; }
 
+/* ─────────── Elementos exclusivos de celular (ocultos en escritorio) ─────────── */
+
+.agarre, .cerrar-hoja, .fabs, .telon { display: none; }
+
 /* ─────────── Responsive ─────────── */
 
-@media (max-width: 1180px) {
+/* Escritorio angosto: la barra lateral se reduce a iconos */
+@media (max-width: 1180px) and (min-width: 901px) {
   .app { grid-template-columns: 74px minmax(0, 1fr) 330px; }
-  .marca span, .marca strong, .nav-item span:not(.ico), .estado { display: none; }
-  .nav-item { justify-content: center; padding: 12px 0; }
+  .marca span, .marca strong, .nav-item .etiqueta, .estado { display: none; }
+  .nav-item { justify-content: center; padding: 12px 0; position: relative; }
   .marca { justify-content: center; padding-bottom: 18px; }
-  .badge { position: absolute; margin: 0; transform: translate(14px, -12px); }
-  .nav-item { position: relative; }
+  .badge { position: absolute; margin: 0; top: 4px; right: 12px; }
 }
 
-@media (max-width: 860px) {
-  body { overflow-y: auto; }
-  .app { grid-template-columns: 1fr; height: auto; }
+/* ══════════════════════════════════════════════════════════════════
+   Celular y tablet en vertical: app de una columna con barra inferior,
+   micrófono flotante y la conversación como hoja deslizante.
+   ══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 900px) {
+  html, body { overflow: hidden; overscroll-behavior: none; }
+
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* ── Barra de navegación inferior ── */
   .sidebar {
-    flex-direction: row; align-items: center; border-right: none;
-    border-bottom: 1px solid var(--borde); padding: 10px; overflow-x: auto;
-    position: sticky; top: 0; z-index: 10;
+    order: 2;
+    flex-direction: row;
+    align-items: stretch;
+    border-right: none;
+    border-top: 1px solid var(--borde);
+    background: color-mix(in srgb, var(--fondo-2) 94%, transparent);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    overflow-x: auto;
+    scrollbar-width: none;
+    position: relative;
+    z-index: 30;
   }
-  .marca { display: none; }
-  .nav { flex-direction: row; gap: 4px; }
-  .nav-item { padding: 10px 14px; }
-  .nav-item span:not(.ico) { display: inline; }
-  .sidebar-pie { display: none; }
-  .cabecera, .contenido { padding-left: 18px; padding-right: 18px; }
+  .sidebar::-webkit-scrollbar { display: none; }
+  .marca, .sidebar-pie { display: none; }
+
+  .nav { flex-direction: row; gap: 2px; width: 100%; }
+  .nav-item {
+    flex: 1 0 auto; min-width: 60px;
+    flex-direction: column; gap: 3px;
+    padding: 7px 4px; border-radius: 12px;
+    font-size: 10px; font-weight: 600; text-align: center;
+    position: relative; width: auto;
+  }
+  .nav-item .ico { font-size: 17px; width: auto; opacity: 1; }
+  .nav-item .etiqueta { display: block; white-space: nowrap; }
+  .nav-item.activo { box-shadow: none; }
+  .nav-item:hover { background: none; }
+  .nav-item.activo:hover { background: color-mix(in srgb, var(--acento) 16%, transparent); }
+  .badge {
+    position: absolute; top: 1px; right: 9px; margin: 0;
+    font-size: 9.5px; min-width: 16px; padding: 1px 5px;
+  }
+
+  /* ── Contenido ── */
+  .principal { order: 1; min-height: 0; }
+  .cabecera {
+    padding: 14px 16px 10px;
+    padding-top: calc(14px + env(safe-area-inset-top));
+  }
+  .cabecera h1 { font-size: 21px; }
+  .contenido { padding: 0 16px 104px; -webkit-overflow-scrolling: touch; }
+  .bloque { margin-bottom: 20px; }
+
+  /* ── La conversación pasa a ser una hoja inferior ── */
   .voz {
+    position: fixed; inset: auto 0 0 0; z-index: 45;
     border-left: none; border-top: 1px solid var(--borde);
-    position: sticky; bottom: 0; max-height: 50vh; background: var(--fondo-2);
-    box-shadow: 0 -12px 30px rgba(0, 0, 0, .18);
+    border-radius: 20px 20px 0 0;
+    background: var(--fondo-2);
+    box-shadow: 0 -18px 44px rgba(0, 0, 0, .38);
+    max-height: 82dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+    transform: translateY(103%);
+    transition: transform .28s cubic-bezier(.2, .9, .3, 1);
+    backdrop-filter: none;
   }
-  .voz-cabecera { padding: 12px 18px 10px; }
-  .conversacion { max-height: 26vh; padding: 12px 18px; }
-  .burbuja.bienvenida li { font-size: 12px; }
+  .voz.abierta { transform: none; }
+
+  .agarre {
+    display: block; position: absolute; top: 7px; left: 50%;
+    transform: translateX(-50%);
+    width: 38px; height: 4px; border-radius: 4px; background: var(--borde);
+  }
+  .voz-cabecera { padding: 18px 16px 10px; gap: 10px; }
+  .voz-cabecera h2 { flex: 1; }
+  .cerrar-hoja {
+    display: grid; place-items: center;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--panel-alto); color: var(--texto-2); font-size: 13px;
+  }
+
+  .conversacion { padding: 12px 16px; max-height: 48dvh; }
+  .burbuja { max-width: 88%; font-size: 14px; }
+  .entrada { padding: 10px 16px 8px; }
+  .entrada .mic { display: none; }           /* en celular el micrófono es el botón flotante */
+  .caja-texto { padding: 4px 4px 4px 14px; }
+  .caja-texto input { font-size: 16px; }     /* 16px evita que iOS haga zoom al enfocar */
+  .caja-texto button { width: 36px; height: 36px; }
+  .pista { padding: 0 16px 10px; min-height: 0; }
+
+  /* ── Telón ── */
+  .telon {
+    display: block; position: fixed; inset: 0; z-index: 40;
+    background: rgba(4, 8, 18, .55);
+    opacity: 0; pointer-events: none; transition: opacity .25s;
+  }
+  .telon.visible { opacity: 1; pointer-events: auto; }
+
+  /* ── Botones flotantes ── */
+  .fabs {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    position: fixed; right: 16px; z-index: 35;
+    bottom: calc(80px + env(safe-area-inset-bottom));
+    transition: opacity .2s, transform .2s;
+  }
+  .fabs.oculto { opacity: 0; pointer-events: none; transform: translateY(14px); }
+
+  .fab { display: grid; place-items: center; border-radius: 50%; position: relative; }
+  .fab svg { position: relative; z-index: 1; }
+  .fab:active { transform: scale(.94); }
+
+  .fab-mic {
+    width: 60px; height: 60px;
+    background: linear-gradient(140deg, var(--acento), #7a6bff);
+    box-shadow: 0 8px 26px color-mix(in srgb, var(--acento) 45%, transparent);
+  }
+  .fab-mic svg { width: 27px; height: 27px; fill: #fff; }
+  .fab-mic.grabando { background: linear-gradient(140deg, var(--alerta), #ff9a5b); }
+  .fab-mic.grabando .mic-ondas {
+    animation: pulso 1.4s ease-out infinite;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--alerta) 60%, transparent);
+  }
+  .fab-teclado {
+    width: 42px; height: 42px;
+    background: var(--panel); border: 1px solid var(--borde);
+  }
+  .fab-teclado svg { width: 19px; height: 19px; fill: var(--texto-2); }
+
+  .aviso { bottom: calc(92px + env(safe-area-inset-bottom)); }
+  .metricas { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+}
+
+/* ── Pantallas angostas: las tablas se vuelven fichas apiladas ── */
+@media (max-width: 640px) {
+  .tabla-envoltura { overflow-x: visible; }
+  table { min-width: 0; display: block; }
+  thead { display: none; }
+  tbody { display: block; }
+
+  tbody tr {
+    display: block; padding: 13px 15px;
+    border-bottom: 1px solid color-mix(in srgb, var(--borde) 55%, transparent);
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: none; }
+
+  tbody td {
+    display: flex; gap: 10px; align-items: baseline;
+    border: none; padding: 3px 0;
+  }
+  tbody td::before {
+    content: attr(data-rotulo);
+    flex: 0 0 80px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--texto-3);
+  }
+  td.principal-col { font-size: 15px; }
+  td.num { text-align: left; }
+  td.acciones { padding-top: 9px; }
+  td.acciones::before { content: none; }
+  .acciones-fila { width: 100%; justify-content: flex-start; }
+  .mini { padding: 9px 16px; font-size: 12.5px; border-radius: 9px; }
+
+  .evento { grid-template-columns: 46px minmax(0, 1fr) auto; gap: 10px; padding: 13px 15px; }
+  .evento .hora { font-size: 14px; }
+  .evento .acciones-fila .mini { padding: 8px 12px; }
+
+  .vacio { padding: 26px 16px; }
+  .metrica .valor { font-size: 23px; }
+  .metrica.dinero .valor { font-size: 19px; }
+  .cabecera h1 { font-size: 19px; }
+}
+
+/* Pantallas muy angostas: sólo iconos en la barra inferior */
+@media (max-width: 400px) {
+  .nav-item { min-width: 52px; font-size: 9px; }
+  tbody td::before { flex-basis: 68px; }
+}
+
+/* Respeta a quien pidió menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

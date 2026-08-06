@@ -30,6 +30,30 @@ Abrí <http://localhost:3000>. Tocá el micrófono (o la barra espaciadora) y ha
 Chrome, Edge o Safari. En cualquier otro navegador el micrófono se desactiva
 solo y podés escribir en la caja de texto: funciona exactamente igual.
 
+### Desde el celular
+
+La interfaz se reorganiza sola: barra de navegación abajo (al alcance del
+pulgar), micrófono flotante, y la conversación como hoja deslizante que se
+aparta cuando pedís ver algo, para que el resultado quede a la vista. Las
+tablas se convierten en fichas legibles y todos los botones son táctiles.
+
+Para usarla en el teléfono con el servidor en tu computador, ambos tienen que
+estar en la misma red:
+
+```bash
+PORT=3000 npm start
+# en el celular: http://<ip-de-tu-computador>:3000
+```
+
+Se puede **instalar como app**: en Chrome Android, «Agregar a la pantalla de
+inicio»; en iPhone, Compartir → «Agregar a inicio». Queda con ícono propio y
+sin barra del navegador.
+
+> ⚠️ Los navegadores sólo dan acceso al micrófono en `localhost` o en sitios con
+> HTTPS. Entrando por IP desde el celular vas a poder usar la app y escribirle a
+> Ari, pero el dictado por voz sólo funciona si la servís con certificado (por
+> ejemplo detrás de Caddy, Cloudflare Tunnel o ngrok).
+
 ---
 
 ## Qué hace
