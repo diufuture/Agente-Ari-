@@ -421,7 +421,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
     padding-top: calc(14px + env(safe-area-inset-top));
   }
   .cabecera h1 { font-size: 21px; }
-  .contenido { padding: 0 16px 104px; -webkit-overflow-scrolling: touch; }
+  .contenido { padding: 0 16px 150px; -webkit-overflow-scrolling: touch; }
   .bloque { margin-bottom: 20px; }
 
   /* ── La conversación pasa a ser una hoja inferior ── */
@@ -697,9 +697,9 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
 @media (max-width: 640px) {
   .ficha-cifras { grid-template-columns: 1fr; gap: 10px; }
   .ficha-cifras div { flex-direction: row; align-items: baseline; justify-content: space-between; }
-  .abono { grid-template-columns: 1fr auto; row-gap: 5px; }
+  .abono { grid-template-columns: 1fr auto; row-gap: 6px; }
   .abono-fecha { grid-column: 1 / -1; }
-  .abono .mini { grid-column: 2; }
+  .abono .mini { grid-column: 1; grid-row: 3; justify-self: start; }
   .form-abono { grid-template-columns: 1fr; }
   .form-abono button { width: 100%; }
 }

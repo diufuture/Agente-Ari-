@@ -651,6 +651,18 @@ $('#contenido').addEventListener('submit', async (e) => {
   }
 });
 
+// En celular el micrófono flotante se aparta mientras se hace scroll —si no,
+// termina tapando montos y botones— y vuelve al detenerse.
+let scrollTimer;
+$('#contenido').addEventListener('scroll', () => {
+  if (!esCelular() || $('.voz').classList.contains('abierta')) return;
+  $('.fabs').classList.add('oculto');
+  clearTimeout(scrollTimer);
+  scrollTimer = setTimeout(() => {
+    if (!$('.voz').classList.contains('abierta')) $('.fabs').classList.remove('oculto');
+  }, 550);
+}, { passive: true });
+
 $('#mic').addEventListener('click', alternarMicrofono);
 
 // Botones flotantes de celular
