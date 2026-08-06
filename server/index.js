@@ -6,15 +6,18 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const RAIZ = resolve(fileURLToPath(new URL('../', import.meta.url)));
+const PUBLICO = join(RAIZ, 'public');
+
 // Carga .env si existe (Node >= 20.6, sin dependencias).
+// Se busca junto al proyecto, no en el directorio desde el que se ejecutó:
+// los servidores (Passenger, systemd, PM2) suelen arrancar desde otra carpeta.
 try {
-  process.loadEnvFile('.env');
+  process.loadEnvFile(join(RAIZ, '.env'));
 } catch {
   /* sin .env: se usan las variables del entorno */
 }
 
-const RAIZ = resolve(fileURLToPath(new URL('../', import.meta.url)));
-const PUBLICO = join(RAIZ, 'public');
 const PUERTO = Number(process.env.PORT) || 3000;
 
 const [db, tools, asistente] = await Promise.all([

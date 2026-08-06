@@ -3,8 +3,14 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const DB_PATH = resolve(process.env.ARI_DB || './data/clic-control.db');
+// Las rutas relativas se resuelven contra la carpeta del proyecto, no contra el
+// directorio desde el que se ejecutó el proceso: al desplegar en un servidor
+// (Passenger, systemd, PM2) el directorio de trabajo suele ser otro, y la base
+// de datos terminaría creándose en un lugar inesperado.
+const RAIZ = resolve(fileURLToPath(new URL('../', import.meta.url)));
+const DB_PATH = resolve(RAIZ, process.env.ARI_DB || './data/clic-control.db');
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
 export const db = new DatabaseSync(DB_PATH);
