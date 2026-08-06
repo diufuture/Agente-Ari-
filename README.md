@@ -18,6 +18,10 @@ en vivo a lo que le pedís.
 
 ## Arranque rápido
 
+> ¿Primera vez, o no tenés experiencia poniendo a correr proyectos?
+> Seguí la **[guía paso a paso](INSTALACION.md)**, que explica todo desde
+> instalar Node hasta usarla en el celular.
+
 ```bash
 npm install
 cp .env.example .env      # y pegá tu ANTHROPIC_API_KEY

@@ -27,6 +27,15 @@ const [db, tools, asistente] = await Promise.all([
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
+/**
+ * ¿Hay una clave de verdad? No basta con que la variable exista: si alguien
+ * copió .env.example sin reemplazar el valor, queda el marcador de ejemplo.
+ */
+function claveConfigurada() {
+  const k = (process.env.ANTHROPIC_API_KEY || '').trim();
+  return k.length > 20 && !k.includes('...');
+}
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -72,7 +81,7 @@ async function api(req, res, url) {
   if (recurso === 'estado' && req.method === 'GET') {
     return json(res, 200, {
       modelo: asistente.modeloEnUso(),
-      vozLista: Boolean(process.env.ANTHROPIC_API_KEY),
+      vozLista: claveConfigurada(),
     });
   }
 
@@ -83,9 +92,9 @@ async function api(req, res, url) {
 
   // POST /api/asistente  -> el cerebro
   if (recurso === 'asistente' && req.method === 'POST') {
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!claveConfigurada()) {
       return json(res, 503, {
-        error: 'Falta configurar ANTHROPIC_API_KEY. Copia .env.example a .env y pon tu clave.',
+        error: 'Falta tu clave de Anthropic. Abrí el archivo .env y reemplazá ANTHROPIC_API_KEY por la clave real (empieza con sk-ant-).',
       });
     }
     const cuerpo = await leerJson(req);
@@ -203,8 +212,8 @@ servidor.listen(PUERTO, () => {
   console.log(`\n  Clic Control · Ari`);
   console.log(`  ➜  http://localhost:${PUERTO}`);
   console.log(`  ➜  modelo: ${asistente.modeloEnUso()}`);
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.log('  ⚠  Falta ANTHROPIC_API_KEY: la voz y el chat no funcionarán.');
+  if (!claveConfigurada()) {
+    console.log('  ⚠  Falta tu clave: abrí el archivo .env y pegá tu ANTHROPIC_API_KEY.');
   }
   console.log('');
 });
