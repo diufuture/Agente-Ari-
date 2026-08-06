@@ -22,6 +22,11 @@ try {
 // un número, así que se reenvía tal cual: listen() acepta ambas formas.
 const PUERTO = process.env.PORT || 3000;
 
+// El arranque completo va dentro de una función async, no al nivel superior
+// del módulo: algunos motores de Node de cPanel (LiteSpeed/lsnode.js) cargan
+// este archivo con require(), que no admite top-level await en el módulo.
+async function iniciar() {
+
 const [db, tools, asistente, auth] = await Promise.all([
   import('./db.js'),
   import('./tools.js'),
@@ -286,4 +291,11 @@ servidor.listen(PUERTO, () => {
         '     Está bien en tu computador; si la publicás, definí ARI_CLAVE.',
   );
   console.log('');
+});
+
+} // fin de iniciar()
+
+iniciar().catch((err) => {
+  console.error('[servidor] no pudo iniciar:', err);
+  process.exit(1);
 });
