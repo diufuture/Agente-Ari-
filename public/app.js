@@ -11,6 +11,8 @@ const estado = {
   resumen: null,
   vistaAsistente: null, // resultado de la última consulta por voz
   cotizacionAbierta: null, // id de la cotización cuyo detalle se está viendo
+  clienteAbierto: null,    // id del cliente cuya ficha se está viendo
+  editando: false,         // la ficha abierta está mostrando su formulario
 };
 
 /* ─────────── Formateo ─────────── */
@@ -123,7 +125,7 @@ const NUEVO_ESTADO = {
   cobros: 'pagado',
 };
 
-function tabla(entidad, columnas, filas, { vacio } = {}) {
+function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
   if (!filas.length) {
     return `<div class="tarjeta"><div class="vacio">
       <strong>Nada por acá</strong>${escapar(vacio || 'Pedíselo a Ari por voz y aparece de inmediato.')}
@@ -146,14 +148,18 @@ function tabla(entidad, columnas, filas, { vacio } = {}) {
 
     const listo = accionable && f.estado !== 'pendiente' && f.estado !== 'enviada';
     const acciones = `<td class="num acciones"><div class="acciones-fila">
+      ${compacta ? '' : `
       ${entidad === 'cotizaciones'
         ? `<button class="mini destacado" data-accion="abrir-cotizacion" data-id="${f.id}">Abonos</button>`
+        : ''}
+      ${entidad === 'clientes'
+        ? `<button class="mini destacado" data-accion="abrir-cliente" data-id="${f.id}">Ver ficha</button>`
         : ''}
       ${accionable && !listo
         ? `<button class="mini" data-accion="estado" data-entidad="${entidad}" data-id="${f.id}" data-estado="${NUEVO_ESTADO[entidad]}">${
             entidad === 'cobros' ? 'Pagado' : 'Listo'}</button>`
         : ''}
-      <button class="mini peligro" data-accion="borrar" data-entidad="${entidad}" data-id="${f.id}">Borrar</button>
+      <button class="mini peligro" data-accion="borrar" data-entidad="${entidad}" data-id="${f.id}">Borrar</button>`}
     </div></td>`;
 
     return `<tr>${celdas}${acciones}</tr>`;
@@ -214,7 +220,10 @@ function detalleCotizacion(cot, abonos) {
           <h2>${escapar(cot.titulo)}</h2>
           <p>${escapar(cot.cliente || 'Sin cliente')} · creada ${escapar(fmtFecha(String(cot.creado_en || '').slice(0, 10)))}</p>
         </div>
-        <span class="pastilla ${escapar(cot.estado)}">${escapar(cot.estado)}</span>
+        <div class="ficha-acciones">
+          <span class="pastilla ${escapar(cot.estado)}">${escapar(cot.estado)}</span>
+          <button class="mini destacado" data-accion="editar">Editar</button>
+        </div>
       </div>
 
       <div class="ficha-cifras">
@@ -230,6 +239,8 @@ function detalleCotizacion(cot, abonos) {
 
       ${cot.descripcion ? `<p class="ficha-desc">${escapar(cot.descripcion)}</p>` : ''}
     </div>
+
+    ${estado.editando ? formularioEdicion('cotizaciones', cot) : ''}
 
     ${bloque('Abonos', `<div class="tarjeta"><div class="lista-abonos">${filas}</div></div>`)}
 
@@ -248,11 +259,152 @@ function detalleCotizacion(cot, abonos) {
   `;
 }
 
+/* ─────────── Edición manual ─────────── */
+
+const CAMPOS = {
+  clientes: [
+    { n: 'nombre', e: 'Nombre', req: true },
+    { n: 'empresa', e: 'Empresa' },
+    { n: 'telefono', e: 'Teléfono', tipo: 'tel' },
+    { n: 'email', e: 'Correo', tipo: 'email' },
+    { n: 'direccion', e: 'Dirección', ancho: true },
+    { n: 'notas', e: 'Notas', area: true, ancho: true },
+  ],
+  cotizaciones: [
+    { n: 'titulo', e: 'Asunto', req: true, ancho: true },
+    { n: 'monto', e: 'Valor', tipo: 'number' },
+    { n: 'vence_en', e: 'Vence', tipo: 'date' },
+    { n: 'estado', e: 'Estado', opciones: ['pendiente', 'enviada', 'aprobada', 'rechazada'] },
+    { n: 'moneda', e: 'Moneda' },
+    { n: 'descripcion', e: 'Descripción', area: true, ancho: true },
+  ],
+};
+
+/** Formulario de edición de un registro. Se guarda con PATCH. */
+function formularioEdicion(entidad, fila) {
+  const campos = CAMPOS[entidad].map((c) => {
+    const valor = fila[c.n] ?? '';
+    const control = c.opciones
+      ? `<select name="${c.n}">${c.opciones
+          .map((o) => `<option value="${o}"${o === valor ? ' selected' : ''}>${o}</option>`).join('')}</select>`
+      : c.area
+        ? `<textarea name="${c.n}" rows="2">${escapar(valor)}</textarea>`
+        : `<input name="${c.n}" type="${c.tipo || 'text'}" value="${escapar(valor)}"${c.req ? ' required' : ''} />`;
+    return `<label class="${c.ancho ? 'ancho' : ''}"><span>${c.e}</span>${control}</label>`;
+  }).join('');
+
+  return `
+    <div class="tarjeta" style="margin-bottom:26px">
+      <form class="form-editar" id="form-editar" data-entidad="${entidad}" data-id="${fila.id}">
+        ${campos}
+        <div class="form-acciones">
+          <button type="submit">Guardar cambios</button>
+          <button type="button" class="secundario" data-accion="cancelar-edicion">Cancelar</button>
+        </div>
+      </form>
+    </div>`;
+}
+
+/** Ficha de un cliente: sus cifras y todo su historial en un solo lugar. */
+function detalleCliente(c, { cotizaciones, abonos, cobros, citas, notas }) {
+  const suma = (lista, campo) => lista.reduce((t, f) => t + (Number(f[campo]) || 0), 0);
+  const cotizado = suma(cotizaciones, 'monto');
+  const abonado = suma(abonos, 'monto');
+  const saldo = cotizaciones.reduce((t, q) => t + Math.max(0, Number(q.saldo) || 0), 0);
+  const porCobrar = suma(cobros.filter((x) => x.estado === 'pendiente'), 'monto');
+
+  const contacto = [
+    c.empresa && `<span>${escapar(c.empresa)}</span>`,
+    c.telefono && `<a href="tel:${escapar(c.telefono)}">${escapar(c.telefono)}</a>`,
+    c.email && `<a href="mailto:${escapar(c.email)}">${escapar(c.email)}</a>`,
+    c.direccion && `<span>${escapar(c.direccion)}</span>`,
+  ].filter(Boolean).join('<i>·</i>');
+
+  // Historial de abonos: cada uno con su fecha, su monto y sobre qué cotización.
+  const historial = abonos.length
+    ? abonos.map((a) => `
+        <div class="abono">
+          <div class="abono-fecha">${escapar(fmtFecha(a.fecha || a.creado_en))}</div>
+          <div class="abono-nota">
+            ${escapar(a.nota || 'Abono')}
+            <em>sobre «${escapar(a.cotizacion || 'cotización eliminada')}»</em>
+          </div>
+          <div class="abono-monto">${fmtDinero(a.monto, a.moneda)}</div>
+        </div>`).join('')
+    : '<div class="vacio"><strong>Sin abonos todavía</strong>Los abonos que registres sobre sus cotizaciones aparecen acá.</div>';
+
+  return `
+    <button class="volver" data-accion="cerrar-cliente">← Clientes</button>
+
+    <div class="tarjeta ficha">
+      <div class="ficha-cabecera">
+        <div>
+          <h2>${escapar(c.nombre)}</h2>
+          ${contacto ? `<p class="contacto">${contacto}</p>` : '<p class="contacto"><span>Sin datos de contacto</span></p>'}
+        </div>
+        <button class="mini destacado" data-accion="editar">Editar datos</button>
+      </div>
+
+      <div class="ficha-cifras cuatro">
+        <div><span>Cotizado</span><strong>${fmtDinero(cotizado)}</strong></div>
+        <div><span>Abonado</span><strong class="ok">${fmtDinero(abonado)}</strong></div>
+        <div><span>Saldo cotizado</span><strong class="${saldo > 0 ? 'pend' : 'ok'}">${fmtDinero(saldo)}</strong></div>
+        <div><span>Por cobrar</span><strong class="${porCobrar > 0 ? 'alerta' : 'ok'}">${fmtDinero(porCobrar)}</strong></div>
+      </div>
+
+      ${c.notas ? `<p class="ficha-desc">${escapar(c.notas)}</p>` : ''}
+    </div>
+
+    ${estado.editando ? formularioEdicion('clientes', c) : ''}
+
+    ${bloque(`Historial de abonos · ${abonos.length}`,
+      `<div class="tarjeta"><div class="lista-abonos">${historial}</div></div>`)}
+
+    ${bloque('Cotizaciones', tabla('cotizaciones',
+      ['creado_en', 'titulo', 'monto', 'abonado', 'saldo', 'estado'], cotizaciones,
+      { vacio: 'Este cliente no tiene cotizaciones.', compacta: true }))}
+
+    ${bloque('Cobros', tabla('cobros',
+      ['vence_en', 'concepto', 'monto', 'estado'], cobros,
+      { vacio: 'No hay cobros registrados.', compacta: true }))}
+
+    ${bloque('Citas', tabla('citas',
+      ['inicio', 'titulo', 'lugar', 'estado'], citas,
+      { vacio: 'No hay citas con este cliente.', compacta: true }))}
+
+    ${notas.length ? bloque('Notas', tabla('notas', ['creado_en', 'texto'], notas, { compacta: true })) : ''}
+  `;
+}
+
 /* ─────────── Vistas ─────────── */
 
 async function pintar() {
   const contenedor = $('#contenido');
   const v = estado.vista;
+
+  // Ficha de un cliente
+  if (estado.clienteAbierto) {
+    contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
+    try {
+      const id = estado.clienteAbierto;
+      const [c, cot, abo, cob, cit, not] = await Promise.all([
+        api(`/clientes/${id}`),
+        api(`/cotizaciones?cliente_id=${id}`),
+        api(`/abonos?cliente_id=${id}`),
+        api(`/cobros?cliente_id=${id}`),
+        api(`/citas?cliente_id=${id}`),
+        api(`/notas?cliente_id=${id}`),
+      ]);
+      $('#titulo-vista').textContent = c.nombre;
+      contenedor.innerHTML = detalleCliente(c, {
+        cotizaciones: cot.filas, abonos: abo.filas, cobros: cob.filas,
+        citas: cit.filas, notas: not.filas,
+      });
+    } catch (e) {
+      contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
+    }
+    return;
+  }
 
   // Ficha de una cotización (tiene prioridad sobre todo lo demás)
   if (estado.cotizacionAbierta) {
@@ -550,10 +702,25 @@ function iniciarVoz() {
   };
 }
 
+let avisoVozMostrado = false;
+
 function alternarMicrofono() {
   if (!VOZ_DISPONIBLE) {
     abrirHoja({ enfocarTexto: true });
     $('#pista').textContent = MOTIVO_SIN_VOZ;
+
+    if (!avisoVozMostrado) {
+      avisoVozMostrado = true;
+      burbuja('ari aviso-voz', !CONTEXTO_SEGURO
+        ? `<p><b>El micrófono no está disponible en esta dirección.</b></p>
+           <p>Los navegadores sólo permiten grabar en <code>localhost</code> o en
+           direcciones con <b>https</b> (candado). Estás entrando por
+           <code>${escapar(location.host)}</code>, que va sin candado.</p>
+           <p>Mientras tanto podés escribirme acá abajo: hago exactamente lo mismo.</p>`
+        : `<p><b>Este navegador no puede dictar por voz.</b></p>
+           <p>Probá con Chrome, Edge o Safari. Mientras tanto escribime acá abajo:
+           hago exactamente lo mismo.</p>`);
+    }
     return;
   }
   if (!reconocedor) return;
@@ -576,6 +743,8 @@ $('#nav').addEventListener('click', (e) => {
   estado.vista = boton.dataset.vista;
   estado.vistaAsistente = null;
   estado.cotizacionAbierta = null;
+  estado.clienteAbierto = null;
+  estado.editando = false;
   cerrarHoja();
   pintar();
   $('#contenido').scrollTop = 0;
@@ -586,8 +755,32 @@ $('#contenido').addEventListener('click', async (e) => {
   if (!boton) return;
   const { accion, entidad, id } = boton.dataset;
 
+  if (accion === 'editar' || accion === 'cancelar-edicion') {
+    estado.editando = accion === 'editar';
+    await pintar();
+    return;
+  }
+  if (accion === 'abrir-cliente') {
+    estado.clienteAbierto = Number(id);
+    estado.editando = false;
+    estado.cotizacionAbierta = null;
+    estado.vistaAsistente = null;
+    await pintar();
+    $('#contenido').scrollTop = 0;
+    return;
+  }
+  if (accion === 'cerrar-cliente') {
+    estado.clienteAbierto = null;
+    estado.vista = 'clientes';
+    estado.editando = false;
+    $$('.nav-item').forEach((b) => b.classList.toggle('activo', b.dataset.vista === 'clientes'));
+    await pintar();
+    return;
+  }
   if (accion === 'abrir-cotizacion') {
     estado.cotizacionAbierta = Number(id);
+    estado.editando = false;
+    estado.clienteAbierto = null;
     estado.vistaAsistente = null;
     await pintar();
     $('#contenido').scrollTop = 0;
@@ -596,6 +789,7 @@ $('#contenido').addEventListener('click', async (e) => {
   if (accion === 'cerrar-cotizacion') {
     estado.cotizacionAbierta = null;
     estado.vista = 'cotizaciones';
+    estado.editando = false;
     $$('.nav-item').forEach((b) => b.classList.toggle('activo', b.dataset.vista === 'cotizaciones'));
     await pintar();
     return;
@@ -627,6 +821,27 @@ $('#contenido').addEventListener('click', async (e) => {
 });
 
 $('#contenido').addEventListener('submit', async (e) => {
+  if (e.target.id === 'form-editar') {
+    e.preventDefault();
+    const { entidad, id } = e.target.dataset;
+    const datos = Object.fromEntries(new FormData(e.target));
+    // Un campo vacío se guarda como nulo, no como cadena vacía.
+    for (const k of Object.keys(datos)) {
+      if (datos[k] === '') datos[k] = null;
+      else if (k === 'monto') datos[k] = Number(datos[k]);
+    }
+    try {
+      await api(`/${entidad}/${id}`, { method: 'PATCH', body: datos });
+      estado.editando = false;
+      avisar('Datos actualizados ✓');
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+
   if (e.target.id !== 'form-abono') return;
   e.preventDefault();
   const d = Object.fromEntries(new FormData(e.target));

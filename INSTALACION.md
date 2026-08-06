@@ -191,6 +191,17 @@ guardados.
 **Mientras la Terminal esté abierta, la aplicación está prendida.** Si cerrás
 esa ventana, se apaga.
 
+### Ver y corregir a mano
+
+No todo hay que dictarlo. Tocando un **cliente** en la lista se abre su ficha
+con sus cifras (cotizado, abonado, saldo y por cobrar), el **historial completo
+de abonos** —cada uno con su fecha y sobre qué cotización fue— y sus
+cotizaciones, cobros, citas y notas.
+
+Ahí mismo, el botón **Editar datos** abre un formulario para escribir a mano el
+teléfono, la empresa, el correo, la dirección o las notas. Guardás y listo. La
+ficha de la cotización tiene lo mismo, más el formulario para agregar abonos.
+
 ---
 
 ## Usarla desde el celular

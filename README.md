@@ -74,7 +74,9 @@ sin barra del navegador.
 | «ya me pagó / ya quedó lista» | Cambia el estado del registro |
 
 Todo lo que se puede hacer por voz también se puede hacer con el mouse: cada
-fila tiene botones para marcar como lista/pagada o borrar.
+fila tiene botones para marcar como lista/pagada o borrar, y clientes y
+cotizaciones se pueden **editar a mano** (teléfono, dirección, correo, monto…)
+sin tener que dictarlo.
 
 Si nombrás un cliente que no existe, Ari lo crea sobre la marcha. Si el nombre
 es ambiguo («la ferretería» cuando tenés dos), te pregunta cuál.
@@ -120,7 +122,7 @@ nada más.
 server/
   index.js      Servidor HTTP + API REST (sin framework)
   db.js         Esquema y consultas SQLite
-  tools.js      Las 9 herramientas de Ari y su ejecución
+  tools.js      Las 10 herramientas de Ari y su ejecución
   assistant.js  El bucle de conversación con Claude
 public/
   index.html    Interfaz
@@ -163,6 +165,22 @@ cotización con saldo, Ari sabe a cuál aplicar el abono sin que se lo digas.
 
 Borrar una cotización borra sus abonos; el saldo nunca queda desincronizado
 porque no se guarda: se calcula al leer.
+
+## Ficha del cliente
+
+Al tocar un cliente en la lista se abre su ficha, que reúne todo lo suyo en una
+sola pantalla:
+
+- **Cuatro cifras arriba**: cotizado, abonado, saldo cotizado y por cobrar.
+- **Historial de abonos**: cada pago con su fecha, su nota, su monto y sobre
+  qué cotización se aplicó. Si el cliente abonó tres veces, ahí están los tres,
+  en orden.
+- **Sus cotizaciones, cobros, citas y notas**, en tablas compactas.
+- **Editar datos**: un formulario para corregir a mano teléfono, empresa,
+  correo, dirección y notas. Lo que se deja en blanco se borra del registro.
+
+La ficha de la cotización funciona igual: cifras, barra de avance, lista de
+abonos, formulario para agregar uno más y botón de editar.
 
 ## Logo
 

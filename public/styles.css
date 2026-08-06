@@ -731,3 +731,77 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
 @media (max-width: 900px) {
   .sidebar .marca-img { display: none; }
 }
+
+/* Aviso de por qué no hay micrófono */
+.burbuja.aviso-voz {
+  max-width: 100%; border-color: var(--ambar);
+  background: color-mix(in srgb, var(--ambar) 8%, var(--panel));
+}
+.burbuja.aviso-voz p + p { margin-top: 7px; }
+.burbuja.aviso-voz code {
+  background: var(--panel-alto); padding: 1px 5px; border-radius: 5px;
+  font-size: 12px; word-break: break-all;
+}
+
+/* ─────────── Ficha de cliente ─────────── */
+
+.ficha-cifras.cuatro { grid-template-columns: repeat(4, 1fr); }
+.ficha-cifras .alerta { color: var(--alerta); }
+
+.contacto { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.contacto a { color: var(--acento); text-decoration: none; font-size: 13px; }
+.contacto a:hover { text-decoration: underline; }
+.contacto span { font-size: 13px; color: var(--texto-3); }
+.contacto i { font-style: normal; color: var(--texto-3); opacity: .5; }
+
+.abono-nota em {
+  display: block; font-style: normal; font-size: 12px;
+  color: var(--texto-3); margin-top: 2px;
+}
+
+@media (max-width: 900px) { .ficha-cifras.cuatro { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .ficha-cifras.cuatro { grid-template-columns: 1fr; } }
+
+/* ─────────── Formulario de edición manual ─────────── */
+
+.ficha-acciones { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+.form-editar {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 20px;
+}
+.form-editar label { display: flex; flex-direction: column; gap: 6px; }
+.form-editar label.ancho { grid-column: 1 / -1; }
+.form-editar span {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .7px; color: var(--texto-3);
+}
+.form-editar input,
+.form-editar select,
+.form-editar textarea {
+  background: var(--panel-alto); border: 1px solid var(--borde);
+  border-radius: 10px; padding: 11px 13px; font-size: 14px; outline: none;
+  transition: border-color .15s; color-scheme: dark light; font-family: inherit;
+  width: 100%; resize: vertical;
+}
+.form-editar input:focus,
+.form-editar select:focus,
+.form-editar textarea:focus { border-color: var(--acento); }
+
+.form-acciones { grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 4px; }
+.form-acciones button {
+  padding: 12px 22px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  background: var(--acento); color: var(--marino); transition: transform .15s;
+}
+.form-acciones button:hover { transform: translateY(-1px); }
+.form-acciones .secundario {
+  background: none; border: 1px solid var(--borde); color: var(--texto-2);
+}
+.form-acciones .secundario:hover { color: var(--texto); border-color: var(--acento); transform: none; }
+
+@media (max-width: 640px) {
+  .form-editar { grid-template-columns: 1fr; }
+  .form-acciones { flex-direction: column-reverse; }
+  .form-acciones button { width: 100%; }
+  .ficha-cabecera { flex-direction: column; }
+  .ficha-acciones { align-self: flex-start; }
+}
