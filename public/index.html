@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0a0e1a" media="(prefers-color-scheme: dark)" />
-  <meta name="theme-color" content="#f4f6fc" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#071a2e" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#eef4f9" media="(prefers-color-scheme: light)" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Ari" />
-  <title>Clic Control · Ari</title>
+  <title>Click Control · Ari</title>
   <link rel="stylesheet" href="/styles.css" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icono.svg" type="image/svg+xml" />
@@ -21,9 +21,21 @@
     <!-- ───────────── Barra lateral ───────────── -->
     <aside class="sidebar">
       <div class="marca">
-        <div class="marca-logo">CC</div>
+        <div class="marca-logo">
+          <svg class="marca-mark" viewBox="0 0 192 192" aria-hidden="true">
+            <g fill="none" stroke="currentColor" stroke-linecap="round">
+              <path d="M96 34a62 62 0 0 1 62 62" stroke-width="7"/>
+              <path d="M96 158a62 62 0 0 1-62-62" stroke-width="7"/>
+              <path d="M96 54a42 42 0 0 1 42 42" stroke-width="6"/>
+              <path d="M96 138a42 42 0 0 1-42-42" stroke-width="6"/>
+              <path d="M96 73a23 23 0 0 1 23 23" stroke-width="5"/>
+              <path d="M96 119a23 23 0 0 1-23-23" stroke-width="5"/>
+            </g>
+            <circle cx="96" cy="96" r="8" fill="currentColor"/>
+          </svg>
+        </div>
         <div>
-          <strong>Clic Control</strong>
+          <strong class="marca-nombre"><i>click</i> control</strong>
           <span>asistente Ari</span>
         </div>
       </div>

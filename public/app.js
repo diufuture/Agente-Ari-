@@ -377,10 +377,24 @@ function hablar(texto) {
 /* ─────────── Voz a texto ─────────── */
 
 const Reconocimiento = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+// Los navegadores sólo entregan el micrófono en localhost o con HTTPS. Entrando
+// por IP desde el celular (http://192.168...) la API desaparece, así que hay que
+// distinguir "este navegador no puede" de "esta dirección no puede".
+const CONTEXTO_SEGURO = window.isSecureContext !== false;
+const VOZ_DISPONIBLE = Boolean(Reconocimiento) && CONTEXTO_SEGURO;
+
+const MOTIVO_SIN_VOZ = !CONTEXTO_SEGURO
+  ? 'El micrófono necesita una dirección segura (https). Por ahora escribile acá abajo.'
+  : 'Este navegador no dicta por voz. Usá Chrome, Edge o Safari, o escribí acá abajo.';
+
 // En pantallas táctiles no hay barra espaciadora que mencionar.
-const PISTA_INICIAL = window.matchMedia('(pointer: coarse)').matches
-  ? 'Tocá el micrófono para hablarle a Ari.'
-  : 'Tocá el micrófono (o la barra espaciadora) para hablar.';
+const PISTA_INICIAL = !VOZ_DISPONIBLE
+  ? MOTIVO_SIN_VOZ
+  : window.matchMedia('(pointer: coarse)').matches
+    ? 'Tocá el micrófono para hablarle a Ari.'
+    : 'Tocá el micrófono (o la barra espaciadora) para hablar.';
+
 let reconocedor = null;
 let escuchando = false;
 
@@ -389,11 +403,15 @@ const marcarGrabando = (activo) =>
   ['#mic', '#fab-mic'].forEach((s) => $(s).classList.toggle('grabando', activo));
 
 function iniciarVoz() {
-  if (!Reconocimiento) {
-    $('#mic').disabled = true;
-    $('#fab-mic').disabled = true;
-    $('#fab-mic').style.opacity = '.45';
-    $('#pista').textContent = 'Este navegador no dicta por voz. Usá Chrome, Edge o Safari, o escribí acá abajo.';
+  if (!VOZ_DISPONIBLE) {
+    // No se desactivan los botones: tocarlos abre la conversación con el
+    // teclado listo y explica por qué no hay voz. Un botón muerto no dice nada.
+    ['#mic', '#fab-mic'].forEach((s) => {
+      $(s).classList.add('sin-voz');
+      $(s).title = MOTIVO_SIN_VOZ;
+      $(s).setAttribute('aria-label', MOTIVO_SIN_VOZ);
+    });
+    $('#pista').textContent = MOTIVO_SIN_VOZ;
     return;
   }
 
@@ -446,6 +464,11 @@ function iniciarVoz() {
 }
 
 function alternarMicrofono() {
+  if (!VOZ_DISPONIBLE) {
+    abrirHoja({ enfocarTexto: true });
+    $('#pista').textContent = MOTIVO_SIN_VOZ;
+    return;
+  }
   if (!reconocedor) return;
   if (escuchando) reconocedor.stop();
   else {
@@ -531,7 +554,7 @@ window.addEventListener('resize', () => { if (!esCelular()) cerrarHoja(); });
 
 (async function arrancar() {
   iniciarVoz();
-  if (Reconocimiento) $('#pista').textContent = PISTA_INICIAL;
+  if (VOZ_DISPONIBLE) $('#pista').textContent = PISTA_INICIAL;
 
   try {
     const s = await api('/estado');
