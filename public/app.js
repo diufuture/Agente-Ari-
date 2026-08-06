@@ -498,6 +498,11 @@ $('#mic').addEventListener('click', alternarMicrofono);
 $('#fab-mic').addEventListener('click', () => { abrirHoja(); alternarMicrofono(); });
 $('#fab-teclado').addEventListener('click', () => abrirHoja({ enfocarTexto: true }));
 $('#cerrar-hoja').addEventListener('click', cerrarHoja);
+
+$('#salir').addEventListener('click', async () => {
+  await fetch('/api/logout', { method: 'POST' });
+  location.reload();
+});
 $('#telon').addEventListener('click', cerrarHoja);
 
 $('#enviar').addEventListener('click', () => enviar($('#texto').value));
@@ -531,6 +536,7 @@ window.addEventListener('resize', () => { if (!esCelular()) cerrarHoja(); });
   try {
     const s = await api('/estado');
     $('#estado-modelo').textContent = `modelo · ${s.modelo}`;
+    if (s.conAcceso) $('#salir').hidden = false;
     if (!s.vozLista) {
       burbuja('ari error', 'Falta configurar <b>ANTHROPIC_API_KEY</b> en el archivo <code>.env</code> del servidor.');
     }

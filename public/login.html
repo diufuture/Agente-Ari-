@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0e1a" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f4f6fc" media="(prefers-color-scheme: light)" />
+  <title>Entrar · Clic Control</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="/icono.svg" type="image/svg+xml" />
+</head>
+<body class="pantalla-entrada">
+  <main class="entrada-caja">
+    <div class="marca-logo grande">CC</div>
+    <h1>Clic Control</h1>
+    <p class="subtitulo">Entrá para hablar con Ari</p>
+
+    <form id="form">
+      <label>
+        <span>Usuario</span>
+        <input id="usuario" name="usuario" type="text" autocomplete="username"
+               autocapitalize="none" autocorrect="off" spellcheck="false" required />
+      </label>
+      <label>
+        <span>Contraseña</span>
+        <input id="clave" name="clave" type="password" autocomplete="current-password" required />
+      </label>
+      <button type="submit" id="enviar">Entrar</button>
+      <p class="error" id="error"></p>
+    </form>
+  </main>
+
+  <script type="module">
+    const $ = (s) => document.querySelector(s);
+
+    $('#form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const boton = $('#enviar');
+      const error = $('#error');
+      boton.disabled = true;
+      boton.textContent = 'Entrando…';
+      error.textContent = '';
+
+      try {
+        const r = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usuario: $('#usuario').value, clave: $('#clave').value }),
+        });
+        const datos = await r.json().catch(() => ({}));
+        if (r.ok) {
+          location.replace('/');
+          return;
+        }
+        error.textContent = datos.error || 'No se pudo entrar.';
+      } catch {
+        error.textContent = 'No se pudo conectar con el servidor.';
+      }
+      boton.disabled = false;
+      boton.textContent = 'Entrar';
+      $('#clave').select();
+    });
+
+    $('#usuario').focus();
+  </script>
+</body>
+</html>

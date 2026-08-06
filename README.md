@@ -145,6 +145,19 @@ Entidades: `clientes`, `citas`, `recordatorios`, `cotizaciones`, `cobros`, `nota
 
 ---
 
+## Acceso con contraseña
+
+Si defines `ARI_CLAVE` (y opcionalmente `ARI_USUARIO`, que por defecto es
+`admin`), la aplicación pide credenciales para entrar. Sin esa variable queda
+abierta, que es lo cómodo en tu propio computador.
+
+**En un servidor público es obligatoria.** Sin ella, cualquiera que llegue a la
+dirección ve tus clientes, sus teléfonos y cuánto te deben.
+
+La sesión es una cookie firmada (HMAC-SHA256), dura 30 días y se invalida sola
+al cambiar la contraseña. Tras 8 intentos fallidos la dirección queda frenada
+10 minutos.
+
 ## Datos
 
 Todo queda en `data/clic-control.db` (SQLite), en tu propia máquina o servidor.
@@ -154,6 +167,6 @@ Para respaldar, copiá ese archivo. Para empezar de cero, borralo.
 
 - La app corre en HTTP local. Si la publicás en internet, ponele HTTPS: los
   navegadores no dan acceso al micrófono en sitios sin certificado.
-- No tiene login. Está pensada para uso personal o de un equipo en red interna;
-  si la vas a exponer, agregale autenticación antes.
+- Define `ARI_CLAVE` antes de publicarla. Sin esa variable la aplicación no
+  pide credenciales.
 - Los montos se asumen en pesos colombianos salvo que digas otra moneda.

@@ -149,7 +149,12 @@ Vas a ver:
   Clic Control · Ari
   ➜  http://localhost:3000
   ➜  modelo: claude-opus-5
+  ⚠  SIN CONTRASEÑA: cualquiera que llegue a esta dirección ve tus datos.
+     Está bien en tu computador; si la publicás, definí ARI_CLAVE.
 ```
+
+Ese aviso es normal y correcto mientras la uses en tu propio computador: nadie
+más llega a `localhost`. Sólo importa cuando la publiques.
 
 Abrí el navegador y entrá a **<http://localhost:3000>**. Ya está funcionando.
 
@@ -220,33 +225,139 @@ Abrila en el celular: ahí el micrófono sí funciona, y podés instalarla en la
 pantalla de inicio (Chrome: «Agregar a la pantalla de inicio»; iPhone:
 Compartir → «Agregar a inicio»).
 
-> 🔒 **Ojo con esto:** esa dirección es pública. Cualquiera que la tenga puede
-> ver tus clientes y tus cobros, porque la aplicación todavía **no tiene
-> contraseña**. Sirve perfecto para probar, pero no la dejes abierta ni la
-> compartas. La dirección cambia cada vez que arrancás el túnel y muere cuando
-> cerrás esa Terminal.
+> 🔒 **Ojo con esto:** esa dirección es pública, así que conviene ponerle
+> contraseña antes. En tu `.env` agregá dos líneas y reiniciá con `npm start`:
+>
+> ```
+> ARI_USUARIO=tu-usuario
+> ARI_CLAVE=una-contraseña-larga
+> ```
+>
+> La dirección cambia cada vez que arrancás el túnel y muere cuando cerrás esa
+> Terminal.
 
 ---
 
-## Dejarla prendida todo el tiempo
+## Publicarla en tu hosting (cPanel)
 
-Hasta acá la aplicación vive en tu computador y funciona mientras esté
-encendido. Si querés que esté siempre disponible, estas son las opciones:
+Esta es la opción definitiva: dirección propia, HTTPS —así **el micrófono
+funciona en el celular**— y disponible aunque tu computador esté apagado.
+
+**Requisito:** que tu cPanel tenga **Setup Node.js App** con **Node 22 o
+superior**. Si sólo llega a 18 o 20, no sirve tal cual.
+
+### 1 · Crear el subdominio
+
+cPanel → **Dominios** → **Crear un dominio**, y poné `ari.tudominio.com`.
+Tu página web actual no se toca: la aplicación vive aparte.
+
+En «Raíz del documento» dejá lo que proponga; no vamos a usar esa carpeta.
+
+### 2 · Crear la aplicación Node
+
+cPanel → **Setup Node.js App** → **CREATE APPLICATION**:
+
+| Campo | Qué poner |
+|---|---|
+| Node.js version | **22.x** (la más alta disponible) |
+| Application mode | **Production** |
+| Application root | `ari` |
+| Application URL | el subdominio del paso 1 |
+| Application startup file | `server/index.js` |
+
+**No pongas `public_html` como Application root.** Ahí vive tu sitio web; la
+aplicación va en su propia carpeta.
+
+Dale **CREATE**. Se crea `/home/TU_USUARIO/ari`.
+
+### 3 · Subir los archivos
+
+1. Descargá el ZIP del proyecto desde GitHub (**Code → Download ZIP**)
+2. cPanel → **Administrador de archivos** → entrá a la carpeta `ari`
+3. **Upload** → subí el ZIP
+4. Clic derecho sobre el ZIP → **Extract**
+5. Si los archivos quedaron dentro de una subcarpeta (`Agente-Ari--main`),
+   entrá, seleccioná todo y movelo un nivel arriba, hasta `ari`
+
+Al terminar, dentro de `ari` tienen que verse `package.json`, `server` y
+`public`.
+
+> **No subas la carpeta `node_modules`.** Se instala en el servidor en el paso 5.
+> Tampoco subas tu archivo `.env`: la clave va en el paso siguiente.
+
+### 4 · Las variables (clave y contraseña)
+
+Volvé a **Setup Node.js App**, entrá a tu aplicación con el lápiz de editar y
+bajá hasta **Environment variables**. Agregá tres con **ADD VARIABLE**:
+
+| Nombre | Valor |
+|---|---|
+| `ANTHROPIC_API_KEY` | tu clave `sk-ant-...` |
+| `ARI_USUARIO` | el usuario con el que vas a entrar |
+| `ARI_CLAVE` | una contraseña larga, distinta a las que ya usás |
+
+Guardá.
+
+> 🔒 **`ARI_CLAVE` no es opcional acá.** Sin ella la aplicación queda abierta y
+> cualquiera que dé con la dirección ve tus clientes, sus teléfonos y cuánto te
+> deben. Con ella, pide usuario y contraseña antes de mostrar nada.
+>
+> Guardar la clave de Anthropic acá es además más seguro que en un archivo
+> `.env`: no queda escrita en el disco del sitio.
+
+### 5 · Instalar y arrancar
+
+En la misma pantalla:
+
+1. **Run NPM Install** → esperá a que termine
+2. **RESTART**
+
+### 6 · Activar HTTPS
+
+cPanel → **SSL/TLS Status** → marcá el subdominio → **Run AutoSSL**. Es gratis
+y tarda unos minutos.
+
+Sin esto el micrófono no funciona en el celular; con esto, sí.
+
+### 7 · Probar
+
+Entrá a `https://ari.tudominio.com`. Te recibe la pantalla de acceso: poné el
+usuario y la contraseña del paso 4.
+
+Desde el celular, abrí esa misma dirección y agregala a la pantalla de inicio
+(Chrome: «Agregar a la pantalla de inicio»; iPhone: Compartir → «Agregar a
+inicio»). Queda con ícono propio, a pantalla completa y con voz.
+
+### Si algo no arranca
+
+En **Setup Node.js App**, la aplicación muestra su estado y hay un enlace a los
+registros de error. Lo más común:
+
+| Síntoma | Causa |
+|---|---|
+| Error 503 o página en blanco | Falta **Run NPM Install**, o el startup file no es `server/index.js` |
+| `Cannot find module 'node:sqlite'` | La versión de Node quedó en 18 o 20: cambiala a 22 y reiniciá |
+| Pide contraseña y no la acepta | Revisá `ARI_USUARIO` y `ARI_CLAVE` en las variables; después de cambiarlas hay que **RESTART** |
+| Ari no responde | Falta `ANTHROPIC_API_KEY`, o tu hosting bloquea las conexiones salientes |
+
+Para los datos: quedan en `/home/TU_USUARIO/ari/data/clic-control.db`. Descargá
+ese archivo de vez en cuando como respaldo.
+
+---
+
+## Otras formas de dejarla disponible
 
 | Opción | Cuesta | Sirve para |
 |---|---|---|
-| **Tu computador** (lo que ya tenés) | Gratis | Probarla y usarla vos solo, en tu escritorio |
+| **Tu computador** | Gratis | Probarla y usarla en tu escritorio |
 | **Tu computador + túnel** | Gratis | Sumarle el celular, mientras el computador esté prendido |
-| **Un servidor pequeño en la nube** | ~5 USD al mes | Que esté siempre disponible, desde cualquier lado y para varias personas |
+| **Tu hosting cPanel** | Ya lo pagás | Siempre disponible, con tu dominio y HTTPS |
+| **Servidor en la nube** | ~5 USD al mes | Si tu hosting no soporta Node 22 |
 
-Para la tercera opción sirve cualquier servidor Linux básico (DigitalOcean,
-Hetzner, Vultr, Railway, Render). El procedimiento es el mismo de esta guía, más
-un dominio con HTTPS y dejar la aplicación corriendo como servicio.
+Si tu cPanel no llega a Node 22, **Railway** o **Render** son la alternativa
+simple: conectás el repositorio de GitHub, ponés las mismas variables de
+entorno y se despliega solo, con HTTPS incluido.
 
-**Antes de dar ese paso, hay que ponerle contraseña.** Hoy cualquiera que llegue
-a la dirección entra sin identificarse, y ahí van los datos de tus clientes.
-
----
 
 ## Si algo falla
 
@@ -259,6 +370,7 @@ a la dirección entra sin identificarse, y ahí van los datos de tus clientes.
 | `401` o `authentication_error` | La clave es inválida o está vencida | Creá una clave nueva en la consola de Anthropic |
 | `credit balance is too low` | Se acabó el saldo | Recargá en **Billing** |
 | El micrófono no aparece o no escucha | Navegador sin soporte, sin permiso, o sin HTTPS | Usá Chrome, Edge o Safari; revisá el permiso del micrófono; en el celular usá el túnel |
+| Pide usuario y contraseña y no las recordás | `ARI_CLAVE` quedó definida | Cambiala en el `.env` (o en las variables del hosting) y reiniciá |
 | La página no carga en el celular | Distinta red, o el firewall bloquea | Verificá que ambos estén en el mismo WiFi y permití el acceso cuando Windows pregunte |
 
 **Para empezar de cero con los datos:** apagá la aplicación y borrá la carpeta

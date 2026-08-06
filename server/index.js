@@ -18,12 +18,15 @@ try {
   /* sin .env: se usan las variables del entorno */
 }
 
-const PUERTO = Number(process.env.PORT) || 3000;
+// Passenger (el motor que usa cPanel) puede pasar una ruta de socket en vez de
+// un número, así que se reenvía tal cual: listen() acepta ambas formas.
+const PUERTO = process.env.PORT || 3000;
 
-const [db, tools, asistente] = await Promise.all([
+const [db, tools, asistente, auth] = await Promise.all([
   import('./db.js'),
   import('./tools.js'),
   import('./assistant.js'),
+  import('./auth.js'),
 ]);
 
 /* ------------------------------------------------------------------ */
@@ -80,11 +83,45 @@ async function api(req, res, url) {
   const partes = url.pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
   const [recurso, id] = partes;
 
+  // POST /api/login  -> única ruta abierta cuando hay clave configurada
+  if (recurso === 'login' && req.method === 'POST') {
+    if (!auth.authActiva()) return json(res, 200, { ok: true });
+
+    const ip = auth.origen(req);
+    if (auth.bloqueado(ip)) {
+      return json(res, 429, {
+        error: 'Demasiados intentos fallidos. Esperá unos minutos e intentá de nuevo.',
+      });
+    }
+
+    const { usuario, clave } = await leerJson(req);
+    if (!auth.credencialesCorrectas(usuario, clave)) {
+      auth.registrarFallo(ip);
+      return json(res, 401, { error: 'Usuario o contraseña incorrectos.' });
+    }
+
+    auth.limpiarIntentos(ip);
+    res.setHeader('Set-Cookie', auth.cookieSesion(req, auth.crearToken()));
+    return json(res, 200, { ok: true });
+  }
+
+  // POST /api/logout
+  if (recurso === 'logout' && req.method === 'POST') {
+    res.setHeader('Set-Cookie', auth.cookieBorrada(req));
+    return json(res, 200, { ok: true });
+  }
+
+  // De acá en adelante hace falta sesión
+  if (!auth.sesionValida(req)) {
+    return json(res, 401, { error: 'Sesión expirada. Volvé a entrar.' });
+  }
+
   // GET /api/estado
   if (recurso === 'estado' && req.method === 'GET') {
     return json(res, 200, {
       modelo: asistente.modeloEnUso(),
       vozLista: claveConfigurada(),
+      conAcceso: auth.authActiva(),
     });
   }
 
@@ -169,8 +206,17 @@ async function api(req, res, url) {
 /* Archivos estáticos                                                  */
 /* ------------------------------------------------------------------ */
 
+// Lo que se puede servir sin haber entrado: la propia pantalla de acceso y lo
+// que necesita para verse bien.
+const LIBRES = new Set(['/login.html', '/styles.css', '/icono.svg', '/manifest.webmanifest', '/favicon.ico']);
+
 async function estatico(req, res, url) {
-  const ruta = url.pathname === '/' ? '/index.html' : url.pathname;
+  let ruta = url.pathname === '/' ? '/index.html' : url.pathname;
+
+  if (!auth.sesionValida(req) && !LIBRES.has(ruta)) {
+    ruta = '/login.html'; // cualquier página lleva al acceso
+  }
+
   const destino = join(PUBLICO, normalize(ruta).replace(/^(\.\.[/\\])+/, ''));
 
   if (!destino.startsWith(PUBLICO)) {
@@ -186,9 +232,10 @@ async function estatico(req, res, url) {
     });
     res.end(contenido);
   } catch {
-    // SPA: cualquier ruta desconocida devuelve el index
+    // SPA: cualquier ruta desconocida devuelve el index (o el acceso)
     try {
-      const html = await readFile(join(PUBLICO, 'index.html'));
+      const respaldo = auth.sesionValida(req) ? 'index.html' : 'login.html';
+      const html = await readFile(join(PUBLICO, respaldo));
       res.writeHead(200, { 'Content-Type': MIME['.html'] });
       res.end(html);
     } catch {
@@ -218,5 +265,11 @@ servidor.listen(PUERTO, () => {
   if (!claveConfigurada()) {
     console.log('  ⚠  Falta tu clave: abrí el archivo .env y pegá tu ANTHROPIC_API_KEY.');
   }
+  console.log(
+    auth.authActiva()
+      ? `  ➜  acceso protegido · usuario: ${auth.usuarioConfigurado()}`
+      : '  ⚠  SIN CONTRASEÑA: cualquiera que llegue a esta dirección ve tus datos.\n' +
+        '     Está bien en tu computador; si la publicás, definí ARI_CLAVE.',
+  );
   console.log('');
 });
