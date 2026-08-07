@@ -874,6 +874,18 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
 p .pastilla { margin-left: 6px; }
 .pastilla.propio { color: var(--acento-2); border-color: color-mix(in srgb, var(--acento-2) 40%, transparent); }
 
+/* Acceso a los datos de la empresa, en el pie de la barra lateral */
+.enlace-ajustes {
+  display: block; width: 100%; text-align: left; margin-bottom: 8px;
+  padding: 8px 10px; border-radius: 8px; font-size: 12.5px;
+  color: var(--texto-3); background: none; border: none; cursor: pointer;
+  transition: color .15s, background .15s;
+}
+.enlace-ajustes:hover { color: var(--acento); background: var(--panel-alto); }
+
+/* Un <a> que se ve igual que los botones .mini de las fichas */
+a.mini { text-decoration: none; display: inline-flex; align-items: center; }
+
 /* ─────────── Renglones de una cotización ─────────── */
 
 .tabla-items .fila-seccion td {

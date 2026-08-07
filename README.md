@@ -129,6 +129,7 @@ server/
   db.js         Esquema y consultas SQLite
   tools.js      Las 14 herramientas de Ari y su ejecución
   xlsx.js       Lector mínimo de archivos .xlsx (sin dependencias)
+  imprimir.js   Página A4 de una cotización, para «Guardar como PDF»
   assistant.js  El bucle de conversación con Claude
 public/
   index.html    Interfaz
@@ -158,6 +159,11 @@ subido en base64 y sugiere el mapeo de columnas), `POST /api/productos/importar`
 (guarda en bloque las filas ya confirmadas) y `POST /api/productos/:id/foto`
 (sube o reemplaza la foto de un producto).
 
+Para las cotizaciones: `GET|POST /api/cotizaciones/:id/items` (renglones y
+totales), `PATCH|DELETE /api/cotizacion_items/:id`, y `GET|PATCH /api/ajustes`
+(datos de la empresa). Fuera de la API, `GET /imprimir/cotizacion/:id` devuelve
+la página imprimible —pide sesión igual que todo lo demás—.
+
 ## Cotizaciones con renglones
 
 Una cotización se arma jalando productos del catálogo, igual que las ofertas en
@@ -180,6 +186,27 @@ renglón** cuando se agrega, no se leen del catálogo cada vez. Así una cotizac
 ya enviada no cambia sola porque después se actualizó una lista de precios, y
 borrar un producto del catálogo no borra el renglón de una oferta pasada: sólo
 se pierde el vínculo.
+
+### Imprimir y mandar el PDF
+
+El botón **Imprimir / PDF** de la ficha abre la cotización en una pestaña
+aparte, ya maquetada en A4: logo y datos de la empresa arriba, número de
+oferta, fecha, ciudad y validez; los datos del cliente y del representante;
+los renglones agrupados por sección con su subtotal; subtotal, servicio, IVA y
+total; y las condiciones comerciales al pie. Desde ahí, **Imprimir → Guardar
+como PDF** y ya se puede mandar.
+
+El PDF no se genera en el servidor a propósito: haría falta una librería
+pesada y el hosting compartido suele quedarse sin memoria con ella. El
+navegador ya sabe hacerlo, sale un PDF con el texto buscable, y funciona igual
+desde el computador y desde el celular. Si la oferta es larga, el encabezado
+de la tabla se repite en cada página y ningún renglón queda partido a la
+mitad.
+
+Los datos de la empresa y del representante se cargan una sola vez en
+**Datos de la empresa** (abajo en la barra lateral). La validez y las
+condiciones comerciales salen de ahí, pero cada cotización puede llevar las
+suyas si esa oferta va con otra forma de pago o plazo.
 
 El campo `monto` de la cotización se recalcula solo al tocar un renglón o un
 porcentaje. Es un valor derivado que se guarda a propósito: es lo que ya usaban

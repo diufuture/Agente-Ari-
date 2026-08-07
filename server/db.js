@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS cotizaciones (
   porcentaje_iva      REAL NOT NULL DEFAULT 0,
   -- Con cuál de los tres precios del catálogo se agregan los productos.
   nivel_precio        TEXT NOT NULL DEFAULT 'cliente', -- canal | constructor | cliente
+  -- Lo que va impreso al pie y puede cambiar de una oferta a otra.
+  validez     TEXT,
+  condiciones TEXT,
   creado_en   TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
@@ -117,6 +120,15 @@ CREATE TABLE IF NOT EXISTS productos (
   activo             INTEGER NOT NULL DEFAULT 1,
   maneja_inventario  INTEGER NOT NULL DEFAULT 0,
   creado_en          TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
+-- Datos que encabezan y cierran las cotizaciones impresas: la empresa, el
+-- representante de ventas y las condiciones comerciales por defecto. Es una
+-- tabla clave/valor porque son un puñado de textos que se editan de vez en
+-- cuando, no entidades con vida propia.
+CREATE TABLE IF NOT EXISTS ajustes (
+  clave TEXT PRIMARY KEY,
+  valor TEXT
 );
 
 -- Renglones de una cotización. Los datos del producto se copian acá al
@@ -184,6 +196,9 @@ CREATE INDEX IF NOT EXISTS idx_items_cot ON cotizacion_items(cotizacion_id);
   if (!cot.includes('nivel_precio')) {
     db.exec("ALTER TABLE cotizaciones ADD COLUMN nivel_precio TEXT NOT NULL DEFAULT 'cliente'");
   }
+  // Lo que va impreso y puede cambiar de una oferta a otra.
+  if (!cot.includes('validez')) db.exec('ALTER TABLE cotizaciones ADD COLUMN validez TEXT');
+  if (!cot.includes('condiciones')) db.exec('ALTER TABLE cotizaciones ADD COLUMN condiciones TEXT');
 }
 
 /* ------------------------------------------------------------------ */
@@ -503,6 +518,42 @@ export function importarProductos(categoria, filas, { reemplazar = true, manejaI
 }
 
 const numeroOn = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+
+/* ------------------------------------------------------------------ */
+/* Ajustes de la empresa (lo que encabeza y cierra las cotizaciones)   */
+/* ------------------------------------------------------------------ */
+
+const AJUSTES_POR_DEFECTO = {
+  empresa: 'Click Control',
+  nit: '',
+  direccion: '',
+  telefono: '',
+  email: '',
+  ciudad: 'Bogotá',
+  representante: '',
+  representante_telefono: '',
+  representante_email: '',
+  validez: '8 días',
+  condiciones: [
+    'Tiempo de entrega: según cronograma de obra.',
+    'Garantía: 1 año.',
+    'Forma de pago: a convenir.',
+  ].join('\n'),
+};
+
+export function leerAjustes() {
+  const filas = all('SELECT clave, valor FROM ajustes');
+  const guardados = Object.fromEntries(filas.map((f) => [f.clave, f.valor]));
+  return { ...AJUSTES_POR_DEFECTO, ...guardados };
+}
+
+export function guardarAjustes(datos = {}) {
+  const stmt = db.prepare('INSERT INTO ajustes (clave, valor) VALUES (?, ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor');
+  for (const [clave, valor] of Object.entries(datos)) {
+    if (clave in AJUSTES_POR_DEFECTO) stmt.run(clave, valor == null ? '' : String(valor));
+  }
+  return leerAjustes();
+}
 
 /* ------------------------------------------------------------------ */
 /* Renglones de una cotización                                         */

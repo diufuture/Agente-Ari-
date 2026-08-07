@@ -28,12 +28,13 @@ const PUERTO = process.env.PORT || 3000;
 // este archivo con require(), que no admite top-level await en el módulo.
 async function iniciar() {
 
-const [db, tools, asistente, auth, xlsx] = await Promise.all([
+const [db, tools, asistente, auth, xlsx, imprimir] = await Promise.all([
   import('./db.js'),
   import('./tools.js'),
   import('./assistant.js'),
   import('./auth.js'),
   import('./xlsx.js'),
+  import('./imprimir.js'),
 ]);
 
 const CARPETA_FOTOS = join(PUBLICO, 'uploads', 'productos');
@@ -148,6 +149,14 @@ async function api(req, res, url) {
   // GET /api/resumen  -> tarjetas y listas del dashboard
   if (recurso === 'resumen' && req.method === 'GET') {
     return json(res, 200, db.resumen());
+  }
+
+  // GET|PATCH /api/ajustes -> datos de la empresa que van en las impresiones
+  if (recurso === 'ajustes') {
+    if (req.method === 'GET') return json(res, 200, db.leerAjustes());
+    if (req.method === 'PATCH' || req.method === 'PUT') {
+      return json(res, 200, db.guardarAjustes(await leerJson(req)));
+    }
   }
 
   // POST /api/asistente  -> el cerebro
@@ -383,10 +392,35 @@ async function estatico(req, res, url) {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * GET /imprimir/cotizacion/:id -> página suelta lista para "Guardar como PDF".
+ * Va fuera de /api porque es una página que se abre en una pestaña, no un
+ * recurso JSON; pero pide sesión igual que todo lo demás.
+ */
+async function paginaImpresion(req, res, url) {
+  if (!auth.sesionValida(req)) {
+    res.writeHead(302, { Location: '/login.html' }).end();
+    return;
+  }
+
+  const id = Number(url.pathname.split('/').filter(Boolean)[2]);
+  const html = Number.isFinite(id) ? imprimir.paginaCotizacion(id) : null;
+
+  if (!html) {
+    res.writeHead(404, { 'Content-Type': MIME['.html'] });
+    res.end('<p style="font:16px system-ui;padding:40px">No encontré esa cotización.</p>');
+    return;
+  }
+
+  res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
+  res.end(html);
+}
+
 const servidor = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   try {
     if (url.pathname.startsWith('/api')) await api(req, res, url);
+    else if (url.pathname.startsWith('/imprimir/')) await paginaImpresion(req, res, url);
     else await estatico(req, res, url);
   } catch (err) {
     console.error('[servidor]', err);

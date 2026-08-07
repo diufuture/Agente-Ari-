@@ -97,6 +97,7 @@ const TITULOS = {
   cotizaciones: 'Cotizaciones',
   cobros: 'Cobros',
   recordatorios: 'Recordatorios',
+  ajustes: 'Datos de la empresa',
 };
 
 const ENCABEZADOS = {
@@ -371,6 +372,7 @@ function detalleCotizacion(cot, abonos, items = [], totales = null) {
         </div>
         <div class="ficha-acciones">
           <span class="pastilla ${escapar(cot.estado)}">${escapar(cot.estado)}</span>
+          <a class="mini destacado" href="/imprimir/cotizacion/${cot.id}" target="_blank" rel="noopener">Imprimir / PDF</a>
           <button class="mini destacado" data-accion="editar">Editar</button>
         </div>
       </div>
@@ -446,7 +448,9 @@ const CAMPOS = {
     { n: 'vence_en', e: 'Vence', tipo: 'date' },
     { n: 'estado', e: 'Estado', opciones: ['pendiente', 'enviada', 'aprobada', 'rechazada'] },
     { n: 'moneda', e: 'Moneda' },
+    { n: 'validez', e: 'Validez de la oferta' },
     { n: 'descripcion', e: 'Descripción', area: true, ancho: true },
+    { n: 'condiciones', e: 'Condiciones comerciales (van impresas)', area: true, ancho: true },
   ],
   productos: [
     { n: 'descripcion', e: 'Descripción', req: true, area: true, ancho: true },
@@ -653,6 +657,45 @@ function formularioNuevoProducto() {
     </div>`);
 }
 
+/* ─────────── Ajustes de la empresa ─────────── */
+
+const CAMPOS_AJUSTES = [
+  { n: 'empresa', e: 'Nombre de la empresa' },
+  { n: 'nit', e: 'NIT' },
+  { n: 'direccion', e: 'Dirección', ancho: true },
+  { n: 'telefono', e: 'Teléfono' },
+  { n: 'email', e: 'Correo', tipo: 'email' },
+  { n: 'ciudad', e: 'Ciudad' },
+  { n: 'representante', e: 'Representante de ventas' },
+  { n: 'representante_telefono', e: 'Teléfono del representante' },
+  { n: 'representante_email', e: 'Correo del representante', tipo: 'email' },
+  { n: 'validez', e: 'Validez por defecto de las ofertas' },
+  { n: 'condiciones', e: 'Condiciones comerciales por defecto', area: true, ancho: true },
+];
+
+function vistaAjustes(aj) {
+  const campos = CAMPOS_AJUSTES.map((c) => {
+    const valor = aj[c.n] ?? '';
+    const control = c.area
+      ? `<textarea name="${c.n}" rows="4">${escapar(valor)}</textarea>`
+      : `<input name="${c.n}" type="${c.tipo || 'text'}" value="${escapar(valor)}" />`;
+    return `<label class="${c.ancho ? 'ancho' : ''}"><span>${c.e}</span>${control}</label>`;
+  }).join('');
+
+  return `
+    <p class="ayuda" style="margin-bottom:16px">
+      Estos datos encabezan y cierran las cotizaciones que imprimís. Se usan como
+      punto de partida: cada cotización puede llevar su propia validez y sus
+      propias condiciones si hace falta.
+    </p>
+    <div class="tarjeta">
+      <form class="form-editar" id="form-ajustes">
+        ${campos}
+        <div class="form-acciones"><button type="submit">Guardar</button></div>
+      </form>
+    </div>`;
+}
+
 /* ─────────── Importar lista de precios ─────────── */
 
 const CAMPOS_MAPEO = [
@@ -827,6 +870,16 @@ async function pintar() {
       + bloque('Tareas pendientes', tabla('recordatorios', ['vence_en', 'texto', 'cliente', 'prioridad'],
         r.pendientesHoy, { vacio: 'Sin tareas para hoy.' }))
       + bloque('Próximas citas', tabla('citas', ['inicio', 'titulo', 'cliente', 'lugar'], r.proximasCitas));
+    return;
+  }
+
+  if (v === 'ajustes') {
+    contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
+    try {
+      contenedor.innerHTML = vistaAjustes(await api('/ajustes'));
+    } catch (e) {
+      contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
+    }
     return;
   }
 
@@ -1406,6 +1459,17 @@ $('#contenido').addEventListener('submit', async (e) => {
     return;
   }
 
+  if (e.target.id === 'form-ajustes') {
+    e.preventDefault();
+    try {
+      await api('/ajustes', { method: 'PATCH', body: Object.fromEntries(new FormData(e.target)) });
+      avisar('Datos de la empresa guardados ✓');
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+
   if (e.target.id === 'form-item-libre') {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target));
@@ -1603,6 +1667,22 @@ $('#mic').addEventListener('click', alternarMicrofono);
 $('#fab-mic').addEventListener('click', () => { abrirHoja(); alternarMicrofono(); });
 $('#fab-teclado').addEventListener('click', () => abrirHoja({ enfocarTexto: true }));
 $('#cerrar-hoja').addEventListener('click', cerrarHoja);
+
+// Los ajustes viven en el pie de la barra, fuera de la navegación principal:
+// se tocan una vez y no se vuelven a mirar.
+$('.enlace-ajustes').addEventListener('click', async () => {
+  estado.vista = 'ajustes';
+  estado.vistaAsistente = null;
+  estado.cotizacionAbierta = null;
+  estado.clienteAbierto = null;
+  estado.productoAbierto = null;
+  estado.importacion = null;
+  estado.editando = false;
+  $$('.nav-item').forEach((b) => b.classList.remove('activo'));
+  cerrarHoja();
+  await pintar();
+  $('#contenido').scrollTop = 0;
+});
 
 $('#salir').addEventListener('click', async () => {
   await fetch('/api/logout', { method: 'POST' });
