@@ -151,6 +151,15 @@ async function api(req, res, url) {
     return json(res, 200, db.resumen());
   }
 
+  // POST /api/cotizacion-en-curso -> abre o cierra la cotización que se está
+  // dictando, desde los botones de la interfaz (por voz lo hacen los tools).
+  if (recurso === 'cotizacion-en-curso' && req.method === 'POST') {
+    const { id: idCot } = await leerJson(req);
+    if (idCot) return json(res, 200, db.activarCotizacion(Number(idCot)));
+    db.cerrarCotizacionActiva();
+    return json(res, 200, { ok: true });
+  }
+
   // GET|PATCH /api/ajustes -> datos de la empresa que van en las impresiones
   if (recurso === 'ajustes') {
     if (req.method === 'GET') return json(res, 200, db.leerAjustes());

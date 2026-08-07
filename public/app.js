@@ -930,6 +930,22 @@ const metrica = (valor, rotulo, clase = '') => `
     <div class="rotulo">${escapar(rotulo)}</div>
   </div>`;
 
+/** Aviso fijo mientras se está dictando una cotización. */
+function pintarEnCurso() {
+  const q = estado.resumen?.enCurso;
+  const barra = $('#en-curso');
+  barra.hidden = !q;
+  if (!q) return;
+
+  $('#en-curso-titulo').textContent = q.titulo;
+  const partes = [
+    q.cliente,
+    `${q.n_items} ${q.n_items === 1 ? 'renglón' : 'renglones'}`,
+    fmtDinero(q.totales?.total ?? q.monto, q.moneda),
+  ].filter(Boolean);
+  $('#en-curso-detalle').textContent = partes.join(' · ');
+}
+
 async function refrescarResumen() {
   try {
     estado.resumen = await api('/resumen');
@@ -941,6 +957,7 @@ async function refrescarResumen() {
       const n = c[el.dataset.badge];
       el.textContent = n ? String(n) : '';
     });
+    pintarEnCurso();
   } catch (e) {
     avisar(e.message, true);
   }
@@ -1022,7 +1039,13 @@ async function enviar(texto) {
     if (r.huboCambios) await refrescarResumen();
     await pintar();
 
-    hablar(r.respuesta);
+    // En manos libres el micrófono se reabre al terminar de hablar, para
+    // poder seguir dictando renglones sin volver a tocar el teléfono.
+    hablar(r.respuesta, () => {
+      if (manosLibres() && VOZ_DISPONIBLE && !escuchando) {
+        setTimeout(() => { if (manosLibres() && !escuchando) alternarMicrofono(); }, 400);
+      }
+    });
 
     // Si pediste ver algo, en celular la hoja se aparta para dejar el
     // resultado a la vista; la respuesta queda en la conversación.
@@ -1032,6 +1055,8 @@ async function enviar(texto) {
     cargando.innerHTML = escapar(e.message);
   }
 }
+
+const manosLibres = () => $('#manos-libres')?.checked;
 
 /* ─────────── Texto a voz ─────────── */
 
@@ -1048,14 +1073,39 @@ if ('speechSynthesis' in window) {
   speechSynthesis.onvoiceschanged = cargarVoces;
 }
 
-function hablar(texto) {
-  if (!$('#tts').checked || !('speechSynthesis' in window) || !texto) return;
+/**
+ * Lee la respuesta en voz alta. `alTerminar` corre cuando se calló —o de
+ * inmediato si la voz está apagada—, que es cuando el modo manos libres puede
+ * volver a escuchar sin grabarse a sí misma.
+ */
+function hablar(texto, alTerminar) {
+  let yaSiguio = false;
+  const seguir = () => {
+    if (yaSiguio) return;
+    yaSiguio = true;
+    if (alTerminar) alTerminar();
+  };
+
+  if (!$('#tts').checked || !('speechSynthesis' in window) || !texto) {
+    seguir();
+    return;
+  }
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(texto);
   u.lang = vozPreferida?.lang || 'es-CO';
   if (vozPreferida) u.voice = vozPreferida;
   u.rate = 1.04;
   u.pitch = 1;
+  u.onend = seguir;
+  u.onerror = seguir;
+
+  // Hay navegadores —Safari en iPhone, o cualquiera sin voces instaladas—
+  // que no disparan `onend`. Sin esta red, el manos libres se quedaría
+  // esperando para siempre y habría que tocar el micrófono igual. Se estima
+  // lo que tarda de leer y se sigue de largo si no avisó.
+  const margen = 1500 + texto.length * 75;
+  setTimeout(seguir, margen);
+
   speechSynthesis.speak(u);
 }
 
@@ -1083,6 +1133,11 @@ const PISTA_INICIAL = !VOZ_DISPONIBLE
 let reconocedor = null;
 let escuchando = false;
 
+// Manos libres: cuántos silencios seguidos se toleran antes de apagarlo solo.
+const MAX_SILENCIOS = 3;
+let silenciosSeguidos = 0;
+let ultimoErrorVoz = null;
+
 /** El micrófono existe dos veces: en el panel (escritorio) y flotante (celular). */
 const marcarGrabando = (activo) =>
   ['#mic', '#fab-mic'].forEach((s) => $(s).classList.toggle('grabando', activo));
@@ -1097,6 +1152,9 @@ function iniciarVoz() {
       $(s).setAttribute('aria-label', MOTIVO_SIN_VOZ);
     });
     $('#pista').textContent = MOTIVO_SIN_VOZ;
+    // Sin micrófono el manos libres no tiene sentido: se esconde en vez de
+    // quedar ahí prometiendo algo que no va a pasar.
+    $('#switch-manos-libres').hidden = true;
     return;
   }
 
@@ -1126,6 +1184,11 @@ function iniciarVoz() {
   };
 
   reconocedor.onerror = (e) => {
+    // Un silencio en manos libres es normal —se está caminando de una pieza a
+    // otra—, así que no interrumpe ni abre la hoja: se sigue escuchando.
+    if (e.error === 'no-speech' && manosLibres()) return;
+
+    ultimoErrorVoz = e.error;
     abrirHoja(); // que el aviso sea visible aunque la hoja estuviera cerrada
     $('#pista').textContent = {
       'not-allowed': 'Necesito permiso para usar el micrófono.',
@@ -1139,10 +1202,32 @@ function iniciarVoz() {
     escuchando = false;
     marcarGrabando(false);
     const texto = $('#texto').value.trim();
+
     if (texto) {
+      silenciosSeguidos = 0;
       $('#pista').textContent = '';
       enviar(texto);
-    } else if (!$('#pista').textContent.startsWith('Error') && !$('#pista').textContent.includes('permiso')) {
+      return;
+    }
+
+    // Sin texto: en manos libres se vuelve a escuchar, pero no para siempre.
+    // Si nadie dice nada varias veces seguidas el teléfono quedó guardado en
+    // el bolsillo, y grabar sin parar sólo gasta batería.
+    if (manosLibres() && !ultimoErrorVoz) {
+      silenciosSeguidos += 1;
+      if (silenciosSeguidos <= MAX_SILENCIOS) {
+        $('#pista').textContent = 'Escuchando… decime el siguiente ítem.';
+        setTimeout(() => { if (manosLibres() && !escuchando) alternarMicrofono(); }, 300);
+        return;
+      }
+      $('#manos-libres').checked = false;
+      silenciosSeguidos = 0;
+      $('#pista').textContent = 'Apagué el manos libres porque no escuché nada. Tocá el micrófono para seguir.';
+      return;
+    }
+
+    ultimoErrorVoz = null;
+    if (!$('#pista').textContent.startsWith('Error') && !$('#pista').textContent.includes('permiso')) {
       $('#pista').textContent = PISTA_INICIAL;
     }
   };
@@ -1658,6 +1743,36 @@ $('#input-foto').addEventListener('change', async (e) => {
     await pintar();
   } catch (err) {
     avisar(err.message, true);
+  }
+});
+
+// Botones del aviso de cotización en curso
+$('#en-curso').addEventListener('click', async (e) => {
+  const boton = e.target.closest('[data-accion]');
+  if (!boton) return;
+  const q = estado.resumen?.enCurso;
+  if (!q) return;
+
+  if (boton.dataset.accion === 'ver-en-curso') {
+    estado.cotizacionAbierta = q.id;
+    estado.clienteAbierto = null;
+    estado.productoAbierto = null;
+    estado.vistaAsistente = null;
+    estado.editando = false;
+    $$('.nav-item').forEach((b) => b.classList.toggle('activo', b.dataset.vista === 'cotizaciones'));
+    await pintar();
+    $('#contenido').scrollTop = 0;
+    return;
+  }
+
+  if (boton.dataset.accion === 'finalizar-en-curso') {
+    try {
+      await api('/cotizacion-en-curso', { method: 'POST', body: {} });
+      avisar('Cotización finalizada ✓');
+      await refrescarTodo();
+    } catch (err) {
+      avisar(err.message, true);
+    }
   }
 });
 

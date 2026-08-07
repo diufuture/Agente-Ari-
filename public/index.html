@@ -87,6 +87,17 @@
         <button class="btn-fantasma" id="btn-refrescar" title="Actualizar">↻</button>
       </header>
 
+      <!-- Aviso de la cotización que se está dictando -->
+      <div class="en-curso" id="en-curso" hidden>
+        <span class="punto"></span>
+        <div class="en-curso-texto">
+          <strong id="en-curso-titulo"></strong>
+          <span id="en-curso-detalle"></span>
+        </div>
+        <button class="mini" data-accion="ver-en-curso">Ver</button>
+        <button class="mini destacado" data-accion="finalizar-en-curso">Finalizar</button>
+      </div>
+
       <section class="contenido" id="contenido"><!-- render dinámico --></section>
     </main>
 
@@ -98,6 +109,11 @@
         <label class="switch" title="Leer las respuestas en voz alta">
           <input type="checkbox" id="tts" checked />
           <span>voz</span>
+        </label>
+        <label class="switch" id="switch-manos-libres"
+               title="Vuelve a escuchar solo después de cada respuesta, para dictar sin tocar el teléfono">
+          <input type="checkbox" id="manos-libres" />
+          <span>manos libres</span>
         </label>
         <button class="cerrar-hoja" id="cerrar-hoja" aria-label="Cerrar conversación">✕</button>
       </div>

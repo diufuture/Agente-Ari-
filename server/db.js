@@ -548,11 +548,51 @@ export function leerAjustes() {
 }
 
 export function guardarAjustes(datos = {}) {
-  const stmt = db.prepare('INSERT INTO ajustes (clave, valor) VALUES (?, ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor');
   for (const [clave, valor] of Object.entries(datos)) {
-    if (clave in AJUSTES_POR_DEFECTO) stmt.run(clave, valor == null ? '' : String(valor));
+    if (clave in AJUSTES_POR_DEFECTO) escribirAjuste(clave, valor);
   }
   return leerAjustes();
+}
+
+const escribirAjuste = (clave, valor) =>
+  run(
+    'INSERT INTO ajustes (clave, valor) VALUES (?, ?) ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor',
+    [clave, valor == null ? '' : String(valor)],
+  );
+
+/* ------------------------------------------------------------------ */
+/* Cotización en curso                                                 */
+/* ------------------------------------------------------------------ */
+
+// Armar una cotización dictándola es un ida y vuelta largo: "agregá dos
+// interruptores", "ahora tres de tres canales", "sumale la mano de obra". Sin
+// memoria habría que nombrar al cliente en cada frase. Se guarda cuál es la
+// cotización en curso para que el asistente sepa a dónde va cada renglón, y
+// se guarda en la base (no en el navegador) para poder empezarla en el
+// celular recorriendo la casa y terminarla en el computador.
+
+const CLAVE_ACTIVA = 'cotizacion_activa';
+
+export function activarCotizacion(id) {
+  escribirAjuste(CLAVE_ACTIVA, String(id));
+  return obtenerPorId('cotizaciones', id);
+}
+
+export function cerrarCotizacionActiva() {
+  escribirAjuste(CLAVE_ACTIVA, '');
+}
+
+/** La cotización en curso, o null. Si la borraron, se olvida sola. */
+export function cotizacionActiva() {
+  const fila = one('SELECT valor FROM ajustes WHERE clave = ?', [CLAVE_ACTIVA]);
+  const id = Number(fila?.valor);
+  if (!id) return null;
+  const cot = obtenerPorId('cotizaciones', id);
+  if (!cot) {
+    cerrarCotizacionActiva();
+    return null;
+  }
+  return cot;
 }
 
 /* ------------------------------------------------------------------ */
@@ -794,9 +834,12 @@ export function consultar(entidad, filtros = {}) {
 export function resumen() {
   const d = hoy();
   const contar = (sql, params = []) => one(sql, params).n;
+  const activa = cotizacionActiva();
 
   return {
     fecha: d,
+    // Para el aviso de "cotización en curso" mientras se dicta.
+    enCurso: activa ? { ...activa, totales: totalesCotizacion(activa.id) } : null,
     citasHoy: consultar('citas', { rango: 'hoy', estado: 'pendiente' }),
     pendientesHoy: consultar('recordatorios', { rango: 'hoy', estado: 'pendiente' }),
     vencidos: consultar('recordatorios', { rango: 'vencidos', estado: 'pendiente' }),

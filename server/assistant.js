@@ -13,7 +13,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { HERRAMIENTAS, ejecutar } from './tools.js';
-import { indiceClientes } from './db.js';
+import { indiceClientes, cotizacionActiva, totalesCotizacion } from './db.js';
 
 const MODELO = process.env.ARI_MODEL || 'claude-opus-5';
 const MAX_VUELTAS = 6;
@@ -33,7 +33,14 @@ Reglas:
 - Si falta un dato imprescindible (por ejemplo la fecha de una cita), pregunta en una sola frase corta.
 - Si el usuario menciona un cliente que no existe, créalo sobre la marcha y menciónalo al responder.
 - Los montos son en pesos colombianos salvo que digan otra moneda.
-- Al confirmar algo, di qué quedó registrado y cuándo. Al consultar, di el dato clave; el detalle ya se ve en la pantalla.`;
+- Al confirmar algo, di qué quedó registrado y cuándo. Al consultar, di el dato clave; el detalle ya se ve en la pantalla.
+
+Armar una cotización dictándola:
+- El usuario suele recorrer el sitio agregando renglón por renglón: "agregá dos interruptores de dos canales", "ahora tres de tres canales", "sumale la mano de obra".
+- Mientras haya una COTIZACIÓN EN CURSO, cada renglón va ahí: llama a agregar_item_cotizacion SIN el campo "cliente". Sólo lo pasas si el usuario nombra explícitamente otro cliente u otra cotización.
+- Si pide agregar algo y no hay ninguna en curso, pregunta para qué cliente es y créala con crear_cotizacion; queda en curso automáticamente.
+- Al confirmar cada renglón sé muy breve —una frase—, porque van muchos seguidos: di qué agregaste y el total que lleva.
+- Cuando diga "listo", "ya está", "esa es la cotización" o similar, llama a finalizar_cotizacion y da el resumen con el total.`;
 
 /** Parámetros que dependen del modelo elegido. */
 function parametrosDeModelo(modelo) {
@@ -57,8 +64,17 @@ function contextoVariable() {
     .map((c) => `${c.id}:${c.nombre}${c.empresa ? ` (${c.empresa})` : ''}`)
     .join(', ');
 
+  // Si hay una cotización armándose, el modelo tiene que saberlo para mandar
+  // ahí los renglones que se dicten sin nombrar cliente.
+  const activa = cotizacionActiva();
+  const enCurso = activa
+    ? `\nCOTIZACIÓN EN CURSO: #${activa.id} "${activa.titulo}" de ${activa.cliente ?? 'sin cliente'}, ` +
+      `${activa.n_items} renglón(es), total ${Math.round(totalesCotizacion(activa.id).total)}. ` +
+      'Todo renglón que se dicte sin nombrar otro cliente va a esta cotización.'
+    : '';
+
   return `Hoy es ${fecha} (${iso}), son las ${hora}.
-Clientes registrados: ${clientes || 'ninguno todavía'}.`;
+Clientes registrados: ${clientes || 'ninguno todavía'}.${enCurso}`;
 }
 
 /**

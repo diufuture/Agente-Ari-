@@ -155,14 +155,17 @@ export const HERRAMIENTAS = [
   {
     name: 'agregar_item_cotizacion',
     description:
-      'Agrega un renglón a una cotización, tomando el producto del catálogo. Úsala para "agregale 5 interruptores a la cotización de", "ponele 3 cámaras", "sumale mano de obra por 2 millones". Si el producto no está en el catálogo, pasa descripcion y precio_unitario a mano (sirve para mano de obra, obra civil, etc.).',
+      'Agrega un renglón a la cotización que se está armando. Úsala para "agregá 2 interruptores de dos canales", "ponele 3 cámaras", "sumale mano de obra por 2 millones". SI HAY UNA COTIZACIÓN EN CURSO, no hace falta nombrar al cliente: el renglón va ahí. Sólo pasa "cliente" si el usuario nombra explícitamente otra cotización. Si el producto no está en el catálogo, pasa descripcion y precio_unitario a mano (sirve para mano de obra, obra civil, etc.).',
     input_schema: {
       type: 'object',
       properties: {
-        cliente: clienteProp,
+        cliente: {
+          ...clienteProp,
+          description: 'Sólo si el usuario nombra otro cliente. Omítelo para seguir con la cotización en curso.',
+        },
         cotizacion: {
           type: 'string',
-          description: 'Número o parte del título de la cotización. Si el cliente tiene una sola con saldo, puedes omitirlo.',
+          description: 'Número o parte del título. Omítelo para seguir con la cotización en curso.',
         },
         producto: {
           type: 'string',
@@ -182,8 +185,14 @@ export const HERRAMIENTAS = [
           description: 'Grupo dentro de la cotización: "Interruptores", "Alarma - Seguridad", "Mano de obra"…',
         },
       },
-      required: ['cliente'],
+      required: [],
     },
+  },
+  {
+    name: 'finalizar_cotizacion',
+    description:
+      'Cierra la cotización que se está armando y da el resumen final. Úsala cuando el usuario diga "listo", "ya está", "finalizá la cotización", "esa es la cotización", "hasta ahí". Después de esto, los renglones nuevos ya no van a esa cotización.',
+    input_schema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'ajustar_item_cotizacion',
@@ -221,7 +230,7 @@ export const HERRAMIENTAS = [
           description: 'Con cuál de los tres precios del catálogo se agregan los productos nuevos.',
         },
       },
-      required: ['cliente'],
+      required: [],
     },
   },
   {
@@ -418,6 +427,27 @@ function exigirCotizacion(texto, clienteId) {
   return r;
 }
 
+/**
+ * A qué cotización va lo que se está dictando. Sin cliente ni número, es la
+ * que está en curso: así se puede ir recorriendo la casa diciendo "agregá dos
+ * interruptores", "ahora tres de tres canales", sin repetir a quién.
+ * Nombrar otro cliente cambia la cotización en curso a esa.
+ */
+function cotizacionEnCurso({ cliente, cotizacion } = {}) {
+  if (!cliente && !cotizacion) {
+    const activa = db.cotizacionActiva();
+    if (activa) return { id: activa.id, cotizacion: activa };
+    throw new Error(
+      'No hay ninguna cotización en curso. Decime para qué cliente la armo y la empiezo.',
+    );
+  }
+
+  const clienteId = cliente ? exigirCliente(cliente).id : null;
+  const q = exigirCotizacion(cotizacion ?? '', clienteId);
+  db.activarCotizacion(q.id); // pasa a ser la que se está armando
+  return q;
+}
+
 const tituloDeItems = (cot, tot) =>
   `«${cot.titulo}» · ${dinero(tot.total, cot.moneda)}`;
 
@@ -486,16 +516,39 @@ export function ejecutar(nombre, args) {
         porcentaje_iva: args.porcentaje_iva ?? 0,
         nivel_precio: args.nivel_precio ?? 'cliente',
       });
+      // Recién creada pasa a ser la que se está armando, para poder dictarle
+      // renglones sin repetir el cliente en cada frase.
+      db.activarCotizacion(c.id);
       return {
-        resumen: `Cotización creada. id=${c.id}, ${c.titulo}, ${dinero(c.monto, c.moneda)}, cliente=${c.cliente}. Saldo ${dinero(c.saldo ?? c.monto, c.moneda)}.`,
+        resumen: `Cotización creada y en curso. id=${c.id}, ${c.titulo}, cliente=${c.cliente}. ` +
+          'Los renglones que se dicten ahora van a esta cotización.',
         vista: vistaDe('cotizaciones', 'Cotización creada', [c]),
         cambio: true,
       };
     }
 
+    case 'finalizar_cotizacion': {
+      const activa = db.cotizacionActiva();
+      if (!activa) throw new Error('No hay ninguna cotización en curso.');
+
+      const items = db.consultar('cotizacion_items', { cotizacion_id: activa.id });
+      const tot = db.totalesCotizacion(activa.id);
+      db.cerrarCotizacionActiva();
+
+      return {
+        resumen:
+          `Cotización #${activa.id} "${activa.titulo}" cerrada con ${items.length} renglón(es). ` +
+          `Subtotal ${dinero(tot.subtotal, activa.moneda)}` +
+          (tot.servicio ? `, servicio ${dinero(tot.servicio, activa.moneda)}` : '') +
+          (tot.iva ? `, IVA ${dinero(tot.iva, activa.moneda)}` : '') +
+          `, total ${dinero(tot.total, activa.moneda)}.`,
+        vista: vistaDe('cotizacion_items', tituloDeItems(activa, tot), items),
+        cambio: true,
+      };
+    }
+
     case 'agregar_item_cotizacion': {
-      const { id: cliente_id } = exigirCliente(args.cliente);
-      const q = exigirCotizacion(args.cotizacion ?? '', cliente_id);
+      const q = cotizacionEnCurso(args);
 
       const datos = {
         cantidad: args.cantidad ?? 1,
@@ -560,8 +613,7 @@ export function ejecutar(nombre, args) {
     }
 
     case 'ajustar_cotizacion': {
-      const { id: cliente_id } = exigirCliente(args.cliente);
-      const q = exigirCotizacion(args.cotizacion ?? '', cliente_id);
+      const q = cotizacionEnCurso(args);
 
       const cambios = {};
       for (const campo of ['porcentaje_servicio', 'porcentaje_iva']) {

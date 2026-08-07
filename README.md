@@ -68,7 +68,8 @@ sin barra del navegador.
 | «agendame / tengo una reunión / visita el jueves» | Crea la cita con fecha, hora, lugar y cliente |
 | «recordame / no se me olvide…» | Crea un pendiente con fecha y prioridad |
 | «hacele una cotización a…» | Registra la cotización con valor y estado |
-| «agregale 7 interruptores G7-3 a la cotización de…» | Suma el renglón con el precio del catálogo |
+| «agregá 2 interruptores de dos canales» | Suma el renglón a la cotización en curso, sin nombrar al cliente |
+| «listo, esa es la cotización» | Cierra la cotización y da el total |
 | «a ese ítem súbele 15%» · «ponelo en 300 mil» | Ajusta el precio de un renglón |
 | «ponele 20% de servicio» · «agregale el IVA» | Aplica los porcentajes a toda la cotización |
 | «me abonó / me dio un adelanto sobre…» | Registra el abono y descuenta del saldo de la cotización |
@@ -127,7 +128,7 @@ nada más.
 server/
   index.js      Servidor HTTP + API REST (sin framework)
   db.js         Esquema y consultas SQLite
-  tools.js      Las 14 herramientas de Ari y su ejecución
+  tools.js      Las 15 herramientas de Ari y su ejecución
   xlsx.js       Lector mínimo de archivos .xlsx (sin dependencias)
   imprimir.js   Página A4 de una cotización, para «Guardar como PDF»
   assistant.js  El bucle de conversación con Claude
@@ -160,9 +161,11 @@ subido en base64 y sugiere el mapeo de columnas), `POST /api/productos/importar`
 (sube o reemplaza la foto de un producto).
 
 Para las cotizaciones: `GET|POST /api/cotizaciones/:id/items` (renglones y
-totales), `PATCH|DELETE /api/cotizacion_items/:id`, y `GET|PATCH /api/ajustes`
-(datos de la empresa). Fuera de la API, `GET /imprimir/cotizacion/:id` devuelve
-la página imprimible —pide sesión igual que todo lo demás—.
+totales), `PATCH|DELETE /api/cotizacion_items/:id`, `POST
+/api/cotizacion-en-curso` (abre o cierra la que se está dictando) y
+`GET|PATCH /api/ajustes` (datos de la empresa). Fuera de la API,
+`GET /imprimir/cotizacion/:id` devuelve la página imprimible —pide sesión igual
+que todo lo demás—.
 
 ## Cotizaciones con renglones
 
@@ -186,6 +189,29 @@ renglón** cuando se agrega, no se leen del catálogo cada vez. Así una cotizac
 ya enviada no cambia sola porque después se actualizó una lista de precios, y
 borrar un producto del catálogo no borra el renglón de una oferta pasada: sólo
 se pierde el vínculo.
+
+### Dictarla recorriendo el sitio
+
+La forma en que se arma una cotización en la práctica es caminando por la casa
+del cliente y diciendo lo que se va necesitando. Para eso:
+
+1. **«Hacele una cotización a Jimmy Forero para la casa»** — queda *en curso*.
+2. **«Agregá dos interruptores de dos canales»**, **«ahora tres de tres
+   canales»**, **«sumale la mano de obra, un millón ochocientos»**… Cada
+   renglón entra a esa cotización **sin volver a nombrar al cliente**.
+3. **«Listo, esa es la cotización»** — se cierra y Ari da el total.
+
+Mientras está en curso, un aviso fijo arriba muestra el título, cuántos
+renglones lleva y el total corriendo, con botones para verla o finalizarla a
+mano.
+
+El interruptor **manos libres** (junto al de voz) cierra el círculo: después de
+cada respuesta el micrófono se reabre solo, así se puede seguir dictando sin
+tocar el teléfono. Tolera tres silencios seguidos —el tiempo de pasar de una
+pieza a otra— y después se apaga solo para no quedar grabando en el bolsillo.
+
+Cuál es la cotización en curso se guarda en la base, no en el navegador: se
+puede empezar en el celular recorriendo la obra y terminarla en el computador.
 
 ### Imprimir y mandar el PDF
 
