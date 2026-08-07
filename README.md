@@ -70,6 +70,8 @@ sin barra del navegador.
 | «hacele una cotización a…» | Registra la cotización con valor y estado |
 | «me abonó / me dio un adelanto sobre…» | Registra el abono y descuenta del saldo de la cotización |
 | «me quedó de dar / me debe…» | Registra el cobro con vencimiento |
+| «agregá al catálogo un interruptor de 2 canales a 280 mil» | Guarda el producto en el catálogo de precios |
+| «cuánto cuesta / buscá en el catálogo…» | Busca en el catálogo y **pinta el resultado en el dashboard** |
 | «mostrame / cuáles / cuánto…» | Consulta y **pinta el resultado en el dashboard** |
 | «ya me pagó / ya quedó lista» | Cambia el estado del registro |
 
@@ -122,7 +124,8 @@ nada más.
 server/
   index.js      Servidor HTTP + API REST (sin framework)
   db.js         Esquema y consultas SQLite
-  tools.js      Las 10 herramientas de Ari y su ejecución
+  tools.js      Las 11 herramientas de Ari y su ejecución
+  xlsx.js       Lector mínimo de archivos .xlsx (sin dependencias)
   assistant.js  El bucle de conversación con Claude
 public/
   index.html    Interfaz
@@ -145,7 +148,12 @@ Anthropic. SQLite viene incluido en Node 22.
 | `DELETE` | `/api/:entidad/:id` | Borra |
 
 Entidades: `clientes`, `citas`, `recordatorios`, `cotizaciones`, `cobros`,
-`notas`, `abonos`.
+`notas`, `abonos`, `productos`.
+
+Además, sólo para el catálogo: `POST /api/productos/analizar` (lee un `.xlsx`
+subido en base64 y sugiere el mapeo de columnas), `POST /api/productos/importar`
+(guarda en bloque las filas ya confirmadas) y `POST /api/productos/:id/foto`
+(sube o reemplaza la foto de un producto).
 
 ## Cotizaciones y abonos
 
@@ -181,6 +189,29 @@ sola pantalla:
 
 La ficha de la cotización funciona igual: cifras, barra de avance, lista de
 abonos, formulario para agregar uno más y botón de editar.
+
+## Catálogo de productos
+
+Es la base para armar cotizaciones a partir de las listas de precios de los
+proveedores, sin retipear nada:
+
+1. En **Productos → Importar lista de precios**, subís el `.xlsx` del
+   proveedor (puede tener varias hojas, una por categoría).
+2. Ari lee el archivo en el navegador y **adivina** qué columna es cuál
+   (referencia, descripción, precio canal / constructor / cliente final) —
+   las listas de precios traen hasta esos tres niveles.
+3. Revisás el mapeo (podés corregir cualquier columna con el desplegable) y
+   confirmás hoja por hoja. Volver a importar la misma categoría reemplaza lo
+   anterior, así una lista de precios actualizada no deja duplicados viejos.
+
+También se puede agregar un producto suelto a mano —por voz o desde el botón
+**+ Agregar producto**— y ponerle una foto propia desde su ficha.
+
+El lector del Excel es propio: no se agregó ninguna librería para esto. El
+paquete `xlsx` de npm tiene una vulnerabilidad conocida sin parche, así que
+se optó por un lector mínimo (`server/xlsx.js`) hecho a medida para lo que
+hace falta acá: texto y números de cada celda. Sigue habiendo una sola
+dependencia en todo el proyecto.
 
 ## Logo
 

@@ -91,11 +91,33 @@ CREATE TABLE IF NOT EXISTS notas (
   creado_en  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
+-- Catálogo de productos: lo que se sube desde las listas de precios de los
+-- proveedores. Trae hasta tres niveles de precio porque así vienen esas
+-- listas (canal / constructor / cliente final); una cotización puede tomar
+-- cualquiera de los tres como punto de partida y después ajustarlo a mano.
+CREATE TABLE IF NOT EXISTS productos (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  categoria          TEXT,
+  referencia         TEXT,
+  descripcion        TEXT NOT NULL,
+  marca              TEXT,
+  unidad             TEXT NOT NULL DEFAULT 'UND',
+  precio_canal       REAL,
+  precio_constructor REAL,
+  precio_cliente     REAL NOT NULL DEFAULT 0,
+  foto               TEXT,
+  proveedor          TEXT,
+  notas              TEXT,
+  activo             INTEGER NOT NULL DEFAULT 1,
+  creado_en          TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_citas_inicio  ON citas(inicio);
 CREATE INDEX IF NOT EXISTS idx_rec_vence     ON recordatorios(vence_en);
 CREATE INDEX IF NOT EXISTS idx_cot_cliente   ON cotizaciones(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_cob_cliente   ON cobros(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_abo_cot       ON abonos(cotizacion_id);
+CREATE INDEX IF NOT EXISTS idx_prod_categoria ON productos(categoria);
 `);
 
 /* ------------------------------------------------------------------ */
@@ -112,6 +134,7 @@ export const ENTIDADES = {
   cobros: { tabla: 'cobros', orden: "COALESCE(t.vence_en,'9999') ASC" },
   notas: { tabla: 'notas', orden: 't.id DESC' },
   abonos: { tabla: 'abonos', orden: "COALESCE(t.fecha, t.creado_en) DESC" },
+  productos: { tabla: 'productos', orden: 't.categoria COLLATE NOCASE ASC, t.descripcion COLLATE NOCASE ASC' },
 };
 
 const all = (sql, params = []) => db.prepare(sql).all(...params);
@@ -125,6 +148,7 @@ const SUMA_ABONOS = "COALESCE((SELECT SUM(a.monto) FROM abonos a WHERE a.cotizac
 
 function selectConCliente(tabla) {
   if (tabla === 'clientes') return 'SELECT * FROM clientes';
+  if (tabla === 'productos') return 'SELECT * FROM productos t';
 
   // Una cotización siempre se lee con lo abonado y lo que falta.
   if (tabla === 'cotizaciones') {
@@ -294,6 +318,49 @@ export function eliminar(tabla, id) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Catálogo de productos                                               */
+/* ------------------------------------------------------------------ */
+
+export const categoriasProductos = () =>
+  all("SELECT DISTINCT categoria FROM productos WHERE categoria IS NOT NULL AND categoria <> '' ORDER BY categoria COLLATE NOCASE");
+
+/**
+ * Inserta muchos productos de una sola vez (lo que sube el importador de
+ * listas de precios). Si `reemplazar` es true, primero borra los productos
+ * que ya existían con esa misma categoría, para que volver a subir una lista
+ * actualizada no vaya dejando duplicados de la versión anterior.
+ */
+export function importarProductos(categoria, filas, { reemplazar = true } = {}) {
+  if (reemplazar && categoria) {
+    run('DELETE FROM productos WHERE categoria = ?', [categoria]);
+  }
+  const insertar = db.prepare(`
+    INSERT INTO productos (categoria, referencia, descripcion, marca, unidad, precio_canal, precio_constructor, precio_cliente, proveedor)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  let creados = 0;
+  for (const f of filas) {
+    const descripcion = String(f.descripcion ?? '').trim();
+    if (!descripcion) continue;
+    insertar.run(
+      categoria ?? null,
+      f.referencia != null ? String(f.referencia).trim() : null,
+      descripcion,
+      f.marca ?? null,
+      f.unidad?.trim() || 'UND',
+      numeroOn(f.precio_canal),
+      numeroOn(f.precio_constructor),
+      Number(f.precio_cliente) || 0,
+      f.proveedor ?? null,
+    );
+    creados += 1;
+  }
+  return creados;
+}
+
+const numeroOn = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+
+/* ------------------------------------------------------------------ */
 /* Consultas con filtros (lo que usa el dashboard y el asistente)      */
 /* ------------------------------------------------------------------ */
 
@@ -320,7 +387,7 @@ export function consultar(entidad, filtros = {}) {
     params.push(filtros.cotizacion_id);
   }
 
-  if (filtros.estado && entidad !== 'clientes' && entidad !== 'notas') {
+  if (filtros.estado && entidad !== 'clientes' && entidad !== 'notas' && entidad !== 'productos') {
     where.push(`${t}estado = ?`);
     params.push(filtros.estado);
   }
@@ -334,6 +401,7 @@ export function consultar(entidad, filtros = {}) {
       cobros: ['concepto'],
       notas: ['texto'],
       abonos: ['nota'],
+      productos: ['categoria', 'referencia', 'descripcion', 'marca', 'proveedor'],
     }[entidad];
     where.push(`(${campos.map((c) => `${t}${c} LIKE ? COLLATE NOCASE`).join(' OR ')})`);
     campos.forEach(() => params.push(`%${filtros.texto}%`));

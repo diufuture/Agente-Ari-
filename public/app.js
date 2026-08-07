@@ -12,7 +12,12 @@ const estado = {
   vistaAsistente: null, // resultado de la última consulta por voz
   cotizacionAbierta: null, // id de la cotización cuyo detalle se está viendo
   clienteAbierto: null,    // id del cliente cuya ficha se está viendo
+  productoAbierto: null,   // id del producto cuya ficha se está viendo
   editando: false,         // la ficha abierta está mostrando su formulario
+  importacion: null,       // hojas de un Excel ya analizadas, listas para revisar e importar
+  buscarProductos: '',     // texto del buscador del catálogo
+  nuevoProducto: false,    // el formulario de alta manual de producto está abierto
+  subiendoFotoPara: null,  // id del producto al que se le está por asignar una foto
 };
 
 /* ─────────── Formateo ─────────── */
@@ -39,6 +44,20 @@ const escapar = (s) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const esPasado = (v) => v && String(v).slice(0, 10) < new Date().toLocaleDateString('sv-SE');
+
+const truncar = (v, n = 80) => {
+  const s = String(v ?? '').replace(/\s+/g, ' ').trim();
+  return s.length > n ? `${s.slice(0, n)}…` : s;
+};
+
+function archivoABase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('No pude leer el archivo.'));
+    r.readAsDataURL(file);
+  });
+}
 
 /* ─────────── API ─────────── */
 
@@ -72,6 +91,7 @@ const TITULOS = {
   inicio: 'Hoy',
   agenda: 'Agenda',
   clientes: 'Clientes',
+  productos: 'Productos',
   cotizaciones: 'Cotizaciones',
   cobros: 'Cobros',
   recordatorios: 'Recordatorios',
@@ -83,6 +103,9 @@ const ENCABEZADOS = {
   estado: 'Estado', vence_en: 'Vence', texto: 'Detalle', prioridad: 'Prioridad',
   creado_en: 'Fecha', monto: 'Valor', concepto: 'Concepto', direccion: 'Dirección',
   abonado: 'Abonado', saldo: 'Saldo', cotizacion: 'Cotización', nota: 'Nota', fecha: 'Fecha',
+  categoria: 'Categoría', referencia: 'Referencia', descripcion: 'Descripción', marca: 'Marca',
+  unidad: 'Unidad', precio_cliente: 'Precio', precio_canal: 'P. canal',
+  precio_constructor: 'P. constructor', proveedor: 'Proveedor',
 };
 
 /** Cómo se pinta cada columna. */
@@ -99,6 +122,12 @@ function celda(columna, fila) {
     case 'monto':
     case 'abonado':
       return fmtDinero(v, fila.moneda);
+    case 'precio_cliente':
+    case 'precio_canal':
+    case 'precio_constructor':
+      return v === null || v === undefined ? '—' : fmtDinero(v);
+    case 'descripcion':
+      return `<span title="${escapar(v ?? '')}">${escapar(truncar(v, 70))}</span>`;
     case 'saldo': {
       const saldado = Number(v) <= 0;
       return `<span style="color:${saldado ? 'var(--verde)' : 'var(--ambar)'};font-weight:600">${
@@ -154,6 +183,9 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
         : ''}
       ${entidad === 'clientes'
         ? `<button class="mini destacado" data-accion="abrir-cliente" data-id="${f.id}">Ver ficha</button>`
+        : ''}
+      ${entidad === 'productos'
+        ? `<button class="mini destacado" data-accion="abrir-producto" data-id="${f.id}">Ver</button>`
         : ''}
       ${accionable && !listo
         ? `<button class="mini" data-accion="estado" data-entidad="${entidad}" data-id="${f.id}" data-estado="${NUEVO_ESTADO[entidad]}">${
@@ -278,6 +310,18 @@ const CAMPOS = {
     { n: 'moneda', e: 'Moneda' },
     { n: 'descripcion', e: 'Descripción', area: true, ancho: true },
   ],
+  productos: [
+    { n: 'descripcion', e: 'Descripción', req: true, area: true, ancho: true },
+    { n: 'categoria', e: 'Categoría' },
+    { n: 'referencia', e: 'Referencia' },
+    { n: 'marca', e: 'Marca' },
+    { n: 'unidad', e: 'Unidad' },
+    { n: 'proveedor', e: 'Proveedor' },
+    { n: 'precio_canal', e: 'Precio canal', tipo: 'number' },
+    { n: 'precio_constructor', e: 'Precio constructor', tipo: 'number' },
+    { n: 'precio_cliente', e: 'Precio cliente final', tipo: 'number', req: true },
+    { n: 'notas', e: 'Notas', area: true, ancho: true },
+  ],
 };
 
 /** Formulario de edición de un registro. Se guarda con PATCH. */
@@ -376,11 +420,156 @@ function detalleCliente(c, { cotizaciones, abonos, cobros, citas, notas }) {
   `;
 }
 
+/** Ficha de un producto del catálogo: sus datos, sus tres precios y su foto. */
+function detalleProducto(p) {
+  return `
+    <button class="volver" data-accion="cerrar-producto">← Productos</button>
+
+    <div class="tarjeta ficha">
+      <div class="ficha-cabecera">
+        <div class="ficha-producto-cab">
+          <div class="foto-producto">
+            ${p.foto
+              ? `<img src="${escapar(p.foto)}" alt="" />`
+              : '<span class="foto-vacia">Sin foto</span>'}
+            <button class="mini" data-accion="cambiar-foto" data-id="${p.id}">${p.foto ? 'Cambiar foto' : 'Agregar foto'}</button>
+          </div>
+          <div>
+            <h2>${escapar(p.descripcion)}</h2>
+            <p>${[p.categoria, p.referencia, p.marca].filter(Boolean).map(escapar).join(' · ') || 'Sin categoría'}</p>
+          </div>
+        </div>
+        <button class="mini destacado" data-accion="editar">Editar datos</button>
+      </div>
+
+      <div class="ficha-cifras tres">
+        <div><span>Canal</span><strong>${p.precio_canal ? fmtDinero(p.precio_canal) : '—'}</strong></div>
+        <div><span>Constructor</span><strong>${p.precio_constructor ? fmtDinero(p.precio_constructor) : '—'}</strong></div>
+        <div><span>Cliente final</span><strong class="ok">${fmtDinero(p.precio_cliente)}</strong></div>
+      </div>
+
+      <p class="ficha-desc">Unidad: ${escapar(p.unidad || 'UND')}${p.proveedor ? ` · Proveedor: ${escapar(p.proveedor)}` : ''}</p>
+      ${p.notas ? `<p class="ficha-desc">${escapar(p.notas)}</p>` : ''}
+    </div>
+
+    ${estado.editando ? formularioEdicion('productos', p) : ''}
+
+    <button class="mini peligro" data-accion="borrar" data-entidad="productos" data-id="${p.id}">Borrar producto</button>
+  `;
+}
+
+/** Formulario para agregar un producto a mano, sin pasar por el Excel. */
+function formularioNuevoProducto() {
+  const campos = CAMPOS.productos.map((c) => {
+    const control = c.area
+      ? `<textarea name="${c.n}" rows="2"></textarea>`
+      : `<input name="${c.n}" type="${c.tipo || 'text'}" value="${c.n === 'unidad' ? 'UND' : ''}"${c.req ? ' required' : ''} />`;
+    return `<label class="${c.ancho ? 'ancho' : ''}"><span>${c.e}</span>${control}</label>`;
+  }).join('');
+
+  return bloque('Agregar producto a mano', `
+    <div class="tarjeta">
+      <form class="form-editar" id="form-nuevo-producto">
+        ${campos}
+        <div class="form-acciones">
+          <button type="submit">Guardar producto</button>
+        </div>
+      </form>
+    </div>`);
+}
+
+/* ─────────── Importar lista de precios ─────────── */
+
+const CAMPOS_MAPEO = [
+  ['', '— ignorar —'],
+  ['referencia', 'Referencia'],
+  ['descripcion', 'Descripción'],
+  ['marca', 'Marca'],
+  ['unidad', 'Unidad'],
+  ['precio_canal', 'Precio canal'],
+  ['precio_constructor', 'Precio constructor'],
+  ['precio_cliente', 'Precio cliente final'],
+];
+
+function tarjetaHojaImportacion(hoja, indice) {
+  const { filas, mapeo } = hoja;
+  const encabezado = filas[mapeo.filaEncabezado] || [];
+  const filaEjemplo = filas[mapeo.filaInicioDatos] || [];
+  const totalColumnas = Math.min(12, Math.max(encabezado.length, filaEjemplo.length, 1));
+  const mapaInverso = {};
+  for (const [campo, col] of Object.entries(mapeo.columnas)) {
+    if (col !== null) mapaInverso[col] = campo;
+  }
+
+  const filasVista = filas.slice(mapeo.filaInicioDatos, mapeo.filaInicioDatos + 4);
+  const filasValidas = filas.slice(mapeo.filaInicioDatos).filter((f) => {
+    const colDesc = mapeo.columnas.descripcion;
+    return colDesc !== null && f[colDesc] !== null && f[colDesc] !== undefined && String(f[colDesc]).trim() !== '';
+  }).length;
+
+  const cabeceras = Array.from({ length: totalColumnas }, (_, c) => `
+    <th>
+      <select class="import-mapa" data-col="${c}">
+        ${CAMPOS_MAPEO.map(([v, e]) => `<option value="${v}"${mapaInverso[c] === v ? ' selected' : ''}>${e}</option>`).join('')}
+      </select>
+    </th>`).join('');
+
+  const filasHtml = filasVista.map((f) => `
+    <tr>${Array.from({ length: totalColumnas }, (_, c) => `<td>${escapar(truncar(f[c], 40))}</td>`).join('')}</tr>
+  `).join('');
+
+  return `
+    <div class="tarjeta import-hoja" data-hoja="${indice}">
+      <div class="import-hoja-cab">
+        <label><span>Categoría</span><input type="text" class="import-categoria" value="${escapar(hoja.nombre)}" /></label>
+        <label class="check"><input type="checkbox" class="import-reemplazar" checked /> Reemplazar lo que ya había de esta categoría</label>
+        <button class="mini destacado" data-accion="importar-hoja" data-hoja="${indice}">Importar esta hoja (${filasValidas} productos)</button>
+        <span class="import-resultado"></span>
+      </div>
+      <p class="ayuda">Elegí en cada columna qué es (o "ignorar"). Se muestran las primeras filas como ejemplo.</p>
+      <div class="tabla-envoltura"><table>
+        <thead><tr>${cabeceras}</tr></thead>
+        <tbody>${filasHtml}</tbody>
+      </table></div>
+    </div>`;
+}
+
+function vistaImportacion() {
+  return `
+    <button class="volver" data-accion="cancelar-importacion">← Productos</button>
+    <p class="ayuda" style="margin-bottom:16px">
+      Revisá el mapeo de columnas de cada hoja antes de importar — quedó adivinado, pero confirmalo.
+      Cada hoja se importa por separado.
+    </p>
+    ${estado.importacion.hojas.map((h, i) => tarjetaHojaImportacion(h, i)).join('')}
+  `;
+}
+
 /* ─────────── Vistas ─────────── */
 
 async function pintar() {
   const contenedor = $('#contenido');
   const v = estado.vista;
+
+  // Revisión de un Excel recién analizado, antes de importarlo
+  if (estado.importacion) {
+    $('#titulo-vista').textContent = 'Importar lista de precios';
+    contenedor.innerHTML = vistaImportacion();
+    return;
+  }
+
+  // Ficha de un producto del catálogo
+  if (estado.productoAbierto) {
+    contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
+    try {
+      const p = await api(`/productos/${estado.productoAbierto}`);
+      $('#titulo-vista').textContent = p.descripcion;
+      contenedor.innerHTML = detalleProducto(p);
+    } catch (e) {
+      contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
+    }
+    return;
+  }
 
   // Ficha de un cliente
   if (estado.clienteAbierto) {
@@ -456,6 +645,28 @@ async function pintar() {
       + bloque('Tareas pendientes', tabla('recordatorios', ['vence_en', 'texto', 'cliente', 'prioridad'],
         r.pendientesHoy, { vacio: 'Sin tareas para hoy.' }))
       + bloque('Próximas citas', tabla('citas', ['inicio', 'titulo', 'cliente', 'lugar'], r.proximasCitas));
+    return;
+  }
+
+  // Catálogo de productos: tiene buscador y botones propios (importar, agregar)
+  if (v === 'productos') {
+    contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
+    try {
+      const q = estado.buscarProductos ? `?texto=${encodeURIComponent(estado.buscarProductos)}` : '';
+      const { filas } = await api(`/productos${q}`);
+      const barra = `<div class="barra-productos">
+        <input type="search" id="buscar-productos" placeholder="Buscar por referencia, descripción, categoría…" value="${escapar(estado.buscarProductos)}" />
+        <button class="mini" data-accion="importar-lista">Importar lista de precios</button>
+        <button class="mini" data-accion="alternar-nuevo-producto">${estado.nuevoProducto ? 'Cancelar' : '+ Agregar producto'}</button>
+      </div>`;
+      contenedor.innerHTML = barra
+        + (estado.nuevoProducto ? formularioNuevoProducto() : '')
+        + tabla('productos', ['categoria', 'referencia', 'descripcion', 'precio_cliente'], filas,
+          { vacio: 'Todavía no hay productos en el catálogo. Importá una lista de precios o agregá uno a mano.' });
+      $('#buscar-productos')?.focus();
+    } catch (e) {
+      contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
+    }
     return;
   }
 
@@ -744,6 +955,9 @@ $('#nav').addEventListener('click', (e) => {
   estado.vistaAsistente = null;
   estado.cotizacionAbierta = null;
   estado.clienteAbierto = null;
+  estado.productoAbierto = null;
+  estado.importacion = null;
+  estado.nuevoProducto = false;
   estado.editando = false;
   cerrarHoja();
   pintar();
@@ -758,6 +972,80 @@ $('#contenido').addEventListener('click', async (e) => {
   if (accion === 'editar' || accion === 'cancelar-edicion') {
     estado.editando = accion === 'editar';
     await pintar();
+    return;
+  }
+  if (accion === 'abrir-producto') {
+    estado.productoAbierto = Number(id);
+    estado.editando = false;
+    await pintar();
+    $('#contenido').scrollTop = 0;
+    return;
+  }
+  if (accion === 'cerrar-producto') {
+    estado.productoAbierto = null;
+    estado.vista = 'productos';
+    estado.editando = false;
+    $$('.nav-item').forEach((b) => b.classList.toggle('activo', b.dataset.vista === 'productos'));
+    await pintar();
+    return;
+  }
+  if (accion === 'cambiar-foto') {
+    estado.subiendoFotoPara = Number(id);
+    $('#input-foto').click();
+    return;
+  }
+  if (accion === 'importar-lista') {
+    $('#input-excel').click();
+    return;
+  }
+  if (accion === 'cancelar-importacion') {
+    estado.importacion = null;
+    await pintar();
+    return;
+  }
+  if (accion === 'alternar-nuevo-producto') {
+    estado.nuevoProducto = !estado.nuevoProducto;
+    await pintar();
+    return;
+  }
+  if (accion === 'importar-hoja') {
+    const tarjeta = boton.closest('.import-hoja');
+    const indice = Number(boton.dataset.hoja);
+    const hoja = estado.importacion.hojas[indice];
+    const categoria = tarjeta.querySelector('.import-categoria').value.trim();
+    const reemplazar = tarjeta.querySelector('.import-reemplazar').checked;
+    const mapaColumnas = {};
+    tarjeta.querySelectorAll('.import-mapa').forEach((sel) => {
+      if (sel.value) mapaColumnas[sel.value] = Number(sel.dataset.col);
+    });
+    if (!('descripcion' in mapaColumnas)) {
+      avisar('Elegí qué columna es la descripción antes de importar.', true);
+      return;
+    }
+    const filas = hoja.filas.slice(hoja.mapeo.filaInicioDatos)
+      .map((f) => ({
+        referencia: mapaColumnas.referencia !== undefined ? f[mapaColumnas.referencia] : null,
+        descripcion: f[mapaColumnas.descripcion],
+        marca: mapaColumnas.marca !== undefined ? f[mapaColumnas.marca] : null,
+        unidad: mapaColumnas.unidad !== undefined ? f[mapaColumnas.unidad] : null,
+        precio_canal: mapaColumnas.precio_canal !== undefined ? f[mapaColumnas.precio_canal] : null,
+        precio_constructor: mapaColumnas.precio_constructor !== undefined ? f[mapaColumnas.precio_constructor] : null,
+        precio_cliente: mapaColumnas.precio_cliente !== undefined ? f[mapaColumnas.precio_cliente] : null,
+      }))
+      .filter((f) => f.descripcion !== null && f.descripcion !== undefined && String(f.descripcion).trim() !== '');
+
+    boton.disabled = true;
+    boton.textContent = 'Importando…';
+    try {
+      const r = await api('/productos/importar', { method: 'POST', body: { categoria, filas, reemplazar } });
+      tarjeta.querySelector('.import-resultado').textContent = `✓ ${r.creados} productos importados`;
+      boton.textContent = 'Importado ✓';
+      avisar(`"${categoria}": ${r.creados} productos importados`);
+    } catch (err) {
+      boton.disabled = false;
+      boton.textContent = 'Reintentar';
+      avisar(err.message, true);
+    }
     return;
   }
   if (accion === 'abrir-cliente') {
@@ -842,6 +1130,28 @@ $('#contenido').addEventListener('submit', async (e) => {
     return;
   }
 
+  if (e.target.id === 'form-nuevo-producto') {
+    e.preventDefault();
+    const datos = Object.fromEntries(new FormData(e.target));
+    for (const k of Object.keys(datos)) {
+      if (datos[k] === '') delete datos[k];
+      else if (k.startsWith('precio_')) datos[k] = Number(datos[k]);
+    }
+    if (!datos.descripcion || !(Number(datos.precio_cliente) > 0)) {
+      return avisar('Falta la descripción o el precio al cliente.', true);
+    }
+    try {
+      await api('/productos', { method: 'POST', body: datos });
+      estado.nuevoProducto = false;
+      avisar('Producto agregado ✓');
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+
   if (e.target.id !== 'form-abono') return;
   e.preventDefault();
   const d = Object.fromEntries(new FormData(e.target));
@@ -877,6 +1187,51 @@ $('#contenido').addEventListener('scroll', () => {
     if (!$('.voz').classList.contains('abierta')) $('.fabs').classList.remove('oculto');
   }, 550);
 }, { passive: true });
+
+// Buscador del catálogo de productos (con una pequeña espera para no
+// disparar una consulta por cada tecla).
+let buscarProductosTimer;
+$('#contenido').addEventListener('input', (e) => {
+  if (e.target.id !== 'buscar-productos') return;
+  estado.buscarProductos = e.target.value;
+  clearTimeout(buscarProductosTimer);
+  buscarProductosTimer = setTimeout(() => {
+    if (estado.vista === 'productos' && !estado.productoAbierto) pintar();
+  }, 300);
+});
+
+// Subir una lista de precios (.xlsx): se lee en el navegador y se manda a
+// analizar; nada de la plata del negocio pasa por un tercero.
+$('#input-excel').addEventListener('change', async (e) => {
+  const archivo = e.target.files[0];
+  e.target.value = '';
+  if (!archivo) return;
+  avisar('Leyendo el archivo…');
+  try {
+    const archivo_base64 = await archivoABase64(archivo);
+    const { hojas } = await api('/productos/analizar', { method: 'POST', body: { archivo_base64 } });
+    if (!hojas.length) return avisar('Ese Excel no tiene hojas con datos.', true);
+    estado.importacion = { hojas };
+    await pintar();
+  } catch (err) {
+    avisar(err.message, true);
+  }
+});
+
+// Foto de un producto puntual (se sube a public/uploads/productos/).
+$('#input-foto').addEventListener('change', async (e) => {
+  const archivo = e.target.files[0];
+  e.target.value = '';
+  if (!archivo || !estado.subiendoFotoPara) return;
+  try {
+    const imagen_base64 = await archivoABase64(archivo);
+    await api(`/productos/${estado.subiendoFotoPara}/foto`, { method: 'POST', body: { imagen_base64 } });
+    avisar('Foto actualizada ✓');
+    await pintar();
+  } catch (err) {
+    avisar(err.message, true);
+  }
+});
 
 $('#mic').addEventListener('click', alternarMicrofono);
 

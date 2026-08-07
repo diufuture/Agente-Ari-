@@ -192,15 +192,35 @@ export const HERRAMIENTAS = [
     },
   },
   {
+    name: 'crear_producto',
+    description:
+      'Agrega un producto al catálogo de precios. Úsala para "agregá al catálogo", "este producto vale", cuando el usuario dicte un producto y su precio de memoria (para listas grandes es mejor subir el Excel desde la pantalla de Productos).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        descripcion: { type: 'string', description: 'Qué es el producto.' },
+        categoria: { type: 'string', description: 'Familia o categoría, ej. "Interruptores", "Cámaras".' },
+        referencia: { type: 'string', description: 'Código o modelo del proveedor, si lo dan.' },
+        marca: { type: 'string' },
+        unidad: { type: 'string', description: 'Por defecto UND.' },
+        precio_cliente: { type: 'number', description: 'Precio de venta al cliente final.' },
+        precio_constructor: { type: 'number' },
+        precio_canal: { type: 'number' },
+        proveedor: { type: 'string' },
+      },
+      required: ['descripcion', 'precio_cliente'],
+    },
+  },
+  {
     name: 'consultar',
     description:
-      'Busca información y la muestra en el dashboard. Úsala para "muéstrame", "cuáles", "qué tengo", "cuánto me deben". SIEMPRE úsala antes de responder con datos: nunca inventes ni asumas registros.',
+      'Busca información y la muestra en el dashboard. Úsala para "muéstrame", "cuáles", "qué tengo", "cuánto me deben", "cuánto cuesta", "buscá en el catálogo". SIEMPRE úsala antes de responder con datos: nunca inventes ni asumas registros ni precios.',
     input_schema: {
       type: 'object',
       properties: {
         entidad: {
           type: 'string',
-          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos'],
+          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos', 'productos'],
         },
         cliente: clienteProp,
         estado: {
@@ -241,7 +261,7 @@ export const HERRAMIENTAS = [
       properties: {
         entidad: {
           type: 'string',
-          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos'],
+          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos', 'productos'],
         },
         id: { type: 'integer' },
       },
@@ -262,6 +282,7 @@ const COLUMNAS = {
   cobros: ['vence_en', 'concepto', 'cliente', 'monto', 'estado'],
   notas: ['creado_en', 'texto', 'cliente'],
   abonos: ['fecha', 'cotizacion', 'cliente', 'monto', 'nota'],
+  productos: ['categoria', 'referencia', 'descripcion', 'marca', 'precio_cliente', 'unidad'],
 };
 
 const vistaDe = (entidad, titulo, filas) => ({
@@ -395,6 +416,25 @@ export function ejecutar(nombre, args) {
       };
     }
 
+    case 'crear_producto': {
+      const p = db.insertar('productos', {
+        categoria: args.categoria ?? null,
+        referencia: args.referencia ?? null,
+        descripcion: args.descripcion,
+        marca: args.marca ?? null,
+        unidad: args.unidad ?? 'UND',
+        precio_canal: args.precio_canal ?? null,
+        precio_constructor: args.precio_constructor ?? null,
+        precio_cliente: args.precio_cliente,
+        proveedor: args.proveedor ?? null,
+      });
+      return {
+        resumen: `Producto agregado al catálogo. id=${p.id}, ${p.descripcion}, ${dinero(p.precio_cliente)}.`,
+        vista: vistaDe('productos', 'Producto agregado', [p]),
+        cambio: true,
+      };
+    }
+
     case 'agregar_nota': {
       const { id: cliente_id } = exigirCliente(args.cliente, { crear: true });
       const n = db.insertar('notas', { cliente_id, texto: args.texto });
@@ -474,6 +514,10 @@ function resumirFila(entidad, f) {
       return `#${f.id} ${f.fecha ?? ''} ${dinero(f.monto, f.moneda)} sobre "${f.cotizacion ?? ''}"`;
     case 'cobros':
       return `#${f.id} ${f.cliente ?? ''} ${dinero(f.monto, f.moneda)}`;
+    case 'productos': {
+      const desc = String(f.descripcion ?? '').replace(/\s+/g, ' ').trim().slice(0, 70);
+      return `#${f.id} ${f.referencia ? `${f.referencia} ` : ''}${desc} ${dinero(f.precio_cliente)}`;
+    }
     default:
       return `#${f.id} ${f.texto ?? ''}`;
   }

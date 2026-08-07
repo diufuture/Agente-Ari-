@@ -3,6 +3,7 @@
 
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,12 +28,16 @@ const PUERTO = process.env.PORT || 3000;
 // este archivo con require(), que no admite top-level await en el módulo.
 async function iniciar() {
 
-const [db, tools, asistente, auth] = await Promise.all([
+const [db, tools, asistente, auth, xlsx] = await Promise.all([
   import('./db.js'),
   import('./tools.js'),
   import('./assistant.js'),
   import('./auth.js'),
+  import('./xlsx.js'),
 ]);
+
+const CARPETA_FOTOS = join(PUBLICO, 'uploads', 'productos');
+mkdirSync(CARPETA_FOTOS, { recursive: true });
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -55,6 +60,10 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.json': 'application/json; charset=utf-8',
   '.webmanifest': 'application/manifest+json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
 };
 
 const json = (res, codigo, cuerpo) => {
@@ -66,16 +75,22 @@ const json = (res, codigo, cuerpo) => {
   res.end(texto);
 };
 
-async function leerJson(req) {
+async function leerJson(req, limite = 1_000_000) {
   const trozos = [];
   let bytes = 0;
   for await (const t of req) {
     bytes += t.length;
-    if (bytes > 1_000_000) throw new Error('Cuerpo demasiado grande');
+    if (bytes > limite) throw new Error('Cuerpo demasiado grande');
     trozos.push(t);
   }
   if (!trozos.length) return {};
   return JSON.parse(Buffer.concat(trozos).toString('utf8'));
+}
+
+/** Decodifica un data URL o un base64 pelado y devuelve el Buffer. */
+function decodificarBase64(texto) {
+  const limpio = String(texto || '').replace(/^data:[^;]+;base64,/, '');
+  return Buffer.from(limpio, 'base64');
 }
 
 const ENTIDADES_VALIDAS = new Set(Object.keys(db.ENTIDADES));
@@ -153,6 +168,60 @@ async function api(req, res, url) {
       console.error('[asistente]', err);
       return json(res, 502, { error: `El asistente falló: ${err.message}` });
     }
+  }
+
+  // POST /api/productos/analizar -> lee un .xlsx subido y sugiere cómo
+  // mapear sus columnas, para que el usuario lo confirme antes de importar.
+  if (recurso === 'productos' && partes[1] === 'analizar' && req.method === 'POST') {
+    try {
+      const { archivo_base64 } = await leerJson(req, 15_000_000);
+      const buffer = decodificarBase64(archivo_base64);
+      const { hojas } = xlsx.leerXlsx(buffer);
+      const resultado = hojas.map((h) => ({
+        nombre: h.nombre,
+        filas: h.filas,
+        mapeo: xlsx.sugerirMapeo(h.filas),
+      }));
+      return json(res, 200, { hojas: resultado });
+    } catch (err) {
+      return json(res, 400, { error: `No pude leer ese archivo: ${err.message}` });
+    }
+  }
+
+  // POST /api/productos/importar -> guarda en bloque las filas ya mapeadas
+  // y confirmadas por el usuario en la pantalla de importación.
+  if (recurso === 'productos' && partes[1] === 'importar' && req.method === 'POST') {
+    const { categoria, filas, reemplazar } = await leerJson(req, 15_000_000);
+    if (!Array.isArray(filas)) return json(res, 400, { error: 'Faltan las filas a importar.' });
+    try {
+      const creados = db.importarProductos(categoria || null, filas, { reemplazar: reemplazar !== false });
+      return json(res, 200, { creados });
+    } catch (err) {
+      return json(res, 400, { error: err.message });
+    }
+  }
+
+  // GET /api/productos/categorias -> para sugerir nombres al importar
+  if (recurso === 'productos' && partes[1] === 'categorias' && req.method === 'GET') {
+    return json(res, 200, { categorias: db.categoriasProductos() });
+  }
+
+  // POST /api/productos/:id/foto -> sube (o reemplaza) la foto de un producto
+  if (recurso === 'productos' && id && partes[2] === 'foto' && req.method === 'POST') {
+    const producto = db.obtenerPorId('productos', Number(id));
+    if (!producto) return json(res, 404, { error: 'No encontrado' });
+
+    const { imagen_base64 } = await leerJson(req, 8_000_000);
+    const m = String(imagen_base64 || '').match(/^data:image\/(png|jpe?g|webp);base64,/);
+    if (!m) return json(res, 400, { error: 'La imagen tiene que ser PNG, JPG o WEBP.' });
+    const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+
+    const buffer = decodificarBase64(imagen_base64);
+    if (buffer.length > 5_000_000) return json(res, 400, { error: 'La imagen pesa demasiado (máximo 5MB).' });
+
+    writeFileSync(join(CARPETA_FOTOS, `${id}.${ext}`), buffer);
+    const fila = db.actualizar('productos', Number(id), { foto: `/uploads/productos/${id}.${ext}` });
+    return json(res, 200, fila);
   }
 
   // CRUD manual sobre las entidades (para editar a mano en la interfaz)
