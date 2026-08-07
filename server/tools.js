@@ -207,8 +207,30 @@ export const HERRAMIENTAS = [
         precio_constructor: { type: 'number' },
         precio_canal: { type: 'number' },
         proveedor: { type: 'string' },
+        maneja_inventario: {
+          type: 'boolean',
+          description: 'true si es un producto propio de Clic Control, del que hay que llevar existencias. false (por defecto) si es de un catálogo de proveedor, sólo para cotizar.',
+        },
+        stock_inicial: { type: 'number', description: 'Cuánto hay ahora mismo, si maneja_inventario es true.' },
       },
       required: ['descripcion', 'precio_cliente'],
+    },
+  },
+  {
+    name: 'ajustar_inventario',
+    description:
+      'Registra una entrada o salida de inventario de un producto propio de Clic Control (no de los que sólo están en el catálogo para cotizar). Úsala para "entraron", "compré", "salieron", "vendí", "se dañaron", "ajustá el inventario de".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        producto: { type: 'string', description: 'Nombre, referencia o descripción del producto.' },
+        cantidad: {
+          type: 'number',
+          description: 'Positiva si es una entrada (compra, ajuste al alza). Negativa si es una salida (venta, daño, ajuste a la baja).',
+        },
+        motivo: { type: 'string', description: 'Por qué: "compra a proveedor", "venta directa", "producto dañado", etc.' },
+      },
+      required: ['producto', 'cantidad'],
     },
   },
   {
@@ -220,9 +242,10 @@ export const HERRAMIENTAS = [
       properties: {
         entidad: {
           type: 'string',
-          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos', 'productos'],
+          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos', 'productos', 'movimientos_stock'],
         },
         cliente: clienteProp,
+        producto: { type: 'string', description: 'Nombre, referencia o descripción de un producto. Útil junto con entidad "movimientos_stock" para ver el historial de inventario de uno puntual.' },
         estado: {
           type: 'string',
           description: 'pendiente | completada | cancelada | enviada | aprobada | rechazada | pagado',
@@ -261,7 +284,7 @@ export const HERRAMIENTAS = [
       properties: {
         entidad: {
           type: 'string',
-          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos', 'productos'],
+          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos', 'productos', 'movimientos_stock'],
         },
         id: { type: 'integer' },
       },
@@ -283,6 +306,7 @@ const COLUMNAS = {
   notas: ['creado_en', 'texto', 'cliente'],
   abonos: ['fecha', 'cotizacion', 'cliente', 'monto', 'nota'],
   productos: ['categoria', 'referencia', 'descripcion', 'marca', 'precio_cliente', 'unidad'],
+  movimientos_stock: ['creado_en', 'producto', 'cantidad', 'motivo'],
 };
 
 const vistaDe = (entidad, titulo, filas) => ({
@@ -417,7 +441,7 @@ export function ejecutar(nombre, args) {
     }
 
     case 'crear_producto': {
-      const p = db.insertar('productos', {
+      let p = db.insertar('productos', {
         categoria: args.categoria ?? null,
         referencia: args.referencia ?? null,
         descripcion: args.descripcion,
@@ -427,10 +451,48 @@ export function ejecutar(nombre, args) {
         precio_constructor: args.precio_constructor ?? null,
         precio_cliente: args.precio_cliente,
         proveedor: args.proveedor ?? null,
+        maneja_inventario: args.maneja_inventario ? 1 : 0,
       });
+      if (args.maneja_inventario && Number(args.stock_inicial) > 0) {
+        db.insertar('movimientos_stock', {
+          producto_id: p.id,
+          cantidad: Number(args.stock_inicial),
+          motivo: 'Inventario inicial',
+        });
+        p = db.obtenerPorId('productos', p.id);
+      }
       return {
-        resumen: `Producto agregado al catálogo. id=${p.id}, ${p.descripcion}, ${dinero(p.precio_cliente)}.`,
+        resumen: `Producto agregado al catálogo. id=${p.id}, ${p.descripcion}, ${dinero(p.precio_cliente)}` +
+          (args.maneja_inventario ? `, stock=${p.stock}.` : '.'),
         vista: vistaDe('productos', 'Producto agregado', [p]),
+        cambio: true,
+      };
+    }
+
+    case 'ajustar_inventario': {
+      const r = db.resolverProducto(args.producto);
+      if (r.error) {
+        const sug = r.sugerencias?.length ? ` Opciones: ${r.sugerencias.join(', ')}.` : '';
+        throw new Error(`${r.error}${sug}`);
+      }
+      if (!r.producto.maneja_inventario) {
+        throw new Error(
+          `"${r.producto.descripcion}" no lleva inventario propio (es de un catálogo de proveedor, sólo para cotizar). ` +
+          'Si es un producto de Clic Control, marcalo primero como "maneja inventario" desde su ficha.',
+        );
+      }
+      const cantidad = Number(args.cantidad);
+      if (!cantidad) throw new Error('La cantidad tiene que ser distinta de cero.');
+
+      db.insertar('movimientos_stock', {
+        producto_id: r.id,
+        cantidad,
+        motivo: args.motivo ?? null,
+      });
+      const actualizado = db.obtenerPorId('productos', r.id);
+      return {
+        resumen: `${cantidad > 0 ? 'Entrada' : 'Salida'} de ${Math.abs(cantidad)} en "${actualizado.descripcion}". Stock actual: ${actualizado.stock}.`,
+        vista: vistaDe('productos', `Inventario actualizado · ${actualizado.descripcion}`, [actualizado]),
         cambio: true,
       };
     }
@@ -459,6 +521,14 @@ export function ejecutar(nombre, args) {
           return { resumen: r.error, vista: vistaDe('clientes', 'Sin coincidencias', []) };
         }
         filtros.cliente_id = r.id;
+      }
+      if (args.producto) {
+        const r = db.resolverProducto(args.producto);
+        if (r.error) {
+          const sug = r.sugerencias?.length ? ` Opciones: ${r.sugerencias.join(', ')}.` : '';
+          return { resumen: `${r.error}${sug}`, vista: vistaDe('productos', 'Sin coincidencias', []) };
+        }
+        filtros.producto_id = r.id;
       }
       const filas = db.consultar(args.entidad, filtros);
 
@@ -516,8 +586,11 @@ function resumirFila(entidad, f) {
       return `#${f.id} ${f.cliente ?? ''} ${dinero(f.monto, f.moneda)}`;
     case 'productos': {
       const desc = String(f.descripcion ?? '').replace(/\s+/g, ' ').trim().slice(0, 70);
-      return `#${f.id} ${f.referencia ? `${f.referencia} ` : ''}${desc} ${dinero(f.precio_cliente)}`;
+      const stock = f.maneja_inventario ? `, stock=${f.stock}` : '';
+      return `#${f.id} ${f.referencia ? `${f.referencia} ` : ''}${desc} ${dinero(f.precio_cliente)}${stock}`;
     }
+    case 'movimientos_stock':
+      return `#${f.id} ${f.cantidad > 0 ? '+' : ''}${f.cantidad} en "${f.producto ?? ''}"${f.motivo ? ` (${f.motivo})` : ''}`;
     default:
       return `#${f.id} ${f.texto ?? ''}`;
   }

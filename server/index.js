@@ -191,10 +191,13 @@ async function api(req, res, url) {
   // POST /api/productos/importar -> guarda en bloque las filas ya mapeadas
   // y confirmadas por el usuario en la pantalla de importación.
   if (recurso === 'productos' && partes[1] === 'importar' && req.method === 'POST') {
-    const { categoria, filas, reemplazar } = await leerJson(req, 15_000_000);
+    const { categoria, filas, reemplazar, maneja_inventario } = await leerJson(req, 15_000_000);
     if (!Array.isArray(filas)) return json(res, 400, { error: 'Faltan las filas a importar.' });
     try {
-      const creados = db.importarProductos(categoria || null, filas, { reemplazar: reemplazar !== false });
+      const creados = db.importarProductos(categoria || null, filas, {
+        reemplazar: reemplazar !== false,
+        manejaInventario: Boolean(maneja_inventario),
+      });
       return json(res, 200, { creados });
     } catch (err) {
       return json(res, 400, { error: err.message });

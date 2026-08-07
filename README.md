@@ -148,7 +148,7 @@ Anthropic. SQLite viene incluido en Node 22.
 | `DELETE` | `/api/:entidad/:id` | Borra |
 
 Entidades: `clientes`, `citas`, `recordatorios`, `cotizaciones`, `cobros`,
-`notas`, `abonos`, `productos`.
+`notas`, `abonos`, `productos`, `movimientos_stock`.
 
 Además, sólo para el catálogo: `POST /api/productos/analizar` (lee un `.xlsx`
 subido en base64 y sugiere el mapeo de columnas), `POST /api/productos/importar`
@@ -206,6 +206,27 @@ proveedores, sin retipear nada:
 
 También se puede agregar un producto suelto a mano —por voz o desde el botón
 **+ Agregar producto**— y ponerle una foto propia desde su ficha.
+
+### Inventario de los productos propios
+
+No todo lo que hay en el catálogo se puede descontar: lo que viene de la
+lista de precios de un proveedor es sólo para cotizar, no hay bodega detrás.
+Pero lo que **es de Clic Control** sí tiene existencias reales.
+
+Por eso cada producto tiene un interruptor **"Maneja inventario propio"**
+(al crearlo a mano, al importarlo marcando la hoja entera como propia, o
+editándolo después). Sólo esos llevan stock:
+
+- La ficha del producto muestra su **stock actual** y su **historial completo**
+  de entradas y salidas, cada una con fecha y motivo.
+- Se registra una entrada o salida desde la ficha, o por voz («vendí 3 cámaras
+  de las nuestras», «entraron 20 sensores», «se dañó uno»).
+- Igual que el saldo de una cotización, el stock **no se guarda como número
+  aparte**: se calcula sumando todos sus movimientos, así nunca queda
+  desincronizado.
+- Pedirle a Ari que ajuste el inventario de un producto que no lo maneja
+  (uno de catálogo de proveedor) da un aviso en vez de hacerlo — primero hay
+  que marcarlo como propio.
 
 El lector del Excel es propio: no se agregó ninguna librería para esto. El
 paquete `xlsx` de npm tiene una vulnerabilidad conocida sin parche, así que

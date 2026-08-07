@@ -105,7 +105,8 @@ const ENCABEZADOS = {
   abonado: 'Abonado', saldo: 'Saldo', cotizacion: 'Cotización', nota: 'Nota', fecha: 'Fecha',
   categoria: 'Categoría', referencia: 'Referencia', descripcion: 'Descripción', marca: 'Marca',
   unidad: 'Unidad', precio_cliente: 'Precio', precio_canal: 'P. canal',
-  precio_constructor: 'P. constructor', proveedor: 'Proveedor',
+  precio_constructor: 'P. constructor', proveedor: 'Proveedor', stock: 'Stock',
+  cantidad: 'Cantidad', motivo: 'Motivo', producto: 'Producto',
 };
 
 /** Cómo se pinta cada columna. */
@@ -128,6 +129,12 @@ function celda(columna, fila) {
       return v === null || v === undefined ? '—' : fmtDinero(v);
     case 'descripcion':
       return `<span title="${escapar(v ?? '')}">${escapar(truncar(v, 70))}</span>`;
+    case 'stock':
+      return fila.maneja_inventario
+        ? `<span style="${Number(v) <= 0 ? 'color:var(--alerta);font-weight:600' : ''}">${escapar(v)}</span>`
+        : '<span style="color:var(--texto-3)">—</span>';
+    case 'cantidad':
+      return `<span style="color:${Number(v) > 0 ? 'var(--verde)' : 'var(--alerta)'};font-weight:600">${Number(v) > 0 ? '+' : ''}${escapar(v)}</span>`;
     case 'saldo': {
       const saldado = Number(v) <= 0;
       return `<span style="color:${saldado ? 'var(--verde)' : 'var(--ambar)'};font-weight:600">${
@@ -320,6 +327,7 @@ const CAMPOS = {
     { n: 'precio_canal', e: 'Precio canal', tipo: 'number' },
     { n: 'precio_constructor', e: 'Precio constructor', tipo: 'number' },
     { n: 'precio_cliente', e: 'Precio cliente final', tipo: 'number', req: true },
+    { n: 'maneja_inventario', e: 'Es un producto propio de Clic Control (llevar inventario)', tipo: 'checkbox' },
     { n: 'notas', e: 'Notas', area: true, ancho: true },
   ],
 };
@@ -328,6 +336,9 @@ const CAMPOS = {
 function formularioEdicion(entidad, fila) {
   const campos = CAMPOS[entidad].map((c) => {
     const valor = fila[c.n] ?? '';
+    if (c.tipo === 'checkbox') {
+      return `<label class="ancho check"><input name="${c.n}" type="checkbox" value="1"${valor ? ' checked' : ''} /> ${c.e}</label>`;
+    }
     const control = c.opciones
       ? `<select name="${c.n}">${c.opciones
           .map((o) => `<option value="${o}"${o === valor ? ' selected' : ''}>${o}</option>`).join('')}</select>`
@@ -420,8 +431,20 @@ function detalleCliente(c, { cotizaciones, abonos, cobros, citas, notas }) {
   `;
 }
 
-/** Ficha de un producto del catálogo: sus datos, sus tres precios y su foto. */
-function detalleProducto(p) {
+/** Ficha de un producto del catálogo: sus datos, sus tres precios, su foto y —si es propio— su inventario. */
+function detalleProducto(p, movimientos = []) {
+  const stockBajo = p.maneja_inventario && Number(p.stock) <= 0;
+
+  const historial = movimientos.length
+    ? movimientos.map((m) => `
+        <div class="abono">
+          <div class="abono-fecha">${escapar(fmtFecha(m.creado_en))}</div>
+          <div class="abono-nota">${escapar(m.motivo || (m.cantidad > 0 ? 'Entrada' : 'Salida'))}</div>
+          <div class="abono-monto" style="color:${m.cantidad > 0 ? 'var(--verde)' : 'var(--alerta)'}">${m.cantidad > 0 ? '+' : ''}${m.cantidad}</div>
+          <button class="mini peligro" data-accion="borrar-movimiento" data-id="${m.id}">Quitar</button>
+        </div>`).join('')
+    : '<div class="vacio"><strong>Sin movimientos todavía</strong>Registrá el primero acá abajo.</div>';
+
   return `
     <button class="volver" data-accion="cerrar-producto">← Productos</button>
 
@@ -436,16 +459,18 @@ function detalleProducto(p) {
           </div>
           <div>
             <h2>${escapar(p.descripcion)}</h2>
-            <p>${[p.categoria, p.referencia, p.marca].filter(Boolean).map(escapar).join(' · ') || 'Sin categoría'}</p>
+            <p>${[p.categoria, p.referencia, p.marca].filter(Boolean).map(escapar).join(' · ') || 'Sin categoría'}
+              ${p.maneja_inventario ? '<span class="pastilla propio">propio</span>' : '<span class="pastilla">catálogo proveedor</span>'}</p>
           </div>
         </div>
         <button class="mini destacado" data-accion="editar">Editar datos</button>
       </div>
 
-      <div class="ficha-cifras tres">
+      <div class="ficha-cifras ${p.maneja_inventario ? 'cuatro' : 'tres'}">
         <div><span>Canal</span><strong>${p.precio_canal ? fmtDinero(p.precio_canal) : '—'}</strong></div>
         <div><span>Constructor</span><strong>${p.precio_constructor ? fmtDinero(p.precio_constructor) : '—'}</strong></div>
         <div><span>Cliente final</span><strong class="ok">${fmtDinero(p.precio_cliente)}</strong></div>
+        ${p.maneja_inventario ? `<div><span>Stock</span><strong class="${stockBajo ? 'alerta' : 'ok'}">${p.stock}</strong></div>` : ''}
       </div>
 
       <p class="ficha-desc">Unidad: ${escapar(p.unidad || 'UND')}${p.proveedor ? ` · Proveedor: ${escapar(p.proveedor)}` : ''}</p>
@@ -454,6 +479,20 @@ function detalleProducto(p) {
 
     ${estado.editando ? formularioEdicion('productos', p) : ''}
 
+    ${p.maneja_inventario ? `
+      ${bloque('Movimientos de inventario', `<div class="tarjeta"><div class="lista-abonos">${historial}</div></div>`)}
+      ${bloque('Registrar entrada o salida', `
+        <div class="tarjeta">
+          <form class="form-abono" id="form-ajuste-stock" data-id="${p.id}">
+            <label><span>Cantidad</span>
+              <input name="cantidad" type="number" step="1" required placeholder="10 (entrada) o -3 (salida)" /></label>
+            <label class="ancho"><span>Motivo</span>
+              <input name="motivo" type="text" placeholder="Compra, venta, ajuste, producto dañado…" /></label>
+            <button type="submit">Registrar</button>
+          </form>
+        </div>`)}
+    ` : ''}
+
     <button class="mini peligro" data-accion="borrar" data-entidad="productos" data-id="${p.id}">Borrar producto</button>
   `;
 }
@@ -461,6 +500,11 @@ function detalleProducto(p) {
 /** Formulario para agregar un producto a mano, sin pasar por el Excel. */
 function formularioNuevoProducto() {
   const campos = CAMPOS.productos.map((c) => {
+    if (c.tipo === 'checkbox') {
+      // Justo debajo, el stock con el que arranca (sólo se usa si se marca la casilla).
+      return `<label class="ancho check"><input name="${c.n}" type="checkbox" value="1" /> ${c.e}</label>
+        <label><span>Stock inicial</span><input name="stock_inicial" type="number" min="0" step="1" value="0" /></label>`;
+    }
     const control = c.area
       ? `<textarea name="${c.n}" rows="2"></textarea>`
       : `<input name="${c.n}" type="${c.tipo || 'text'}" value="${c.n === 'unidad' ? 'UND' : ''}"${c.req ? ' required' : ''} />`;
@@ -489,6 +533,7 @@ const CAMPOS_MAPEO = [
   ['precio_canal', 'Precio canal'],
   ['precio_constructor', 'Precio constructor'],
   ['precio_cliente', 'Precio cliente final'],
+  ['stock', 'Stock (cuánto hay)'],
 ];
 
 function tarjetaHojaImportacion(hoja, indice) {
@@ -523,6 +568,7 @@ function tarjetaHojaImportacion(hoja, indice) {
       <div class="import-hoja-cab">
         <label><span>Categoría</span><input type="text" class="import-categoria" value="${escapar(hoja.nombre)}" /></label>
         <label class="check"><input type="checkbox" class="import-reemplazar" checked /> Reemplazar lo que ya había de esta categoría</label>
+        <label class="check"><input type="checkbox" class="import-inventario" /> Son productos propios de Clic Control (llevar inventario)</label>
         <button class="mini destacado" data-accion="importar-hoja" data-hoja="${indice}">Importar esta hoja (${filasValidas} productos)</button>
         <span class="import-resultado"></span>
       </div>
@@ -562,9 +608,11 @@ async function pintar() {
   if (estado.productoAbierto) {
     contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
     try {
-      const p = await api(`/productos/${estado.productoAbierto}`);
+      const id = estado.productoAbierto;
+      const p = await api(`/productos/${id}`);
+      const movimientos = p.maneja_inventario ? (await api(`/movimientos_stock?producto_id=${id}`)).filas : [];
       $('#titulo-vista').textContent = p.descripcion;
-      contenedor.innerHTML = detalleProducto(p);
+      contenedor.innerHTML = detalleProducto(p, movimientos);
     } catch (e) {
       contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
     }
@@ -661,7 +709,7 @@ async function pintar() {
       </div>`;
       contenedor.innerHTML = barra
         + (estado.nuevoProducto ? formularioNuevoProducto() : '')
-        + tabla('productos', ['categoria', 'referencia', 'descripcion', 'precio_cliente'], filas,
+        + tabla('productos', ['categoria', 'referencia', 'descripcion', 'stock', 'precio_cliente'], filas,
           { vacio: 'Todavía no hay productos en el catálogo. Importá una lista de precios o agregá uno a mano.' });
       $('#buscar-productos')?.focus();
     } catch (e) {
@@ -1014,6 +1062,7 @@ $('#contenido').addEventListener('click', async (e) => {
     const hoja = estado.importacion.hojas[indice];
     const categoria = tarjeta.querySelector('.import-categoria').value.trim();
     const reemplazar = tarjeta.querySelector('.import-reemplazar').checked;
+    const manejaInventario = tarjeta.querySelector('.import-inventario').checked;
     const mapaColumnas = {};
     tarjeta.querySelectorAll('.import-mapa').forEach((sel) => {
       if (sel.value) mapaColumnas[sel.value] = Number(sel.dataset.col);
@@ -1031,13 +1080,17 @@ $('#contenido').addEventListener('click', async (e) => {
         precio_canal: mapaColumnas.precio_canal !== undefined ? f[mapaColumnas.precio_canal] : null,
         precio_constructor: mapaColumnas.precio_constructor !== undefined ? f[mapaColumnas.precio_constructor] : null,
         precio_cliente: mapaColumnas.precio_cliente !== undefined ? f[mapaColumnas.precio_cliente] : null,
+        stock: mapaColumnas.stock !== undefined ? f[mapaColumnas.stock] : null,
       }))
       .filter((f) => f.descripcion !== null && f.descripcion !== undefined && String(f.descripcion).trim() !== '');
 
     boton.disabled = true;
     boton.textContent = 'Importando…';
     try {
-      const r = await api('/productos/importar', { method: 'POST', body: { categoria, filas, reemplazar } });
+      const r = await api('/productos/importar', {
+        method: 'POST',
+        body: { categoria, filas, reemplazar, maneja_inventario: manejaInventario },
+      });
       tarjeta.querySelector('.import-resultado').textContent = `✓ ${r.creados} productos importados`;
       boton.textContent = 'Importado ✓';
       avisar(`"${categoria}": ${r.creados} productos importados`);
@@ -1092,6 +1145,13 @@ $('#contenido').addEventListener('click', async (e) => {
       await pintar();
       return;
     }
+    if (accion === 'borrar-movimiento') {
+      if (!confirm('¿Quitar este movimiento de inventario?')) return;
+      await api(`/movimientos_stock/${id}`, { method: 'DELETE' });
+      avisar('Movimiento eliminado');
+      await pintar();
+      return;
+    }
     if (accion === 'estado') {
       await api(`/${entidad}/${id}`, { method: 'PATCH', body: { estado: boton.dataset.estado } });
       avisar('Actualizado ✓');
@@ -1113,6 +1173,8 @@ $('#contenido').addEventListener('submit', async (e) => {
     e.preventDefault();
     const { entidad, id } = e.target.dataset;
     const datos = Object.fromEntries(new FormData(e.target));
+    // Las casillas sin marcar no aparecen en FormData: hay que agregarlas.
+    e.target.querySelectorAll('input[type="checkbox"]').forEach((cb) => { datos[cb.name] = cb.checked ? 1 : 0; });
     // Un campo vacío se guarda como nulo, no como cadena vacía.
     for (const k of Object.keys(datos)) {
       if (datos[k] === '') datos[k] = null;
@@ -1133,6 +1195,10 @@ $('#contenido').addEventListener('submit', async (e) => {
   if (e.target.id === 'form-nuevo-producto') {
     e.preventDefault();
     const datos = Object.fromEntries(new FormData(e.target));
+    const manejaInventario = e.target.querySelector('input[name="maneja_inventario"]').checked;
+    const stockInicial = Number(datos.stock_inicial) || 0;
+    delete datos.stock_inicial; // no es una columna de productos: va aparte, como movimiento
+    datos.maneja_inventario = manejaInventario ? 1 : 0;
     for (const k of Object.keys(datos)) {
       if (datos[k] === '') delete datos[k];
       else if (k.startsWith('precio_')) datos[k] = Number(datos[k]);
@@ -1141,10 +1207,35 @@ $('#contenido').addEventListener('submit', async (e) => {
       return avisar('Falta la descripción o el precio al cliente.', true);
     }
     try {
-      await api('/productos', { method: 'POST', body: datos });
+      const p = await api('/productos', { method: 'POST', body: datos });
+      if (manejaInventario && stockInicial > 0) {
+        await api('/movimientos_stock', {
+          method: 'POST',
+          body: { producto_id: p.id, cantidad: stockInicial, motivo: 'Inventario inicial' },
+        });
+      }
       estado.nuevoProducto = false;
       avisar('Producto agregado ✓');
       await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+
+  if (e.target.id === 'form-ajuste-stock') {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    const cantidad = Number(d.cantidad);
+    if (!cantidad) return avisar('La cantidad tiene que ser distinta de cero.', true);
+
+    try {
+      await api('/movimientos_stock', {
+        method: 'POST',
+        body: { producto_id: Number(e.target.dataset.id), cantidad, motivo: d.motivo || undefined },
+      });
+      avisar('Inventario actualizado ✓');
       await pintar();
     } catch (err) {
       avisar(err.message, true);

@@ -109,7 +109,21 @@ CREATE TABLE IF NOT EXISTS productos (
   proveedor          TEXT,
   notas              TEXT,
   activo             INTEGER NOT NULL DEFAULT 1,
+  maneja_inventario  INTEGER NOT NULL DEFAULT 0,
   creado_en          TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
+-- Entradas y salidas de inventario. Sólo tiene sentido para los productos
+-- propios de Clic Control (maneja_inventario = 1): los que vienen de listas
+-- de precios de otros proveedores se cotizan pero no se guardan en bodega.
+-- El stock actual nunca se guarda como número aparte: se calcula sumando
+-- estos movimientos, igual que el saldo de una cotización con sus abonos.
+CREATE TABLE IF NOT EXISTS movimientos_stock (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  producto_id  INTEGER NOT NULL REFERENCES productos(id) ON DELETE CASCADE,
+  cantidad     REAL NOT NULL,     -- positiva = entrada, negativa = salida
+  motivo       TEXT,
+  creado_en    TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_citas_inicio  ON citas(inicio);
@@ -118,7 +132,17 @@ CREATE INDEX IF NOT EXISTS idx_cot_cliente   ON cotizaciones(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_cob_cliente   ON cobros(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_abo_cot       ON abonos(cotizacion_id);
 CREATE INDEX IF NOT EXISTS idx_prod_categoria ON productos(categoria);
+CREATE INDEX IF NOT EXISTS idx_mov_producto ON movimientos_stock(producto_id);
 `);
+
+// Migración suave: si la base ya existía desde antes de que `productos`
+// tuviera `maneja_inventario`, CREATE TABLE IF NOT EXISTS no la agrega sola.
+{
+  const columnas = db.prepare('PRAGMA table_info(productos)').all().map((c) => c.name);
+  if (!columnas.includes('maneja_inventario')) {
+    db.exec('ALTER TABLE productos ADD COLUMN maneja_inventario INTEGER NOT NULL DEFAULT 0');
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Utilidades                                                          */
@@ -135,6 +159,7 @@ export const ENTIDADES = {
   notas: { tabla: 'notas', orden: 't.id DESC' },
   abonos: { tabla: 'abonos', orden: "COALESCE(t.fecha, t.creado_en) DESC" },
   productos: { tabla: 'productos', orden: 't.categoria COLLATE NOCASE ASC, t.descripcion COLLATE NOCASE ASC' },
+  movimientos_stock: { tabla: 'movimientos_stock', orden: 't.id DESC' },
 };
 
 const all = (sql, params = []) => db.prepare(sql).all(...params);
@@ -146,9 +171,15 @@ export const hoy = () => new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
 /** Une el nombre del cliente a cualquier fila que tenga cliente_id. */
 const SUMA_ABONOS = "COALESCE((SELECT SUM(a.monto) FROM abonos a WHERE a.cotizacion_id = t.id), 0)";
 
+const SUMA_STOCK = "COALESCE((SELECT SUM(m.cantidad) FROM movimientos_stock m WHERE m.producto_id = t.id), 0)";
+
 function selectConCliente(tabla) {
   if (tabla === 'clientes') return 'SELECT * FROM clientes';
-  if (tabla === 'productos') return 'SELECT * FROM productos t';
+  if (tabla === 'productos') return `SELECT t.*, ${SUMA_STOCK} AS stock FROM productos t`;
+  if (tabla === 'movimientos_stock') {
+    return `SELECT t.*, p.descripcion AS producto, p.referencia AS referencia
+            FROM movimientos_stock t LEFT JOIN productos p ON p.id = t.producto_id`;
+  }
 
   // Una cotización siempre se lee con lo abonado y lo que falta.
   if (tabla === 'cotizaciones') {
@@ -284,6 +315,35 @@ export function resolverCotizacion(texto, clienteId = null) {
   return { error: `No encontré ninguna cotización que coincida con "${q}".`, sugerencias: [] };
 }
 
+/**
+ * Encuentra un producto del catálogo por id, referencia o descripción.
+ * Devuelve { id, producto } o { error, sugerencias }.
+ */
+export function resolverProducto(texto) {
+  if (typeof texto === 'number' || /^\d+$/.test(String(texto ?? '').trim())) {
+    const p = obtenerPorId('productos', Number(texto));
+    if (p) return { id: p.id, producto: p };
+  }
+
+  const q = String(texto ?? '').trim();
+  if (!q) return { error: 'No dijiste qué producto.', sugerencias: [] };
+
+  const parecidos = all(
+    `${selectConCliente('productos')}
+      WHERE t.referencia LIKE ? COLLATE NOCASE OR t.descripcion LIKE ? COLLATE NOCASE
+      ORDER BY t.descripcion COLLATE NOCASE LIMIT 5`,
+    [`%${q}%`, `%${q}%`],
+  );
+  if (parecidos.length === 1) return { id: parecidos[0].id, producto: parecidos[0] };
+  if (parecidos.length > 1) {
+    return {
+      error: `Hay varios productos que coinciden con "${q}".`,
+      sugerencias: parecidos.map((p) => `#${p.id} ${p.referencia ? `${p.referencia} ` : ''}${p.descripcion}`),
+    };
+  }
+  return { error: `No encontré ningún producto que coincida con "${q}".`, sugerencias: [] };
+}
+
 /* ------------------------------------------------------------------ */
 /* Inserciones genéricas                                               */
 /* ------------------------------------------------------------------ */
@@ -329,20 +389,28 @@ export const categoriasProductos = () =>
  * listas de precios). Si `reemplazar` es true, primero borra los productos
  * que ya existían con esa misma categoría, para que volver a subir una lista
  * actualizada no vaya dejando duplicados de la versión anterior.
+ *
+ * `manejaInventario` marca la tanda entera como propia de Clic Control (con
+ * stock que se descuenta), en vez de un catálogo de referencia de un
+ * proveedor externo. Si además alguna fila trae `stock`, esa cantidad queda
+ * como su primer movimiento de inventario.
  */
-export function importarProductos(categoria, filas, { reemplazar = true } = {}) {
+export function importarProductos(categoria, filas, { reemplazar = true, manejaInventario = false } = {}) {
   if (reemplazar && categoria) {
-    run('DELETE FROM productos WHERE categoria = ?', [categoria]);
+    run('DELETE FROM productos WHERE categoria = ?', [categoria]); // arrastra sus movimientos de stock (ON DELETE CASCADE)
   }
   const insertar = db.prepare(`
-    INSERT INTO productos (categoria, referencia, descripcion, marca, unidad, precio_canal, precio_constructor, precio_cliente, proveedor)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO productos (categoria, referencia, descripcion, marca, unidad, precio_canal, precio_constructor, precio_cliente, proveedor, maneja_inventario)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
+  const insertarStock = db.prepare(
+    "INSERT INTO movimientos_stock (producto_id, cantidad, motivo) VALUES (?, ?, 'Importación de lista de precios')",
+  );
   let creados = 0;
   for (const f of filas) {
     const descripcion = String(f.descripcion ?? '').trim();
     if (!descripcion) continue;
-    insertar.run(
+    const r = insertar.run(
       categoria ?? null,
       f.referencia != null ? String(f.referencia).trim() : null,
       descripcion,
@@ -352,7 +420,11 @@ export function importarProductos(categoria, filas, { reemplazar = true } = {}) 
       numeroOn(f.precio_constructor),
       Number(f.precio_cliente) || 0,
       f.proveedor ?? null,
+      manejaInventario ? 1 : 0,
     );
+    if (manejaInventario && Number(f.stock) > 0) {
+      insertarStock.run(Number(r.lastInsertRowid), Number(f.stock));
+    }
     creados += 1;
   }
   return creados;
@@ -386,8 +458,12 @@ export function consultar(entidad, filtros = {}) {
     where.push(`${t}cotizacion_id = ?`);
     params.push(filtros.cotizacion_id);
   }
+  if (filtros.producto_id) {
+    where.push(`${t}producto_id = ?`);
+    params.push(filtros.producto_id);
+  }
 
-  if (filtros.estado && entidad !== 'clientes' && entidad !== 'notas' && entidad !== 'productos') {
+  if (filtros.estado && entidad !== 'clientes' && entidad !== 'notas' && entidad !== 'productos' && entidad !== 'movimientos_stock') {
     where.push(`${t}estado = ?`);
     params.push(filtros.estado);
   }
@@ -402,6 +478,7 @@ export function consultar(entidad, filtros = {}) {
       notas: ['texto'],
       abonos: ['nota'],
       productos: ['categoria', 'referencia', 'descripcion', 'marca', 'proveedor'],
+      movimientos_stock: ['motivo'],
     }[entidad];
     where.push(`(${campos.map((c) => `${t}${c} LIKE ? COLLATE NOCASE`).join(' OR ')})`);
     campos.forEach(() => params.push(`%${filtros.texto}%`));

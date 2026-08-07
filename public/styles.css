@@ -869,3 +869,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
 }
 .import-hoja th { padding: 10px 12px; }
 .import-hoja td { font-size: 12.5px; max-width: 220px; }
+
+.contacto .pastilla,
+p .pastilla { margin-left: 6px; }
+.pastilla.propio { color: var(--acento-2); border-color: color-mix(in srgb, var(--acento-2) 40%, transparent); }
