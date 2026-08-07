@@ -366,6 +366,67 @@ ese archivo de vez en cuando como respaldo.
 
 ---
 
+## Actualizar a una versión nueva
+
+Cuando se le agreguen funciones, hay que subir los archivos nuevos al servidor.
+Son cinco minutos y siempre es el mismo procedimiento.
+
+> ⚠️ **Lo único que no se puede perder es la carpeta `data`**: ahí viven tus
+> clientes, cotizaciones y productos. Los pasos de abajo no la tocan, pero el
+> paso 1 es para que aunque algo salga mal, tengas de dónde volver.
+
+### 1 · Respaldar la base de datos (siempre)
+
+En el **File Manager**, entrá a `/home/TU_USUARIO/ari/data`, seleccioná
+**`clic-control.db`** y usá **Download**. Guardalo en tu computador con la fecha
+en el nombre. Si algo sale mal, con volver a subir ese archivo queda todo como
+estaba.
+
+### 2 · Bajar la versión nueva
+
+Abrí el repositorio en GitHub, entrá a la rama del proyecto, y usá el botón
+verde **Code → Download ZIP**. Se descarga un `.zip` en tu computador.
+
+### 3 · Prepararlo
+
+Descomprimí ese ZIP (doble clic). Queda una carpeta con un nombre largo. **Entrá
+a esa carpeta**, seleccioná todo lo de adentro (Cmd+A), clic derecho →
+**Comprimir**. Eso genera un `Archive.zip` con los archivos sueltos, que es lo
+que entiende cPanel.
+
+> Es el mismo paso que la primera vez: cPanel no sabe subir carpetas, sólo
+> archivos, y el ZIP tiene que traer los archivos en la raíz.
+
+### 4 · Subirlo y extraerlo
+
+En el **File Manager**, parado en `/home/TU_USUARIO/ari`:
+
+1. **Upload** → arrastrá el `Archive.zip`.
+2. Cuando termine, clic derecho sobre él → **Extract**.
+3. Confirmá que se sobrescriban los archivos existentes.
+4. Borrá el `Archive.zip` y, si aparece, la carpeta `__MACOSX`.
+
+Los archivos viejos se reemplazan por los nuevos. `data` no está en el ZIP, así
+que queda intacta.
+
+### 5 · Reiniciar
+
+En **Setup Node.js App** → tu aplicación → **RESTART**.
+
+Si la versión nueva trae dependencias nuevas (te lo vamos a avisar), antes de
+reiniciar hacé **Run NPM Install**.
+
+### 6 · Comprobar
+
+Entrá a `https://ari.tudominio.com` y fijate que tus clientes y cotizaciones
+sigan ahí. La primera vez que arranca, la aplicación acomoda sola la base de
+datos para lo que traiga la versión nueva, sin borrar nada.
+
+> Si ves la versión vieja, es el navegador guardando la página. Recargá
+> forzando: **Cmd+Shift+R** en Mac, o abrí una ventana privada.
+
+---
+
 ## Otras formas de dejarla disponible
 
 | Opción | Cuesta | Sirve para |
