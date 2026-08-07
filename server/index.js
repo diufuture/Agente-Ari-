@@ -245,17 +245,20 @@ async function api(req, res, url) {
     }
   }
 
-  // POST /api/productos/importar -> guarda en bloque las filas ya mapeadas
-  // y confirmadas por el usuario en la pantalla de importación.
+  // POST /api/productos/importar -> cruza la lista con el catálogo. Con
+  // `simular: true` sólo informa qué pasaría, sin tocar nada: así el usuario
+  // ve qué se va a actualizar antes de aceptarlo.
   if (recurso === 'productos' && partes[1] === 'importar' && req.method === 'POST') {
-    const { categoria, filas, reemplazar, maneja_inventario } = await leerJson(req, 15_000_000);
+    const { categoria, filas, maneja_inventario, descontinuar_ausentes, simular } =
+      await leerJson(req, 15_000_000);
     if (!Array.isArray(filas)) return json(res, 400, { error: 'Faltan las filas a importar.' });
     try {
-      const creados = db.importarProductos(categoria || null, filas, {
-        reemplazar: reemplazar !== false,
+      const informe = db.conciliarProductos(categoria || null, filas, {
         manejaInventario: Boolean(maneja_inventario),
+        descontinuarAusentes: Boolean(descontinuar_ausentes),
+        simular: Boolean(simular),
       });
-      return json(res, 200, { creados });
+      return json(res, 200, informe);
     } catch (err) {
       return json(res, 400, { error: err.message });
     }

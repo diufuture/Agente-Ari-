@@ -471,53 +471,165 @@ export function eliminar(tabla, id) {
 export const categoriasProductos = () =>
   all("SELECT DISTINCT categoria FROM productos WHERE categoria IS NOT NULL AND categoria <> '' ORDER BY categoria COLLATE NOCASE");
 
+const numeroOn = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+
+/** Clave con la que se reconoce un producto entre una lista y la siguiente. */
+const claveDe = (f) => {
+  const ref = String(f.referencia ?? '').trim().toLowerCase();
+  if (ref) return `r:${ref}`;
+  // Sin referencia sólo queda la descripción, que es peor clave pero es lo que hay.
+  return `d:${String(f.descripcion ?? '').trim().toLowerCase().replace(/\s+/g, ' ')}`;
+};
+
+/** Campos que manda la lista del proveedor. Lo demás es del usuario. */
+const CAMPOS_DE_LISTA = ['descripcion', 'marca', 'unidad', 'precio_canal', 'precio_constructor', 'precio_cliente', 'proveedor'];
+
 /**
- * Inserta muchos productos de una sola vez (lo que sube el importador de
- * listas de precios). Si `reemplazar` es true, primero borra los productos
- * que ya existían con esa misma categoría, para que volver a subir una lista
- * actualizada no vaya dejando duplicados de la versión anterior.
+ * Cruza una lista de precios contra lo que ya hay en esa categoría y decide
+ * qué es nuevo, qué cambió y qué dejó de venir.
  *
- * `manejaInventario` marca la tanda entera como propia de Clic Control (con
- * stock que se descuenta), en vez de un catálogo de referencia de un
- * proveedor externo. Si además alguna fila trae `stock`, esa cantidad queda
- * como su primer movimiento de inventario.
+ * El problema que resuelve: la primera versión borraba la categoría entera y
+ * la volvía a crear. Eso actualizaba los precios, sí, pero se llevaba por
+ * delante las fotos, las notas y —lo más grave— el inventario, porque los
+ * movimientos de stock cuelgan del producto y se iban con él. Actualizar una
+ * lista de precios no puede costar el inventario de la bodega.
+ *
+ * Ahora los productos se reconocen por su referencia (o por su descripción si
+ * no tienen), y de los que ya existen sólo se pisan los campos que manda el
+ * proveedor. Foto, notas, inventario y la marca de "producto propio" quedan
+ * como estaban.
+ *
+ * @param {object} opciones
+ *   - manejaInventario: la tanda es de productos propios, con existencias.
+ *   - descontinuarAusentes: los que ya no vienen en la lista se marcan como
+ *     inactivos (no se borran: pueden estar en cotizaciones viejas).
+ *   - simular: no escribe nada, sólo devuelve el informe. Sirve para mostrar
+ *     qué va a pasar ANTES de tocar el catálogo.
  */
-export function importarProductos(categoria, filas, { reemplazar = true, manejaInventario = false } = {}) {
-  if (reemplazar && categoria) {
-    run('DELETE FROM productos WHERE categoria = ?', [categoria]); // arrastra sus movimientos de stock (ON DELETE CASCADE)
-  }
-  const insertar = db.prepare(`
-    INSERT INTO productos (categoria, referencia, descripcion, marca, unidad, precio_canal, precio_constructor, precio_cliente, proveedor, maneja_inventario)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const insertarStock = db.prepare(
-    "INSERT INTO movimientos_stock (producto_id, cantidad, motivo) VALUES (?, ?, 'Importación de lista de precios')",
+export function conciliarProductos(categoria, filas, opciones = {}) {
+  const { manejaInventario = false, descontinuarAusentes = false, simular = false } = opciones;
+
+  const existentes = all(
+    `${selectConCliente('productos')} WHERE t.categoria IS ? OR (t.categoria = ?)`,
+    [categoria ?? null, categoria ?? ''],
   );
-  let creados = 0;
+  const porClave = new Map(existentes.map((p) => [claveDe(p), p]));
+  const vistas = new Set();
+
+  const informe = {
+    nuevos: [], actualizados: [], sinCambios: [], ausentes: [], ajustesStock: [], duplicadosEnArchivo: 0,
+  };
+
   for (const f of filas) {
     const descripcion = String(f.descripcion ?? '').trim();
     if (!descripcion) continue;
-    const r = insertar.run(
-      categoria ?? null,
-      f.referencia != null ? String(f.referencia).trim() : null,
-      descripcion,
-      f.marca ?? null,
-      f.unidad?.trim() || 'UND',
-      numeroOn(f.precio_canal),
-      numeroOn(f.precio_constructor),
-      Number(f.precio_cliente) || 0,
-      f.proveedor ?? null,
-      manejaInventario ? 1 : 0,
-    );
-    if (manejaInventario && Number(f.stock) > 0) {
-      insertarStock.run(Number(r.lastInsertRowid), Number(f.stock));
-    }
-    creados += 1;
-  }
-  return creados;
-}
 
-const numeroOn = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+    const clave = claveDe({ ...f, descripcion });
+    if (vistas.has(clave)) { informe.duplicadosEnArchivo += 1; continue; }
+    vistas.add(clave);
+
+    const existente = porClave.get(clave);
+
+    // Lo que trae la lista, ya normalizado. Un campo vacío en el Excel no
+    // borra lo que el usuario tenga cargado a mano: simplemente no se toca.
+    const entrantes = {
+      descripcion,
+      marca: f.marca != null && String(f.marca).trim() ? String(f.marca).trim() : null,
+      unidad: f.unidad != null && String(f.unidad).trim() ? String(f.unidad).trim() : null,
+      proveedor: f.proveedor != null && String(f.proveedor).trim() ? String(f.proveedor).trim() : null,
+      precio_canal: numeroOn(f.precio_canal),
+      precio_constructor: numeroOn(f.precio_constructor),
+      precio_cliente: numeroOn(f.precio_cliente),
+    };
+    const referencia = f.referencia != null && String(f.referencia).trim()
+      ? String(f.referencia).trim() : null;
+
+    if (!existente) {
+      const nuevo = {
+        categoria: categoria ?? null,
+        referencia,
+        descripcion,
+        marca: entrantes.marca,
+        unidad: entrantes.unidad || 'UND',
+        precio_canal: entrantes.precio_canal,
+        precio_constructor: entrantes.precio_constructor,
+        precio_cliente: entrantes.precio_cliente ?? 0,
+        proveedor: entrantes.proveedor,
+        maneja_inventario: manejaInventario ? 1 : 0,
+      };
+      informe.nuevos.push({ referencia, descripcion, precio: nuevo.precio_cliente });
+
+      if (!simular) {
+        const creado = insertar('productos', nuevo);
+        if (manejaInventario && Number(f.stock) > 0) {
+          insertar('movimientos_stock', {
+            producto_id: creado.id, cantidad: Number(f.stock), motivo: 'Importación de lista de precios',
+          });
+        }
+      }
+      continue;
+    }
+
+    // Ya existe: sólo se cambian los campos que la lista realmente trae.
+    const cambios = {};
+    for (const campo of CAMPOS_DE_LISTA) {
+      const nuevo = entrantes[campo];
+      if (nuevo === null || nuevo === undefined) continue;
+      if (String(existente[campo] ?? '') !== String(nuevo)) cambios[campo] = nuevo;
+    }
+    if (referencia && String(existente.referencia ?? '') !== referencia) cambios.referencia = referencia;
+    if (manejaInventario && !existente.maneja_inventario) cambios.maneja_inventario = 1;
+    // Si estaba descontinuado y volvió a aparecer en la lista, revive.
+    if (!existente.activo) cambios.activo = 1;
+
+    // Una columna de stock en una lista que se re-sube significa "hoy hay
+    // esto": se registra la diferencia como movimiento, para que quede
+    // rastro de por qué cambió y se pueda deshacer.
+    const stockEnLista = f.stock === null || f.stock === undefined || f.stock === '' ? null : Number(f.stock);
+    const manejará = manejaInventario || existente.maneja_inventario;
+    const diferencia = stockEnLista !== null && manejará ? stockEnLista - Number(existente.stock ?? 0) : 0;
+
+    if (Object.keys(cambios).length || diferencia) {
+      informe.actualizados.push({
+        id: existente.id,
+        referencia: existente.referencia,
+        descripcion: existente.descripcion,
+        precioAntes: existente.precio_cliente,
+        precioDespues: cambios.precio_cliente ?? existente.precio_cliente,
+        campos: Object.keys(cambios),
+      });
+      if (diferencia) {
+        informe.ajustesStock.push({
+          referencia: existente.referencia, descripcion: existente.descripcion,
+          de: Number(existente.stock ?? 0), a: stockEnLista,
+        });
+      }
+      if (!simular) {
+        if (Object.keys(cambios).length) actualizar('productos', existente.id, cambios);
+        if (diferencia) {
+          insertar('movimientos_stock', {
+            producto_id: existente.id, cantidad: diferencia,
+            motivo: 'Ajuste por lista de precios',
+          });
+        }
+      }
+    } else {
+      informe.sinCambios.push({ referencia: existente.referencia, descripcion: existente.descripcion });
+    }
+  }
+
+  // Los que estaban y ya no vienen. Nunca se borran: pueden estar citados en
+  // cotizaciones viejas y tener inventario.
+  for (const p of existentes) {
+    if (vistas.has(claveDe(p))) continue;
+    informe.ausentes.push({ id: p.id, referencia: p.referencia, descripcion: p.descripcion, stock: p.stock });
+    if (descontinuarAusentes && !simular && p.activo) {
+      actualizar('productos', p.id, { activo: 0 });
+    }
+  }
+
+  return informe;
+}
 
 /* ------------------------------------------------------------------ */
 /* Ajustes de la empresa (lo que encabeza y cierra las cotizaciones)   */
@@ -760,6 +872,12 @@ export function consultar(entidad, filtros = {}) {
   if (filtros.producto_id) {
     where.push(`${t}producto_id = ?`);
     params.push(filtros.producto_id);
+  }
+
+  // Un producto descontinuado (dejó de venir en la lista del proveedor) no se
+  // borra, pero tampoco estorba al cotizar: sólo aparece si se lo pide.
+  if (entidad === 'productos' && !filtros.incluir_inactivos) {
+    where.push('t.activo = 1');
   }
 
   const SIN_ESTADO = new Set(['clientes', 'notas', 'productos', 'movimientos_stock', 'cotizacion_items']);

@@ -741,17 +741,67 @@ function tarjetaHojaImportacion(hoja, indice) {
     <div class="tarjeta import-hoja" data-hoja="${indice}">
       <div class="import-hoja-cab">
         <label><span>Categoría</span><input type="text" class="import-categoria" value="${escapar(hoja.nombre)}" /></label>
-        <label class="check"><input type="checkbox" class="import-reemplazar" checked /> Reemplazar lo que ya había de esta categoría</label>
         <label class="check"><input type="checkbox" class="import-inventario" /> Son productos propios de Clic Control (llevar inventario)</label>
-        <button class="mini destacado" data-accion="importar-hoja" data-hoja="${indice}">Importar esta hoja (${filasValidas} productos)</button>
+        <label class="check"><input type="checkbox" class="import-descontinuar" /> Descontinuar los que ya no vengan en la lista</label>
+        <button class="mini destacado" data-accion="revisar-hoja" data-hoja="${indice}">Ver qué cambiaría (${filasValidas} productos)</button>
         <span class="import-resultado"></span>
       </div>
+      <div class="import-informe"></div>
       <p class="ayuda">Elegí en cada columna qué es (o "ignorar"). Se muestran las primeras filas como ejemplo.</p>
       <div class="tabla-envoltura"><table>
         <thead><tr>${cabeceras}</tr></thead>
         <tbody>${filasHtml}</tbody>
       </table></div>
     </div>`;
+}
+
+/** Qué va a pasar (o qué pasó) al cruzar la lista con el catálogo. */
+function informeImportacion(inf, { aplicado = false } = {}) {
+  const lista = (titulo, filas, pintar, clase = '') => {
+    if (!filas.length) return '';
+    const muestra = filas.slice(0, 8);
+    return `<div class="informe-grupo ${clase}">
+      <h4>${escapar(titulo)} · ${filas.length}</h4>
+      <ul>${muestra.map((f) => `<li>${pintar(f)}</li>`).join('')}
+      ${filas.length > muestra.length ? `<li class="mas">…y ${filas.length - muestra.length} más</li>` : ''}</ul>
+    </div>`;
+  };
+
+  const nombre = (f) => escapar(`${f.referencia ? `${f.referencia} · ` : ''}${truncar(f.descripcion, 48)}`);
+
+  const cuerpo = [
+    lista(aplicado ? 'Agregados' : 'Se van a agregar', inf.nuevos,
+      (f) => `${nombre(f)} <b>${fmtDinero(f.precio)}</b>`, 'nuevo'),
+
+    lista(aplicado ? 'Actualizados' : 'Se van a actualizar', inf.actualizados, (f) =>
+      `${nombre(f)}${f.precioAntes !== f.precioDespues
+        ? ` <s>${fmtDinero(f.precioAntes)}</s> <b>${fmtDinero(f.precioDespues)}</b>`
+        : ` <em>(${escapar(f.campos.join(', '))})</em>`}`, 'actualizado'),
+
+    lista('Ajustes de inventario', inf.ajustesStock,
+      (f) => `${nombre(f)} <b>${escapar(f.de)} → ${escapar(f.a)}</b>`, 'actualizado'),
+
+    lista('Ya no vienen en la lista', inf.ausentes, (f) =>
+      `${nombre(f)}${Number(f.stock) ? ` <em>(quedan ${escapar(f.stock)} en bodega)</em>` : ''}`, 'ausente'),
+
+    inf.sinCambios.length
+      ? `<div class="informe-grupo"><h4>Sin cambios · ${inf.sinCambios.length}</h4></div>`
+      : '',
+  ].join('');
+
+  const nada = !inf.nuevos.length && !inf.actualizados.length && !inf.ausentes.length;
+
+  return `<div class="informe ${aplicado ? 'aplicado' : ''}">
+    ${nada
+      ? '<p class="ayuda" style="margin:0">Esta lista no cambia nada: todo está igual que en el catálogo.</p>'
+      : cuerpo}
+    ${inf.duplicadosEnArchivo
+      ? `<p class="ayuda" style="margin:8px 0 0">Se ignoraron ${inf.duplicadosEnArchivo} fila(s) repetidas dentro del archivo.</p>`
+      : ''}
+    ${!aplicado && inf.ausentes.length
+      ? '<p class="ayuda" style="margin:8px 0 0">Los que ya no vienen <b>no se borran</b>: pueden estar en cotizaciones anteriores. Marcá la casilla de arriba si querés que dejen de aparecer al cotizar.</p>'
+      : ''}
+  </div>`;
 }
 
 function vistaImportacion() {
@@ -1328,13 +1378,16 @@ $('#contenido').addEventListener('click', async (e) => {
     await pintar();
     return;
   }
-  if (accion === 'importar-hoja') {
+  // Importar es en dos tiempos: primero se muestra qué cambiaría, y sólo
+  // después se aplica. Una lista de precios toca todo el catálogo, así que
+  // conviene verlo antes que enterarse después.
+  if (accion === 'revisar-hoja' || accion === 'aplicar-hoja') {
     const tarjeta = boton.closest('.import-hoja');
-    const indice = Number(boton.dataset.hoja);
-    const hoja = estado.importacion.hojas[indice];
+    const hoja = estado.importacion.hojas[Number(boton.dataset.hoja)];
     const categoria = tarjeta.querySelector('.import-categoria').value.trim();
-    const reemplazar = tarjeta.querySelector('.import-reemplazar').checked;
     const manejaInventario = tarjeta.querySelector('.import-inventario').checked;
+    const descontinuar = tarjeta.querySelector('.import-descontinuar').checked;
+
     const mapaColumnas = {};
     tarjeta.querySelectorAll('.import-mapa').forEach((sel) => {
       if (sel.value) mapaColumnas[sel.value] = Number(sel.dataset.col);
@@ -1343,29 +1396,46 @@ $('#contenido').addEventListener('click', async (e) => {
       avisar('Elegí qué columna es la descripción antes de importar.', true);
       return;
     }
+
+    const columna = (f, campo) => (mapaColumnas[campo] !== undefined ? f[mapaColumnas[campo]] : null);
     const filas = hoja.filas.slice(hoja.mapeo.filaInicioDatos)
       .map((f) => ({
-        referencia: mapaColumnas.referencia !== undefined ? f[mapaColumnas.referencia] : null,
+        referencia: columna(f, 'referencia'),
         descripcion: f[mapaColumnas.descripcion],
-        marca: mapaColumnas.marca !== undefined ? f[mapaColumnas.marca] : null,
-        unidad: mapaColumnas.unidad !== undefined ? f[mapaColumnas.unidad] : null,
-        precio_canal: mapaColumnas.precio_canal !== undefined ? f[mapaColumnas.precio_canal] : null,
-        precio_constructor: mapaColumnas.precio_constructor !== undefined ? f[mapaColumnas.precio_constructor] : null,
-        precio_cliente: mapaColumnas.precio_cliente !== undefined ? f[mapaColumnas.precio_cliente] : null,
-        stock: mapaColumnas.stock !== undefined ? f[mapaColumnas.stock] : null,
+        marca: columna(f, 'marca'),
+        unidad: columna(f, 'unidad'),
+        precio_canal: columna(f, 'precio_canal'),
+        precio_constructor: columna(f, 'precio_constructor'),
+        precio_cliente: columna(f, 'precio_cliente'),
+        stock: columna(f, 'stock'),
       }))
       .filter((f) => f.descripcion !== null && f.descripcion !== undefined && String(f.descripcion).trim() !== '');
 
+    const simular = accion === 'revisar-hoja';
     boton.disabled = true;
-    boton.textContent = 'Importando…';
+    boton.textContent = simular ? 'Comparando…' : 'Aplicando…';
     try {
-      const r = await api('/productos/importar', {
+      const inf = await api('/productos/importar', {
         method: 'POST',
-        body: { categoria, filas, reemplazar, maneja_inventario: manejaInventario },
+        body: {
+          categoria, filas, simular,
+          maneja_inventario: manejaInventario,
+          descontinuar_ausentes: descontinuar,
+        },
       });
-      tarjeta.querySelector('.import-resultado').textContent = `✓ ${r.creados} productos importados`;
-      boton.textContent = 'Importado ✓';
-      avisar(`"${categoria}": ${r.creados} productos importados`);
+      tarjeta.querySelector('.import-informe').innerHTML = informeImportacion(inf, { aplicado: !simular });
+
+      if (simular) {
+        const hayCambios = inf.nuevos.length || inf.actualizados.length || (descontinuar && inf.ausentes.length);
+        boton.disabled = !hayCambios;
+        boton.dataset.accion = hayCambios ? 'aplicar-hoja' : 'revisar-hoja';
+        boton.textContent = hayCambios ? 'Aplicar estos cambios' : 'Nada que cambiar';
+      } else {
+        boton.textContent = 'Aplicado ✓';
+        tarjeta.querySelector('.import-resultado').textContent =
+          `${inf.nuevos.length} nuevos · ${inf.actualizados.length} actualizados`;
+        avisar(`"${categoria}": ${inf.nuevos.length} nuevos, ${inf.actualizados.length} actualizados`);
+      }
     } catch (err) {
       boton.disabled = false;
       boton.textContent = 'Reintentar';
@@ -1693,6 +1763,19 @@ $('#contenido').addEventListener('input', (e) => {
       else if (listaNueva) contenedor.append(listaNueva);
     }, 280);
   }
+});
+
+// Si se cambia el mapeo o alguna opción después de revisar, la comparación que
+// se está mostrando ya no vale: se vuelve a pedir antes de dejar aplicarla.
+$('#contenido').addEventListener('change', (e) => {
+  const tarjeta = e.target.closest('.import-hoja');
+  if (!tarjeta) return;
+  const boton = tarjeta.querySelector('[data-accion="aplicar-hoja"]');
+  if (!boton) return;
+  boton.dataset.accion = 'revisar-hoja';
+  boton.disabled = false;
+  boton.textContent = 'Ver qué cambiaría';
+  tarjeta.querySelector('.import-informe').innerHTML = '';
 });
 
 // Edición directa de cantidad y precio en la tabla de renglones.

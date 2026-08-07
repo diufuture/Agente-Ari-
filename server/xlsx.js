@@ -193,8 +193,21 @@ export function sugerirMapeo(filas) {
 
   const encabezado = filas[filaEncabezado] || [];
   // La fila con "CANAL / CONSTRUCTOR / CLIENTE FINAL" no siempre es la
-  // inmediata siguiente (a veces hay una fila en blanco de por medio).
-  const filasSub = [filas[filaEncabezado + 1], filas[filaEncabezado + 2], filas[filaEncabezado + 3]];
+  // Dónde empiezan los datos: la primera fila con algún número. Hay que
+  // saberlo ANTES de buscar los subtítulos, porque los subtítulos
+  // (CANAL / CONSTRUCTOR / CLIENTE FINAL) viven entre el encabezado y los
+  // datos. Buscarlos más abajo hace que una descripción como "Interruptor de
+  // 2 canales" se confunda con la columna de precio de canal.
+  let filaInicioDatos = filas.length;
+  for (let i = filaEncabezado + 1; i < filas.length; i++) {
+    if ((filas[i] || []).some((celda) => typeof celda === 'number')) {
+      filaInicioDatos = i;
+      break;
+    }
+  }
+
+  const filasSub = [];
+  for (let i = filaEncabezado + 1; i < filaInicioDatos; i++) filasSub.push(filas[i]);
 
   // `grupos` se prueba en orden de prioridad: la primera coincidencia gana,
   // así un patrón muy específico ("descri") no lo tapa uno más genérico que
@@ -218,14 +231,20 @@ export function sugerirMapeo(filas) {
     precio_cliente: buscar([['cliente final', 'cliente', 'final']], ...filasSub, encabezado),
   };
 
-  const colsPrecio = Object.values(columnas).filter((c) => c !== null);
-  let filaInicioDatos = filaEncabezado + 1;
-  for (let i = filaEncabezado + 1; i < filas.length; i++) {
-    if (colsPrecio.some((c) => typeof (filas[i] || [])[c] === 'number')) {
-      filaInicioDatos = i;
-      break;
-    }
+  // Dos campos no pueden apuntar a la misma columna. Si pasa, gana el que
+  // aparece primero acá arriba (referencia y descripción antes que los
+  // precios), que son los que se detectan por el encabezado y no por
+  // subtítulos parecidos.
+  const tomadas = new Set();
+  for (const campo of Object.keys(columnas)) {
+    const col = columnas[campo];
+    if (col === null) continue;
+    if (tomadas.has(col)) columnas[campo] = null;
+    else tomadas.add(col);
   }
+
+  // Sin datos detectados, se asume que empiezan justo debajo del encabezado.
+  if (filaInicioDatos === filas.length) filaInicioDatos = filaEncabezado + 1;
 
   return { filaEncabezado, filaInicioDatos, columnas };
 }

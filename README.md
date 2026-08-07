@@ -286,8 +286,36 @@ proveedores, sin retipear nada:
    (referencia, descripción, precio canal / constructor / cliente final) —
    las listas de precios traen hasta esos tres niveles.
 3. Revisás el mapeo (podés corregir cualquier columna con el desplegable) y
-   confirmás hoja por hoja. Volver a importar la misma categoría reemplaza lo
-   anterior, así una lista de precios actualizada no deja duplicados viejos.
+   confirmás hoja por hoja.
+
+### Volver a subir una lista actualizada
+
+Es lo normal: el proveedor manda la lista nueva, con precios distintos,
+referencias nuevas y algunas que ya no vende. La importación **compara contra
+lo que ya tenés** y te muestra qué va a pasar antes de tocar nada:
+
+| Caso | Qué hace |
+|---|---|
+| La referencia ya existe | Actualiza precios y descripción |
+| La referencia es nueva | La agrega |
+| Es idéntica a lo que hay | La deja quieta |
+| Estaba y ya no viene en la lista | Te avisa. Nunca la borra |
+
+Los productos se reconocen por su **referencia** (o por la descripción, si no
+tienen). Lo que vos cargaste a mano —**la foto, las notas, el inventario, la
+marca de "producto propio"**— no se toca: la lista del proveedor sólo manda
+sobre los datos que ella misma trae. Si una columna viene vacía en el Excel, se
+conserva lo que ya estaba.
+
+Los que dejaron de venir en la lista **no se borran nunca**: pueden estar
+citados en cotizaciones anteriores y tener existencias en bodega. Podés marcar
+*«Descontinuar los que ya no vengan»* para que dejen de aparecer al cotizar;
+siguen ahí, con su historial, y si vuelven a aparecer en una lista futura se
+reactivan solos.
+
+Si la lista trae columna de stock y son productos propios, la diferencia con lo
+que había queda registrada como un movimiento de inventario («Ajuste por lista
+de precios»), no como un número que cambió sin explicación.
 
 También se puede agregar un producto suelto a mano —por voz o desde el botón
 **+ Agregar producto**— y ponerle una foto propia desde su ficha.
