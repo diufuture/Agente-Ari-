@@ -18,6 +18,8 @@ const estado = {
   buscarProductos: '',     // texto del buscador del catálogo
   nuevoProducto: false,    // el formulario de alta manual de producto está abierto
   subiendoFotoPara: null,  // id del producto al que se le está por asignar una foto
+  buscarCatalogo: '',      // texto del buscador de productos dentro de una cotización
+  resultadosCatalogo: null, // null = todavía no se buscó nada
 };
 
 /* ─────────── Formateo ─────────── */
@@ -236,8 +238,116 @@ function lineaTiempo(citas) {
     </div>`).join('')}</div></div>`;
 }
 
+/* ─────────── Renglones de una cotización ─────────── */
+
+/** La tabla de ítems, agrupada por sección como en el formato impreso. */
+function tablaItems(cot, items) {
+  if (!items.length) {
+    return `<div class="tarjeta"><div class="vacio">
+      <strong>Sin renglones todavía</strong>Buscá productos del catálogo acá abajo, o agregá una línea suelta.
+    </div></div>`;
+  }
+
+  // Se respeta el orden en que fueron agregados; sólo se insertan cabeceras
+  // cada vez que cambia la sección, para no reordenar lo que armó el usuario.
+  let seccionActual = null;
+  const filas = items.map((it) => {
+    const seccion = it.seccion || 'Sin sección';
+    const cabecera = seccion !== seccionActual
+      ? `<tr class="fila-seccion"><td colspan="6">${escapar(seccion)}</td></tr>`
+      : '';
+    seccionActual = seccion;
+
+    return `${cabecera}
+      <tr>
+        <td data-rotulo="Referencia" class="col-ref">${escapar(it.referencia || '—')}</td>
+        <td data-rotulo="Descripción" class="principal-col" title="${escapar(it.descripcion)}">
+          ${escapar(truncar(it.descripcion, 60))}
+          ${it.marca ? `<em class="marca-item">${escapar(it.marca)}</em>` : ''}
+        </td>
+        <td data-rotulo="Cant." class="num">
+          <input class="celda-num" type="number" min="0" step="1" value="${escapar(it.cantidad)}"
+                 data-item="${it.id}" data-campo="cantidad" />
+        </td>
+        <td data-rotulo="Vr. unitario" class="num">
+          <input class="celda-num ancho" type="number" min="0" step="1" value="${escapar(it.precio_unitario)}"
+                 data-item="${it.id}" data-campo="precio_unitario" />
+        </td>
+        <td data-rotulo="Vr. total" class="num total-item">${fmtDinero(it.total, cot.moneda)}</td>
+        <td class="num acciones"><div class="acciones-fila">
+          <button class="mini" data-accion="porcentaje-item" data-id="${it.id}"
+                  title="Subirle o bajarle un porcentaje" aria-label="Ajustar por porcentaje">%</button>
+          <button class="mini peligro" data-accion="borrar-item" data-id="${it.id}"
+                  title="Quitar este renglón" aria-label="Quitar renglón">✕</button>
+        </div></td>
+      </tr>`;
+  }).join('');
+
+  return `<div class="tarjeta"><div class="tabla-envoltura"><table class="tabla-items">
+    <thead><tr>
+      <th>Ref.</th><th>Descripción</th><th class="num">Cant.</th>
+      <th class="num">Vr. unit.</th><th class="num">Vr. total</th><th class="num"></th>
+    </tr></thead>
+    <tbody>${filas}</tbody>
+  </table></div></div>`;
+}
+
+/** Subtotal, servicio, IVA y total, con los porcentajes editables. */
+function totalesYAjustes(cot, totales) {
+  const NIVELES = [['canal', 'Canal'], ['constructor', 'Constructor'], ['cliente', 'Cliente final']];
+  return `
+    <div class="tarjeta">
+      <form class="form-totales" id="form-totales" data-id="${cot.id}">
+        <label><span>Servicio %</span>
+          <input name="porcentaje_servicio" type="number" min="0" step="0.1" value="${escapar(cot.porcentaje_servicio ?? 0)}" /></label>
+        <label><span>IVA %</span>
+          <input name="porcentaje_iva" type="number" min="0" step="0.1" value="${escapar(cot.porcentaje_iva ?? 0)}" /></label>
+        <label><span>Precios que se usan</span>
+          <select name="nivel_precio">
+            ${NIVELES.map(([v, e]) => `<option value="${v}"${(cot.nivel_precio || 'cliente') === v ? ' selected' : ''}>${e}</option>`).join('')}
+          </select></label>
+        <button type="submit">Aplicar</button>
+      </form>
+
+      <div class="resumen-totales">
+        <div><span>Subtotal</span><b>${fmtDinero(totales.subtotal, cot.moneda)}</b></div>
+        ${totales.servicio ? `<div><span>Servicio ${cot.porcentaje_servicio}%</span><b>${fmtDinero(totales.servicio, cot.moneda)}</b></div>` : ''}
+        ${totales.iva ? `<div><span>IVA ${cot.porcentaje_iva}%</span><b>${fmtDinero(totales.iva, cot.moneda)}</b></div>` : ''}
+        <div class="gran-total"><span>Total</span><b>${fmtDinero(totales.total, cot.moneda)}</b></div>
+      </div>
+    </div>`;
+}
+
+/** Buscador del catálogo para ir sumando renglones. */
+function buscadorDeProductos() {
+  const r = estado.resultadosCatalogo;
+  const lista = r === null
+    ? '<p class="ayuda" style="padding:0 18px 16px">Escribí para buscar en el catálogo.</p>'
+    : r.length
+      ? `<div class="resultados-catalogo">${r.map((p) => `
+          <div class="resultado">
+            <div>
+              <strong>${escapar(truncar(p.descripcion, 70))}</strong>
+              <em>${[p.referencia, p.categoria].filter(Boolean).map(escapar).join(' · ')}</em>
+            </div>
+            <span class="precio">${fmtDinero(p.precio_cliente)}</span>
+            <input type="number" min="1" step="1" value="1" class="celda-num" data-cant-para="${p.id}" />
+            <button class="mini destacado" data-accion="agregar-item" data-id="${p.id}">Agregar</button>
+          </div>`).join('')}</div>`
+      : '<p class="ayuda" style="padding:0 18px 16px">Ningún producto coincide.</p>';
+
+  return `<div class="tarjeta">
+    <div style="padding:16px 18px 12px">
+      <input type="search" id="buscar-catalogo" class="buscador-catalogo"
+             placeholder="Buscar producto por referencia o descripción…"
+             value="${escapar(estado.buscarCatalogo)}" />
+    </div>
+    ${lista}
+  </div>`;
+}
+
 /** Ficha de una cotización: lo cotizado, lo abonado, lo que falta y sus abonos. */
-function detalleCotizacion(cot, abonos) {
+function detalleCotizacion(cot, abonos, items = [], totales = null) {
   const saldado = Number(cot.saldo) <= 0;
 
   const filas = abonos.length
@@ -280,6 +390,27 @@ function detalleCotizacion(cot, abonos) {
     </div>
 
     ${estado.editando ? formularioEdicion('cotizaciones', cot) : ''}
+
+    ${bloque(`Renglones · ${items.length}`, tablaItems(cot, items))}
+
+    ${totales ? bloque('Totales', totalesYAjustes(cot, totales)) : ''}
+
+    ${bloque('Agregar del catálogo', buscadorDeProductos())}
+
+    ${bloque('Agregar una línea suelta', `
+      <div class="tarjeta">
+        <form class="form-abono" id="form-item-libre" data-id="${cot.id}">
+          <label class="ancho"><span>Descripción</span>
+            <input name="descripcion" type="text" required placeholder="Mano de obra, obra civil, cableado…" /></label>
+          <label><span>Sección</span>
+            <input name="seccion" type="text" placeholder="Mano de obra" /></label>
+          <label><span>Cantidad</span>
+            <input name="cantidad" type="number" min="1" step="1" value="1" /></label>
+          <label><span>Valor unitario</span>
+            <input name="precio_unitario" type="number" min="0" step="1" required placeholder="1500000" /></label>
+          <button type="submit">Agregar</button>
+        </form>
+      </div>`)}
 
     ${bloque('Abonos', `<div class="tarjeta"><div class="lista-abonos">${filas}</div></div>`)}
 
@@ -647,12 +778,15 @@ async function pintar() {
   if (estado.cotizacionAbierta) {
     contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
     try {
-      const [cot, { filas }] = await Promise.all([
-        api(`/cotizaciones/${estado.cotizacionAbierta}`),
-        api(`/abonos?cotizacion_id=${estado.cotizacionAbierta}`),
+      const id = estado.cotizacionAbierta;
+      const [cot, { filas }, itemsResp] = await Promise.all([
+        api(`/cotizaciones/${id}`),
+        api(`/abonos?cotizacion_id=${id}`),
+        api(`/cotizaciones/${id}/items`),
       ]);
       $('#titulo-vista').textContent = 'Cotización';
-      contenedor.innerHTML = detalleCotizacion(cot, filas);
+      contenedor.innerHTML = detalleCotizacion(cot, filas, itemsResp.filas, itemsResp.totales);
+      $('#buscar-catalogo')?.focus();
     } catch (e) {
       contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
     }
@@ -1123,8 +1257,56 @@ $('#contenido').addEventListener('click', async (e) => {
     estado.editando = false;
     estado.clienteAbierto = null;
     estado.vistaAsistente = null;
+    estado.buscarCatalogo = '';
+    estado.resultadosCatalogo = null;
     await pintar();
     $('#contenido').scrollTop = 0;
+    return;
+  }
+  if (accion === 'agregar-item') {
+    const campoCant = $(`[data-cant-para="${id}"]`);
+    const cantidad = Number(campoCant?.value) || 1;
+    try {
+      await api(`/cotizaciones/${estado.cotizacionAbierta}/items`, {
+        method: 'POST',
+        body: { producto_id: Number(id), cantidad },
+      });
+      avisar('Renglón agregado ✓');
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+  if (accion === 'borrar-item') {
+    try {
+      await api(`/cotizacion_items/${id}`, { method: 'DELETE' });
+      avisar('Renglón quitado');
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+  if (accion === 'porcentaje-item') {
+    const texto = prompt('¿Qué porcentaje le aplico al precio? Ej: 15 para subirlo 15%, -10 para bajarlo 10%.');
+    if (texto === null) return;
+    const pct = Number(String(texto).replace(',', '.').replace('%', '').trim());
+    if (!pct) return avisar('Ese porcentaje no es un número válido.', true);
+    const actual = Number($(`input[data-item="${id}"][data-campo="precio_unitario"]`)?.value) || 0;
+    try {
+      await api(`/cotizacion_items/${id}`, {
+        method: 'PATCH',
+        body: { precio_unitario: Math.round(actual * (1 + pct / 100)) },
+      });
+      avisar(`Precio ${pct > 0 ? 'aumentado' : 'reducido'} ${Math.abs(pct)}% ✓`);
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
     return;
   }
   if (accion === 'cerrar-cotizacion') {
@@ -1224,6 +1406,49 @@ $('#contenido').addEventListener('submit', async (e) => {
     return;
   }
 
+  if (e.target.id === 'form-item-libre') {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    try {
+      await api(`/cotizaciones/${e.target.dataset.id}/items`, {
+        method: 'POST',
+        body: {
+          descripcion: d.descripcion,
+          seccion: d.seccion || undefined,
+          cantidad: Number(d.cantidad) || 1,
+          precio_unitario: Number(d.precio_unitario) || 0,
+        },
+      });
+      avisar('Renglón agregado ✓');
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+
+  if (e.target.id === 'form-totales') {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    try {
+      await api(`/cotizaciones/${e.target.dataset.id}`, {
+        method: 'PATCH',
+        body: {
+          porcentaje_servicio: Number(d.porcentaje_servicio) || 0,
+          porcentaje_iva: Number(d.porcentaje_iva) || 0,
+          nivel_precio: d.nivel_precio,
+        },
+      });
+      avisar('Totales actualizados ✓');
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+
   if (e.target.id === 'form-ajuste-stock') {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target));
@@ -1279,16 +1504,64 @@ $('#contenido').addEventListener('scroll', () => {
   }, 550);
 }, { passive: true });
 
-// Buscador del catálogo de productos (con una pequeña espera para no
-// disparar una consulta por cada tecla).
+// Buscadores (con una pequeña espera para no disparar una consulta por tecla).
 let buscarProductosTimer;
+let buscarCatalogoTimer;
 $('#contenido').addEventListener('input', (e) => {
-  if (e.target.id !== 'buscar-productos') return;
-  estado.buscarProductos = e.target.value;
-  clearTimeout(buscarProductosTimer);
-  buscarProductosTimer = setTimeout(() => {
-    if (estado.vista === 'productos' && !estado.productoAbierto) pintar();
-  }, 300);
+  if (e.target.id === 'buscar-productos') {
+    estado.buscarProductos = e.target.value;
+    clearTimeout(buscarProductosTimer);
+    buscarProductosTimer = setTimeout(() => {
+      if (estado.vista === 'productos' && !estado.productoAbierto) pintar();
+    }, 300);
+    return;
+  }
+
+  // Buscador del catálogo dentro de una cotización: sólo se repinta el
+  // bloque de resultados, para no perder el foco ni lo escrito.
+  if (e.target.id === 'buscar-catalogo') {
+    estado.buscarCatalogo = e.target.value;
+    clearTimeout(buscarCatalogoTimer);
+    buscarCatalogoTimer = setTimeout(async () => {
+      const q = estado.buscarCatalogo.trim();
+      if (!q) {
+        estado.resultadosCatalogo = null;
+      } else {
+        try {
+          const { filas } = await api(`/productos?texto=${encodeURIComponent(q)}&limite=8`);
+          estado.resultadosCatalogo = filas.slice(0, 8);
+        } catch {
+          estado.resultadosCatalogo = [];
+        }
+      }
+      const contenedor = $('#buscar-catalogo')?.closest('.tarjeta');
+      if (!contenedor) return;
+      const nuevo = document.createElement('div');
+      nuevo.innerHTML = buscadorDeProductos();
+      const listaVieja = contenedor.querySelector('.resultados-catalogo, .ayuda');
+      const listaNueva = nuevo.querySelector('.resultados-catalogo, .ayuda');
+      if (listaVieja && listaNueva) listaVieja.replaceWith(listaNueva);
+      else if (listaNueva) contenedor.append(listaNueva);
+    }, 280);
+  }
+});
+
+// Edición directa de cantidad y precio en la tabla de renglones.
+$('#contenido').addEventListener('change', async (e) => {
+  const campo = e.target.closest('input[data-item]');
+  if (!campo) return;
+  const valor = Number(campo.value);
+  if (!(valor >= 0)) return avisar('Ese valor no es válido.', true);
+  try {
+    await api(`/cotizacion_items/${campo.dataset.item}`, {
+      method: 'PATCH',
+      body: { [campo.dataset.campo]: valor },
+    });
+    await refrescarResumen();
+    await pintar();
+  } catch (err) {
+    avisar(err.message, true);
+  }
 });
 
 // Subir una lista de precios (.xlsx): se lee en el navegador y se manda a

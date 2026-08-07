@@ -68,6 +68,9 @@ sin barra del navegador.
 | «agendame / tengo una reunión / visita el jueves» | Crea la cita con fecha, hora, lugar y cliente |
 | «recordame / no se me olvide…» | Crea un pendiente con fecha y prioridad |
 | «hacele una cotización a…» | Registra la cotización con valor y estado |
+| «agregale 7 interruptores G7-3 a la cotización de…» | Suma el renglón con el precio del catálogo |
+| «a ese ítem súbele 15%» · «ponelo en 300 mil» | Ajusta el precio de un renglón |
+| «ponele 20% de servicio» · «agregale el IVA» | Aplica los porcentajes a toda la cotización |
 | «me abonó / me dio un adelanto sobre…» | Registra el abono y descuenta del saldo de la cotización |
 | «me quedó de dar / me debe…» | Registra el cobro con vencimiento |
 | «agregá al catálogo un interruptor de 2 canales a 280 mil» | Guarda el producto en el catálogo de precios |
@@ -124,7 +127,7 @@ nada más.
 server/
   index.js      Servidor HTTP + API REST (sin framework)
   db.js         Esquema y consultas SQLite
-  tools.js      Las 11 herramientas de Ari y su ejecución
+  tools.js      Las 14 herramientas de Ari y su ejecución
   xlsx.js       Lector mínimo de archivos .xlsx (sin dependencias)
   assistant.js  El bucle de conversación con Claude
 public/
@@ -148,12 +151,41 @@ Anthropic. SQLite viene incluido en Node 22.
 | `DELETE` | `/api/:entidad/:id` | Borra |
 
 Entidades: `clientes`, `citas`, `recordatorios`, `cotizaciones`, `cobros`,
-`notas`, `abonos`, `productos`, `movimientos_stock`.
+`notas`, `abonos`, `productos`, `movimientos_stock`, `cotizacion_items`.
 
 Además, sólo para el catálogo: `POST /api/productos/analizar` (lee un `.xlsx`
 subido en base64 y sugiere el mapeo de columnas), `POST /api/productos/importar`
 (guarda en bloque las filas ya confirmadas) y `POST /api/productos/:id/foto`
 (sube o reemplaza la foto de un producto).
+
+## Cotizaciones con renglones
+
+Una cotización se arma jalando productos del catálogo, igual que las ofertas en
+papel: renglones agrupados por sección, con cantidad y valor unitario, y al pie
+subtotal, servicio, IVA y total.
+
+- **Del catálogo**: se busca por referencia o descripción y se agrega con su
+  cantidad. El precio sale del catálogo, según el **nivel** con el que se esté
+  cotizando (canal / constructor / cliente final); si ese nivel viene vacío en
+  la lista del proveedor, se usa el de cliente.
+- **Líneas sueltas**: mano de obra, obra civil, cableado… cualquier cosa que no
+  esté en el catálogo, con su propia descripción y valor.
+- **Ajustes por renglón**: la cantidad y el valor unitario se editan directo en
+  la tabla, y el botón `%` sube o baja el precio un porcentaje («súbele 15%»).
+- **Porcentajes generales**: servicio e IVA se aplican sobre el subtotal. Los
+  dos arrancan en cero y se ponen por cotización.
+
+Los datos del producto (descripción, referencia, marca, precio) **se copian al
+renglón** cuando se agrega, no se leen del catálogo cada vez. Así una cotización
+ya enviada no cambia sola porque después se actualizó una lista de precios, y
+borrar un producto del catálogo no borra el renglón de una oferta pasada: sólo
+se pierde el vínculo.
+
+El campo `monto` de la cotización se recalcula solo al tocar un renglón o un
+porcentaje. Es un valor derivado que se guarda a propósito: es lo que ya usaban
+el saldo, los abonos y el dashboard, y es lo único que tienen las cotizaciones
+viejas cargadas a mano, que siguen funcionando igual (si no tiene renglones, su
+monto no se toca).
 
 ## Cotizaciones y abonos
 

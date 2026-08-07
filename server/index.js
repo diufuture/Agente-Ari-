@@ -170,6 +170,45 @@ async function api(req, res, url) {
     }
   }
 
+  // GET|POST /api/cotizaciones/:id/items -> renglones de una cotización
+  if (recurso === 'cotizaciones' && id && partes[2] === 'items') {
+    const cotizacionId = Number(id);
+
+    if (req.method === 'GET') {
+      return json(res, 200, {
+        filas: db.consultar('cotizacion_items', { cotizacion_id: cotizacionId }),
+        totales: db.totalesCotizacion(cotizacionId),
+      });
+    }
+
+    if (req.method === 'POST') {
+      try {
+        const item = db.agregarItem(cotizacionId, await leerJson(req));
+        return json(res, 201, item);
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+    }
+  }
+
+  // PATCH|DELETE /api/cotizacion_items/:id -> edita o quita un renglón.
+  // Van por su propia ruta, no por el CRUD genérico, porque después de
+  // tocarlos hay que recalcular el total de la cotización.
+  if (recurso === 'cotizacion_items' && id) {
+    if (req.method === 'PATCH' || req.method === 'PUT') {
+      try {
+        const fila = db.actualizarItem(Number(id), await leerJson(req));
+        if (!fila) return json(res, 404, { error: 'No encontrado' });
+        return json(res, 200, fila);
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+    }
+    if (req.method === 'DELETE') {
+      return json(res, db.eliminarItem(Number(id)) ? 200 : 404, { ok: true });
+    }
+  }
+
   // POST /api/productos/analizar -> lee un .xlsx subido y sugiere cómo
   // mapear sus columnas, para que el usuario lo confirme antes de importar.
   if (recurso === 'productos' && partes[1] === 'analizar' && req.method === 'POST') {
@@ -267,9 +306,16 @@ async function api(req, res, url) {
       const datos = await leerJson(req);
       delete datos.id;
       delete datos.cliente;
+      // Campos calculados: llegan de vuelta al guardar una fila que se leyó
+      // con ellos, pero no son columnas y romperían el UPDATE.
+      for (const c of ['abonado', 'saldo', 'subtotal', 'n_items', 'stock', 'total', 'producto', 'cotizacion']) {
+        delete datos[c];
+      }
       try {
-        const fila = db.actualizar(tabla, Number(id), datos);
+        let fila = db.actualizar(tabla, Number(id), datos);
         if (!fila) return json(res, 404, { error: 'No encontrado' });
+        // Cambiar los porcentajes cambia el total de la cotización.
+        if (tabla === 'cotizaciones') fila = db.recalcularCotizacion(Number(id)) ?? fila;
         return json(res, 200, fila);
       } catch (err) {
         return json(res, 400, { error: err.message });

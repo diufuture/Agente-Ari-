@@ -61,6 +61,12 @@ CREATE TABLE IF NOT EXISTS cotizaciones (
   moneda      TEXT NOT NULL DEFAULT 'COP',
   estado      TEXT NOT NULL DEFAULT 'pendiente', -- pendiente | enviada | aprobada | rechazada
   vence_en    TEXT,
+  -- Porcentajes que se aplican sobre la suma de los renglones. Arrancan en
+  -- cero: se ponen por cotización, según lo que se esté ofertando.
+  porcentaje_servicio REAL NOT NULL DEFAULT 0,
+  porcentaje_iva      REAL NOT NULL DEFAULT 0,
+  -- Con cuál de los tres precios del catálogo se agregan los productos.
+  nivel_precio        TEXT NOT NULL DEFAULT 'cliente', -- canal | constructor | cliente
   creado_en   TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
@@ -113,6 +119,27 @@ CREATE TABLE IF NOT EXISTS productos (
   creado_en          TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
+-- Renglones de una cotización. Los datos del producto se copian acá al
+-- agregarlo (descripción, precio, marca…) en vez de leerse del catálogo cada
+-- vez: una cotización ya enviada no puede cambiar sola porque después se
+-- actualizó una lista de precios. Por eso producto_id es sólo una referencia
+-- y queda en NULL si el producto se borra del catálogo, sin perder el renglón.
+CREATE TABLE IF NOT EXISTS cotizacion_items (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  cotizacion_id   INTEGER NOT NULL REFERENCES cotizaciones(id) ON DELETE CASCADE,
+  producto_id     INTEGER REFERENCES productos(id) ON DELETE SET NULL,
+  seccion         TEXT,
+  descripcion     TEXT NOT NULL,
+  referencia      TEXT,
+  marca           TEXT,
+  unidad          TEXT NOT NULL DEFAULT 'UND',
+  foto            TEXT,
+  cantidad        REAL NOT NULL DEFAULT 1,
+  precio_unitario REAL NOT NULL DEFAULT 0,
+  orden           INTEGER NOT NULL DEFAULT 0,
+  creado_en       TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
 -- Entradas y salidas de inventario. Sólo tiene sentido para los productos
 -- propios de Clic Control (maneja_inventario = 1): los que vienen de listas
 -- de precios de otros proveedores se cotizan pero no se guardan en bodega.
@@ -133,14 +160,29 @@ CREATE INDEX IF NOT EXISTS idx_cob_cliente   ON cobros(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_abo_cot       ON abonos(cotizacion_id);
 CREATE INDEX IF NOT EXISTS idx_prod_categoria ON productos(categoria);
 CREATE INDEX IF NOT EXISTS idx_mov_producto ON movimientos_stock(producto_id);
+CREATE INDEX IF NOT EXISTS idx_items_cot ON cotizacion_items(cotizacion_id);
 `);
 
-// Migración suave: si la base ya existía desde antes de que `productos`
-// tuviera `maneja_inventario`, CREATE TABLE IF NOT EXISTS no la agrega sola.
+// Migraciones suaves: CREATE TABLE IF NOT EXISTS no agrega columnas nuevas a
+// una tabla que ya existía, así que las bases creadas con versiones
+// anteriores se completan acá sin perder datos.
 {
-  const columnas = db.prepare('PRAGMA table_info(productos)').all().map((c) => c.name);
-  if (!columnas.includes('maneja_inventario')) {
+  const columnasDe = (tabla) => db.prepare(`PRAGMA table_info(${tabla})`).all().map((c) => c.name);
+
+  const prod = columnasDe('productos');
+  if (!prod.includes('maneja_inventario')) {
     db.exec('ALTER TABLE productos ADD COLUMN maneja_inventario INTEGER NOT NULL DEFAULT 0');
+  }
+
+  const cot = columnasDe('cotizaciones');
+  if (!cot.includes('porcentaje_servicio')) {
+    db.exec('ALTER TABLE cotizaciones ADD COLUMN porcentaje_servicio REAL NOT NULL DEFAULT 0');
+  }
+  if (!cot.includes('porcentaje_iva')) {
+    db.exec('ALTER TABLE cotizaciones ADD COLUMN porcentaje_iva REAL NOT NULL DEFAULT 0');
+  }
+  if (!cot.includes('nivel_precio')) {
+    db.exec("ALTER TABLE cotizaciones ADD COLUMN nivel_precio TEXT NOT NULL DEFAULT 'cliente'");
   }
 }
 
@@ -160,6 +202,7 @@ export const ENTIDADES = {
   abonos: { tabla: 'abonos', orden: "COALESCE(t.fecha, t.creado_en) DESC" },
   productos: { tabla: 'productos', orden: 't.categoria COLLATE NOCASE ASC, t.descripcion COLLATE NOCASE ASC' },
   movimientos_stock: { tabla: 'movimientos_stock', orden: 't.id DESC' },
+  cotizacion_items: { tabla: 'cotizacion_items', orden: 't.orden ASC, t.id ASC' },
 };
 
 const all = (sql, params = []) => db.prepare(sql).all(...params);
@@ -173,6 +216,9 @@ const SUMA_ABONOS = "COALESCE((SELECT SUM(a.monto) FROM abonos a WHERE a.cotizac
 
 const SUMA_STOCK = "COALESCE((SELECT SUM(m.cantidad) FROM movimientos_stock m WHERE m.producto_id = t.id), 0)";
 
+const SUMA_ITEMS =
+  "COALESCE((SELECT SUM(i.cantidad * i.precio_unitario) FROM cotizacion_items i WHERE i.cotizacion_id = t.id), 0)";
+
 function selectConCliente(tabla) {
   if (tabla === 'clientes') return 'SELECT * FROM clientes';
   if (tabla === 'productos') return `SELECT t.*, ${SUMA_STOCK} AS stock FROM productos t`;
@@ -181,12 +227,22 @@ function selectConCliente(tabla) {
             FROM movimientos_stock t LEFT JOIN productos p ON p.id = t.producto_id`;
   }
 
-  // Una cotización siempre se lee con lo abonado y lo que falta.
+  // Una cotización siempre se lee con lo abonado, lo que falta y el desglose
+  // de sus renglones. `monto` es el total final y se recalcula al tocar los
+  // ítems (ver recalcularCotizacion), así que sirve de fuente única para el
+  // saldo tanto si la cotización se armó con ítems como si se puso a mano.
   if (tabla === 'cotizaciones') {
     return `SELECT t.*, c.nombre AS cliente,
                    ${SUMA_ABONOS} AS abonado,
-                   t.monto - ${SUMA_ABONOS} AS saldo
+                   t.monto - ${SUMA_ABONOS} AS saldo,
+                   ${SUMA_ITEMS} AS subtotal,
+                   (SELECT COUNT(*) FROM cotizacion_items i WHERE i.cotizacion_id = t.id) AS n_items
             FROM cotizaciones t LEFT JOIN clientes c ON c.id = t.cliente_id`;
+  }
+
+  if (tabla === 'cotizacion_items') {
+    return `SELECT t.*, t.cantidad * t.precio_unitario AS total
+            FROM cotizacion_items t`;
   }
 
   // Un abono cuelga de la cotización, y el cliente se hereda de ella.
@@ -272,8 +328,13 @@ export function resolverCliente(texto, { crearSiNoExiste = false } = {}) {
 /**
  * Encuentra una cotización a partir de un id, o de un texto y opcionalmente un
  * cliente ("la del sistema POS"). Devuelve { id } o { error, sugerencias }.
+ *
+ * `soloConSaldo` distingue las dos formas de adivinar "la cotización de ese
+ * cliente" cuando no se nombra ninguna: al registrar un abono interesan las
+ * que tienen plata pendiente, pero al armar una cotización interesa la que se
+ * está trabajando, que suele valer cero todavía porque no tiene renglones.
  */
-export function resolverCotizacion(texto, clienteId = null) {
+export function resolverCotizacion(texto, clienteId = null, { soloConSaldo = true } = {}) {
   const cond = clienteId ? 'AND t.cliente_id = ?' : '';
   const extra = clienteId ? [clienteId] : [];
 
@@ -286,18 +347,29 @@ export function resolverCotizacion(texto, clienteId = null) {
 
   // Sin texto pero con cliente: si tiene una sola cotización abierta, es esa.
   if (!q && clienteId) {
+    const filtro = soloConSaldo
+      ? `t.monto > ${SUMA_ABONOS}`
+      : "t.estado IN ('pendiente', 'enviada')";
     const abiertas = all(
-      `${selectConCliente('cotizaciones')} WHERE t.cliente_id = ? AND t.monto > ${SUMA_ABONOS}`,
+      `${selectConCliente('cotizaciones')} WHERE t.cliente_id = ? AND ${filtro}
+       ORDER BY t.id DESC`,
       [clienteId],
     );
     if (abiertas.length === 1) return { id: abiertas[0].id, cotizacion: abiertas[0] };
     if (abiertas.length > 1) {
       return {
-        error: 'Ese cliente tiene varias cotizaciones con saldo.',
+        error: soloConSaldo
+          ? 'Ese cliente tiene varias cotizaciones con saldo.'
+          : 'Ese cliente tiene varias cotizaciones abiertas.',
         sugerencias: abiertas.map((c) => `#${c.id} ${c.titulo}`),
       };
     }
-    return { error: 'Ese cliente no tiene cotizaciones con saldo pendiente.', sugerencias: [] };
+    return {
+      error: soloConSaldo
+        ? 'Ese cliente no tiene cotizaciones con saldo pendiente.'
+        : 'Ese cliente no tiene ninguna cotización abierta. Creá una primero.',
+      sugerencias: [],
+    };
   }
 
   const parecidas = all(
@@ -433,6 +505,139 @@ export function importarProductos(categoria, filas, { reemplazar = true, manejaI
 const numeroOn = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
 
 /* ------------------------------------------------------------------ */
+/* Renglones de una cotización                                         */
+/* ------------------------------------------------------------------ */
+
+/** Los tres precios del catálogo, según con cuál se esté cotizando. */
+export function precioSegunNivel(producto, nivel = 'cliente') {
+  const p = {
+    canal: producto.precio_canal,
+    constructor: producto.precio_constructor,
+    cliente: producto.precio_cliente,
+  }[nivel];
+  // Si ese nivel viene vacío en la lista del proveedor, se cae al de cliente.
+  return Number(p ?? producto.precio_cliente) || 0;
+}
+
+/**
+ * Vuelve a calcular el total de una cotización a partir de sus renglones y
+ * guarda el resultado en `monto`.
+ *
+ * `monto` es un valor derivado, pero se guarda a propósito: es la columna que
+ * ya usaban el saldo, los abonos y el dashboard, y también es lo único que
+ * tienen las cotizaciones viejas cargadas a mano (sin ítems). Guardarlo
+ * mantiene una sola fuente de verdad para todo eso; a cambio, hay que llamar
+ * a esta función cada vez que cambia un renglón o un porcentaje — que es lo
+ * que hacen las funciones de acá abajo, único camino que los modifica.
+ */
+export function recalcularCotizacion(id) {
+  const cot = one('SELECT * FROM cotizaciones WHERE id = ?', [id]);
+  if (!cot) return null;
+
+  const n = one('SELECT COUNT(*) n FROM cotizacion_items WHERE cotizacion_id = ?', [id]).n;
+  // Sin renglones no se toca el monto: puede ser una cotización puesta a mano.
+  if (!n) return obtenerPorId('cotizaciones', id);
+
+  const subtotal = one(
+    'SELECT COALESCE(SUM(cantidad * precio_unitario), 0) s FROM cotizacion_items WHERE cotizacion_id = ?',
+    [id],
+  ).s;
+  const conServicio = subtotal * (1 + (Number(cot.porcentaje_servicio) || 0) / 100);
+  const total = conServicio * (1 + (Number(cot.porcentaje_iva) || 0) / 100);
+
+  run('UPDATE cotizaciones SET monto = ? WHERE id = ?', [Math.round(total), id]);
+  return obtenerPorId('cotizaciones', id);
+}
+
+/** Desglose para mostrar y para imprimir: subtotal, servicio, IVA y total. */
+export function totalesCotizacion(id) {
+  const cot = obtenerPorId('cotizaciones', id);
+  if (!cot) return null;
+  const subtotal = Number(cot.subtotal) || 0;
+  const servicio = subtotal * (Number(cot.porcentaje_servicio) || 0) / 100;
+  const iva = (subtotal + servicio) * (Number(cot.porcentaje_iva) || 0) / 100;
+  return {
+    subtotal,
+    servicio,
+    iva,
+    total: cot.n_items ? subtotal + servicio + iva : Number(cot.monto) || 0,
+  };
+}
+
+/**
+ * Agrega un renglón. Si viene `producto_id`, copia sus datos del catálogo
+ * (descripción, referencia, marca, unidad, foto y el precio del nivel que
+ * use la cotización); si no, se toman los que se pasen sueltos, para
+ * renglones libres como "Mano de obra" o "Obra civil".
+ */
+export function agregarItem(cotizacionId, datos = {}) {
+  const cot = one('SELECT * FROM cotizaciones WHERE id = ?', [cotizacionId]);
+  if (!cot) throw new Error('Esa cotización no existe.');
+
+  let base = {};
+  if (datos.producto_id) {
+    const p = obtenerPorId('productos', Number(datos.producto_id));
+    if (!p) throw new Error('Ese producto no está en el catálogo.');
+    base = {
+      producto_id: p.id,
+      descripcion: p.descripcion,
+      referencia: p.referencia,
+      marca: p.marca,
+      unidad: p.unidad,
+      foto: p.foto,
+      seccion: p.categoria,
+      precio_unitario: precioSegunNivel(p, cot.nivel_precio),
+    };
+  }
+
+  const descripcion = String(datos.descripcion ?? base.descripcion ?? '').trim();
+  if (!descripcion) throw new Error('El renglón necesita una descripción.');
+
+  const siguiente = one(
+    'SELECT COALESCE(MAX(orden), 0) + 1 n FROM cotizacion_items WHERE cotizacion_id = ?',
+    [cotizacionId],
+  ).n;
+
+  const item = insertar('cotizacion_items', {
+    cotizacion_id: cotizacionId,
+    producto_id: base.producto_id ?? null,
+    seccion: datos.seccion ?? base.seccion ?? null,
+    descripcion,
+    referencia: datos.referencia ?? base.referencia ?? null,
+    marca: datos.marca ?? base.marca ?? null,
+    unidad: datos.unidad ?? base.unidad ?? 'UND',
+    foto: base.foto ?? null,
+    cantidad: Number(datos.cantidad) > 0 ? Number(datos.cantidad) : 1,
+    precio_unitario: datos.precio_unitario !== undefined && datos.precio_unitario !== null
+      ? Number(datos.precio_unitario)
+      : (base.precio_unitario ?? 0),
+    orden: datos.orden ?? siguiente,
+  });
+
+  recalcularCotizacion(cotizacionId);
+  return item;
+}
+
+export function actualizarItem(itemId, datos = {}) {
+  const item = obtenerPorId('cotizacion_items', itemId);
+  if (!item) return null;
+  const limpio = { ...datos };
+  delete limpio.id;
+  delete limpio.cotizacion_id;
+  const actualizado = actualizar('cotizacion_items', itemId, limpio);
+  recalcularCotizacion(item.cotizacion_id);
+  return actualizado;
+}
+
+export function eliminarItem(itemId) {
+  const item = obtenerPorId('cotizacion_items', itemId);
+  if (!item) return false;
+  const ok = eliminar('cotizacion_items', itemId);
+  recalcularCotizacion(item.cotizacion_id);
+  return ok;
+}
+
+/* ------------------------------------------------------------------ */
 /* Consultas con filtros (lo que usa el dashboard y el asistente)      */
 /* ------------------------------------------------------------------ */
 
@@ -451,7 +656,10 @@ export function consultar(entidad, filtros = {}) {
   if (filtros.cliente_id) {
     if (entidad === 'clientes') where.push('id = ?');
     else if (entidad === 'abonos') where.push('q.cliente_id = ?');
-    else where.push(`${t}cliente_id = ?`);
+    // Un renglón no guarda el cliente: se llega a él por su cotización.
+    else if (entidad === 'cotizacion_items') {
+      where.push('t.cotizacion_id IN (SELECT id FROM cotizaciones WHERE cliente_id = ?)');
+    } else where.push(`${t}cliente_id = ?`);
     params.push(filtros.cliente_id);
   }
   if (filtros.cotizacion_id) {
@@ -463,7 +671,8 @@ export function consultar(entidad, filtros = {}) {
     params.push(filtros.producto_id);
   }
 
-  if (filtros.estado && entidad !== 'clientes' && entidad !== 'notas' && entidad !== 'productos' && entidad !== 'movimientos_stock') {
+  const SIN_ESTADO = new Set(['clientes', 'notas', 'productos', 'movimientos_stock', 'cotizacion_items']);
+  if (filtros.estado && !SIN_ESTADO.has(entidad)) {
     where.push(`${t}estado = ?`);
     params.push(filtros.estado);
   }
@@ -479,6 +688,7 @@ export function consultar(entidad, filtros = {}) {
       abonos: ['nota'],
       productos: ['categoria', 'referencia', 'descripcion', 'marca', 'proveedor'],
       movimientos_stock: ['motivo'],
+      cotizacion_items: ['descripcion', 'referencia', 'marca', 'seccion'],
     }[entidad];
     where.push(`(${campos.map((c) => `${t}${c} LIKE ? COLLATE NOCASE`).join(' OR ')})`);
     campos.forEach(() => params.push(`%${filtros.texto}%`));

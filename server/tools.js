@@ -141,8 +141,87 @@ export const HERRAMIENTAS = [
         descripcion: { type: 'string' },
         vence_en: { type: 'string', description: 'Fecha de vencimiento YYYY-MM-DD.' },
         estado: { type: 'string', enum: ['pendiente', 'enviada', 'aprobada', 'rechazada'] },
+        porcentaje_servicio: { type: 'number', description: 'Porcentaje de servicio/instalación sobre los productos.' },
+        porcentaje_iva: { type: 'number', description: 'Porcentaje de IVA. En Colombia suele ser 19.' },
+        nivel_precio: {
+          type: 'string',
+          enum: ['canal', 'constructor', 'cliente'],
+          description: 'Con cuál de los tres precios del catálogo se cotiza. Por defecto "cliente".',
+        },
       },
       required: ['cliente', 'titulo'],
+    },
+  },
+  {
+    name: 'agregar_item_cotizacion',
+    description:
+      'Agrega un renglón a una cotización, tomando el producto del catálogo. Úsala para "agregale 5 interruptores a la cotización de", "ponele 3 cámaras", "sumale mano de obra por 2 millones". Si el producto no está en el catálogo, pasa descripcion y precio_unitario a mano (sirve para mano de obra, obra civil, etc.).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cliente: clienteProp,
+        cotizacion: {
+          type: 'string',
+          description: 'Número o parte del título de la cotización. Si el cliente tiene una sola con saldo, puedes omitirlo.',
+        },
+        producto: {
+          type: 'string',
+          description: 'Nombre o referencia del producto en el catálogo. Su precio y descripción se copian de ahí.',
+        },
+        descripcion: {
+          type: 'string',
+          description: 'Sólo si NO es un producto del catálogo (mano de obra, obra civil, un ítem suelto).',
+        },
+        cantidad: { type: 'number', description: 'Cuántas unidades. Por defecto 1.' },
+        precio_unitario: {
+          type: 'number',
+          description: 'Sólo si el usuario dicta un precio distinto al del catálogo, o si el renglón es libre.',
+        },
+        seccion: {
+          type: 'string',
+          description: 'Grupo dentro de la cotización: "Interruptores", "Alarma - Seguridad", "Mano de obra"…',
+        },
+      },
+      required: ['cliente'],
+    },
+  },
+  {
+    name: 'ajustar_item_cotizacion',
+    description:
+      'Cambia la cantidad o el precio de un renglón que ya está en una cotización, o le aplica un porcentaje. Úsala para "a ese ítem súbele 15%", "ponelo en 300 mil", "cambiá la cantidad a 7", "quitá ese renglón".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        item_id: { type: 'integer', description: 'ID del renglón. Si no lo sabes, consulta primero los ítems de la cotización.' },
+        cantidad: { type: 'number' },
+        precio_unitario: { type: 'number', description: 'Precio nuevo, si el usuario dicta un número exacto.' },
+        porcentaje: {
+          type: 'number',
+          description: 'Porcentaje a aplicar sobre el precio actual: 15 lo sube 15%, -10 lo baja 10%.',
+        },
+        eliminar: { type: 'boolean', description: 'true para quitar el renglón de la cotización.' },
+      },
+      required: ['item_id'],
+    },
+  },
+  {
+    name: 'ajustar_cotizacion',
+    description:
+      'Cambia los porcentajes globales de una cotización: el de servicio (que se suma sobre los productos) y el de IVA. Úsala para "ponele 20% de servicio", "agregale el IVA", "quitale el IVA".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cliente: clienteProp,
+        cotizacion: { type: 'string', description: 'Número o parte del título.' },
+        porcentaje_servicio: { type: 'number', description: 'Porcentaje de servicio/instalación. 0 para quitarlo.' },
+        porcentaje_iva: { type: 'number', description: 'Porcentaje de IVA (en Colombia suele ser 19). 0 para quitarlo.' },
+        nivel_precio: {
+          type: 'string',
+          enum: ['canal', 'constructor', 'cliente'],
+          description: 'Con cuál de los tres precios del catálogo se agregan los productos nuevos.',
+        },
+      },
+      required: ['cliente'],
     },
   },
   {
@@ -242,9 +321,10 @@ export const HERRAMIENTAS = [
       properties: {
         entidad: {
           type: 'string',
-          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos', 'productos', 'movimientos_stock'],
+          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos', 'productos', 'movimientos_stock', 'cotizacion_items'],
         },
         cliente: clienteProp,
+        cotizacion: { type: 'string', description: 'Número o parte del título. Con entidad "cotizacion_items" muestra los renglones de esa cotización.' },
         producto: { type: 'string', description: 'Nombre, referencia o descripción de un producto. Útil junto con entidad "movimientos_stock" para ver el historial de inventario de uno puntual.' },
         estado: {
           type: 'string',
@@ -284,7 +364,7 @@ export const HERRAMIENTAS = [
       properties: {
         entidad: {
           type: 'string',
-          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos', 'productos', 'movimientos_stock'],
+          enum: ['clientes', 'citas', 'recordatorios', 'cotizaciones', 'cobros', 'notas', 'abonos', 'productos', 'movimientos_stock', 'cotizacion_items'],
         },
         id: { type: 'integer' },
       },
@@ -307,6 +387,7 @@ const COLUMNAS = {
   abonos: ['fecha', 'cotizacion', 'cliente', 'monto', 'nota'],
   productos: ['categoria', 'referencia', 'descripcion', 'marca', 'precio_cliente', 'unidad'],
   movimientos_stock: ['creado_en', 'producto', 'cantidad', 'motivo'],
+  cotizacion_items: ['seccion', 'referencia', 'descripcion', 'cantidad', 'precio_unitario', 'total'],
 };
 
 const vistaDe = (entidad, titulo, filas) => ({
@@ -325,6 +406,20 @@ function exigirCliente(texto, { crear = false } = {}) {
   }
   return r;
 }
+
+/** Igual que exigirCliente, para la cotización sobre la que se está trabajando. */
+function exigirCotizacion(texto, clienteId) {
+  // Al armar una cotización todavía puede valer cero, así que no se exige saldo.
+  const r = db.resolverCotizacion(texto, clienteId, { soloConSaldo: false });
+  if (r.error) {
+    const sug = r.sugerencias?.length ? ` Opciones: ${r.sugerencias.join(', ')}.` : '';
+    throw new Error(`${r.error}${sug}`);
+  }
+  return r;
+}
+
+const tituloDeItems = (cot, tot) =>
+  `«${cot.titulo}» · ${dinero(tot.total, cot.moneda)}`;
 
 /**
  * Ejecuta una herramienta.
@@ -387,10 +482,106 @@ export function ejecutar(nombre, args) {
         moneda: args.moneda ?? 'COP',
         estado: args.estado ?? 'pendiente',
         vence_en: normalizarFecha(args.vence_en),
+        porcentaje_servicio: args.porcentaje_servicio ?? 0,
+        porcentaje_iva: args.porcentaje_iva ?? 0,
+        nivel_precio: args.nivel_precio ?? 'cliente',
       });
       return {
         resumen: `Cotización creada. id=${c.id}, ${c.titulo}, ${dinero(c.monto, c.moneda)}, cliente=${c.cliente}. Saldo ${dinero(c.saldo ?? c.monto, c.moneda)}.`,
         vista: vistaDe('cotizaciones', 'Cotización creada', [c]),
+        cambio: true,
+      };
+    }
+
+    case 'agregar_item_cotizacion': {
+      const { id: cliente_id } = exigirCliente(args.cliente);
+      const q = exigirCotizacion(args.cotizacion ?? '', cliente_id);
+
+      const datos = {
+        cantidad: args.cantidad ?? 1,
+        seccion: args.seccion,
+        descripcion: args.descripcion,
+        precio_unitario: args.precio_unitario,
+      };
+
+      if (args.producto) {
+        const p = db.resolverProducto(args.producto);
+        if (p.error) {
+          const sug = p.sugerencias?.length ? ` Opciones: ${p.sugerencias.join(', ')}.` : '';
+          throw new Error(`${p.error}${sug}`);
+        }
+        datos.producto_id = p.id;
+      } else if (!args.descripcion) {
+        throw new Error('Decime qué producto agregar, o la descripción del renglón si no está en el catálogo.');
+      }
+
+      const item = db.agregarItem(q.id, datos);
+      const cot = db.obtenerPorId('cotizaciones', q.id);
+      const items = db.consultar('cotizacion_items', { cotizacion_id: q.id });
+      const tot = db.totalesCotizacion(q.id);
+
+      return {
+        resumen:
+          `Agregado a la cotización #${cot.id} "${cot.titulo}": ${item.cantidad} x ${item.descripcion.slice(0, 50)} ` +
+          `a ${dinero(item.precio_unitario, cot.moneda)}. ` +
+          `Subtotal ${dinero(tot.subtotal, cot.moneda)}, total ${dinero(tot.total, cot.moneda)}.`,
+        vista: vistaDe('cotizacion_items', tituloDeItems(cot, tot), items),
+        cambio: true,
+      };
+    }
+
+    case 'ajustar_item_cotizacion': {
+      const item = db.obtenerPorId('cotizacion_items', args.item_id);
+      if (!item) throw new Error(`No existe ningún renglón con id ${args.item_id}.`);
+
+      if (args.eliminar) {
+        db.eliminarItem(args.item_id);
+      } else {
+        const cambios = {};
+        if (args.cantidad !== undefined) cambios.cantidad = Number(args.cantidad);
+        if (args.precio_unitario !== undefined) cambios.precio_unitario = Number(args.precio_unitario);
+        else if (args.porcentaje !== undefined) {
+          cambios.precio_unitario = Math.round(item.precio_unitario * (1 + Number(args.porcentaje) / 100));
+        }
+        if (!Object.keys(cambios).length) throw new Error('No dijiste qué cambiarle al renglón.');
+        db.actualizarItem(args.item_id, cambios);
+      }
+
+      const cot = db.obtenerPorId('cotizaciones', item.cotizacion_id);
+      const items = db.consultar('cotizacion_items', { cotizacion_id: item.cotizacion_id });
+      const tot = db.totalesCotizacion(item.cotizacion_id);
+      return {
+        resumen: args.eliminar
+          ? `Renglón quitado. La cotización "${cot.titulo}" queda en ${dinero(tot.total, cot.moneda)}.`
+          : `Renglón actualizado. La cotización "${cot.titulo}" queda en ${dinero(tot.total, cot.moneda)}.`,
+        vista: vistaDe('cotizacion_items', tituloDeItems(cot, tot), items),
+        cambio: true,
+      };
+    }
+
+    case 'ajustar_cotizacion': {
+      const { id: cliente_id } = exigirCliente(args.cliente);
+      const q = exigirCotizacion(args.cotizacion ?? '', cliente_id);
+
+      const cambios = {};
+      for (const campo of ['porcentaje_servicio', 'porcentaje_iva']) {
+        if (args[campo] !== undefined) cambios[campo] = Number(args[campo]);
+      }
+      if (args.nivel_precio) cambios.nivel_precio = args.nivel_precio;
+      if (!Object.keys(cambios).length) throw new Error('No dijiste qué ajustar de la cotización.');
+
+      db.actualizar('cotizaciones', q.id, cambios);
+      db.recalcularCotizacion(q.id);
+
+      const cot = db.obtenerPorId('cotizaciones', q.id);
+      const tot = db.totalesCotizacion(q.id);
+      return {
+        resumen:
+          `Cotización "${cot.titulo}": subtotal ${dinero(tot.subtotal, cot.moneda)}` +
+          (tot.servicio ? `, servicio ${cot.porcentaje_servicio}% (${dinero(tot.servicio, cot.moneda)})` : '') +
+          (tot.iva ? `, IVA ${cot.porcentaje_iva}% (${dinero(tot.iva, cot.moneda)})` : '') +
+          `, total ${dinero(tot.total, cot.moneda)}.`,
+        vista: vistaDe('cotizaciones', 'Cotización actualizada', [cot]),
         cambio: true,
       };
     }
@@ -530,6 +721,14 @@ export function ejecutar(nombre, args) {
         }
         filtros.producto_id = r.id;
       }
+      if (args.cotizacion || args.entidad === 'cotizacion_items') {
+        const r = db.resolverCotizacion(args.cotizacion ?? '', filtros.cliente_id ?? null, { soloConSaldo: false });
+        if (r.error) {
+          const sug = r.sugerencias?.length ? ` Opciones: ${r.sugerencias.join(', ')}.` : '';
+          return { resumen: `${r.error}${sug}`, vista: vistaDe('cotizaciones', 'Sin coincidencias', []) };
+        }
+        filtros.cotizacion_id = r.id;
+      }
       const filas = db.consultar(args.entidad, filtros);
 
       // Sólo un resumen numérico + las 5 primeras filas abreviadas viajan al
@@ -559,7 +758,11 @@ export function ejecutar(nombre, args) {
     }
 
     case 'eliminar': {
-      const ok = db.eliminar(args.entidad, args.id);
+      // Un renglón se borra por su propia vía, que además recalcula el total
+      // de la cotización a la que pertenecía.
+      const ok = args.entidad === 'cotizacion_items'
+        ? db.eliminarItem(args.id)
+        : db.eliminar(args.entidad, args.id);
       if (!ok) throw new Error(`No existe ${args.entidad} con id ${args.id}.`);
       return { resumen: `Registro eliminado de ${args.entidad}.`, cambio: true };
     }
@@ -591,6 +794,10 @@ function resumirFila(entidad, f) {
     }
     case 'movimientos_stock':
       return `#${f.id} ${f.cantidad > 0 ? '+' : ''}${f.cantidad} en "${f.producto ?? ''}"${f.motivo ? ` (${f.motivo})` : ''}`;
+    case 'cotizacion_items': {
+      const desc = String(f.descripcion ?? '').replace(/\s+/g, ' ').trim().slice(0, 50);
+      return `#${f.id} ${f.cantidad} x ${desc} a ${dinero(f.precio_unitario)} = ${dinero(f.total)}`;
+    }
     default:
       return `#${f.id} ${f.texto ?? ''}`;
   }
