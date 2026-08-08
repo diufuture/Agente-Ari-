@@ -167,16 +167,6 @@ Ferretería El Tornillo, teléfono 3105554433»*.
 
 ---
 
-## Poner tu logo
-
-Copiá el archivo de tu logo dentro de la carpeta `public` del proyecto, con el
-nombre **`logo.png`**. La aplicación lo toma sola la próxima vez que la abras:
-aparece en la barra lateral y en la pantalla de acceso.
-
-Si no ponés ninguno, se usa una versión dibujada con los colores de la marca.
-
----
-
 ## Uso de todos los días
 
 Ya no tenés que repetir la instalación. Cada vez que quieras usarla:
@@ -201,6 +191,71 @@ cotizaciones, cobros, citas y notas.
 Ahí mismo, el botón **Editar datos** abre un formulario para escribir a mano el
 teléfono, la empresa, el correo, la dirección o las notas. Guardás y listo. La
 ficha de la cotización tiene lo mismo, más el formulario para agregar abonos.
+
+---
+
+## Antes de mandar la primera cotización
+
+Dos cosas que se hacen una sola vez y quedan para siempre:
+
+### 1 · Tu logo
+
+Copiá tu logo dentro de la carpeta **`public`** del proyecto, con el nombre
+**`logo.png`**. Aparece en la barra lateral, en la pantalla de acceso y —lo más
+importante— **en las cotizaciones que imprimís**. Si no ponés ninguno, se usa
+una versión dibujada con los colores de la marca.
+
+### 2 · Los datos de la empresa
+
+Abajo en el menú, **⚙ Datos de la empresa**. Cargá el nombre, NIT, dirección,
+teléfono y correo; tu nombre y contacto como representante de ventas; y las
+condiciones comerciales (tiempo de entrega, garantía, forma de pago).
+
+Todo eso encabeza y cierra las cotizaciones impresas. Cada cotización puede
+llevar sus propias condiciones si esa oferta va distinta.
+
+---
+
+## Armar una cotización
+
+### Primero, el catálogo
+
+En **Productos → Importar lista de precios**, subís el Excel del proveedor tal
+como te lo manda. La aplicación:
+
+- Adivina qué columna es cuál y te lo muestra para que lo confirmes.
+- **Trae las fotos** que el Excel tenga pegadas sobre cada producto.
+- Si es una lista que ya subiste antes, **compara y te muestra qué va a
+  cambiar** —qué precios suben, qué productos son nuevos, cuáles ya no vienen—
+  antes de tocar nada. Lo que vos hayas cargado a mano (fotos, notas,
+  inventario) no se pierde.
+
+Si son productos tuyos y no de un proveedor, marcá *«Son productos propios»*
+para llevarles inventario.
+
+### Después, la cotización
+
+Se puede armar **hablando, mientras recorrés el sitio del cliente**:
+
+1. *«Hacele una cotización a Jimmy Forero para la casa»*
+2. *«Agregá dos interruptores de dos canales»* — y seguís, ítem por ítem, **sin
+   repetir el nombre del cliente**
+3. *«Sumale la mano de obra, un millón ochocientos»*
+4. *«Ponele 19 de IVA»*
+5. *«Listo, esa es la cotización»*
+
+Arriba te queda un aviso con lo que llevás sumado. El interruptor **manos
+libres** (junto al de voz) reabre el micrófono solo después de cada respuesta,
+así no tenés que tocar el teléfono entre un ítem y otro.
+
+También se arma con el mouse: buscás en el catálogo y agregás, o escribís una
+línea suelta. La cantidad y el precio se editan directamente en la tabla, y el
+botón `%` le sube o baja un porcentaje a un renglón.
+
+### Y por último, el PDF
+
+En la cotización, el botón **Imprimir / PDF** la abre ya maquetada. Ahí hacés
+**Imprimir → Guardar como PDF** y se lo mandás al cliente por correo o WhatsApp.
 
 ---
 

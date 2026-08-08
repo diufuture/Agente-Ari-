@@ -136,10 +136,26 @@ public/
   index.html    Interfaz
   styles.css    Estilos (claro y oscuro automáticos)
   app.js        Dashboard, voz y conversación
+prueba.js       Recorrido completo del sistema (npm test)
 ```
 
 Sin build, sin bundler, sin framework. Una sola dependencia: el SDK de
 Anthropic. SQLite viene incluido en Node 22.
+
+### Probar que todo sigue funcionando
+
+```bash
+npm test
+```
+
+`prueba.js` recorre el sistema entero como lo usaría el negocio en una semana:
+arma el catálogo, dicta una cotización renglón por renglón, le cobra un abono,
+mueve inventario, importa una lista de precios actualizada y genera la página
+imprimible. Cada paso se compara contra el número que debería dar —los totales,
+el IVA, el saldo, el stock—, no sólo contra que no se caiga.
+
+Corre sobre una base de datos temporal que se borra sola: no toca la del
+negocio. Conviene pasarlo antes de subir una versión nueva al servidor.
 
 ### API
 
