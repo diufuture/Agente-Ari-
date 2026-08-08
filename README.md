@@ -378,6 +378,34 @@ En un `.xlsx` las imágenes no viven dentro de las celdas: son objetos flotantes
 que guardan a qué fila están pegados. El lector sigue ese rastro (hoja →
 dibujo → imagen) para saber de qué producto es cada foto.
 
+### Todas del mismo tamaño
+
+Las fotos no llegan parejas: la del celular trae 4000 píxeles y 3 MB, la del
+Excel del proveedor puede traer 230 KB, y la de la web viene como esté. En una
+cotización todas se ven del tamaño de una uña, así que **se achican a 320
+píxeles de lado antes de guardarse** —una foto de 1,2 MB queda en unos 18 KB—
+y se convierten a WEBP, que pesa menos y conserva los fondos transparentes.
+
+Eso pasa solo, en los cuatro caminos por los que puede entrar una foto:
+
+| Cómo entra | Cuándo se achica |
+| --- | --- |
+| Archivo elegido en la ficha | En el navegador, antes de subirla |
+| Imagen pegada (Ctrl+V) | En el navegador, antes de subirla |
+| Dirección web | La baja el servidor y se achica enseguida |
+| Foto del Excel | Al terminar de importar la lista |
+
+Para las que ya estaban guardadas de antes, en **Productos** aparece un botón
+—**«Achicar N fotos pesadas»**— que dice cuánto ocupan y las deja todas en
+medida. Sólo se muestra si hay alguna arriba de 60 KB; cuando no queda ninguna,
+desaparece.
+
+El redimensionado lo hace el navegador con su propio `<canvas>`
+(`public/foto.js`): no hace falta ninguna biblioteca de imágenes en el servidor,
+y la foto grande ni siquiera llega a viajar por la red. Al reemplazar una foto
+se borra el archivo anterior, así que un `.jpg` de 700 KB no queda ocupando
+lugar después de convertirse en un `.webp` de 17 KB.
+
 ### Inventario de los productos propios
 
 No todo lo que hay en el catálogo se puede descontar: lo que viene de la

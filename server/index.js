@@ -3,7 +3,7 @@
 
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -156,6 +156,30 @@ async function descargarImagen(url) {
   if (!buffer.length) throw new Error('La imagen llegó vacía.');
   if (buffer.length > PESO_MAXIMO_IMAGEN) throw new Error('La imagen pesa demasiado (máximo 5MB).');
   return { buffer, ext };
+}
+
+/**
+ * Deja la foto del producto en disco y borra la anterior si tenía otra
+ * extensión: al achicarlas todas quedan en .webp, y sin esto el .jpg viejo
+ * (el pesado, justamente) seguiría ocupando lugar para siempre.
+ */
+function guardarFoto(id, buffer, ext) {
+  writeFileSync(join(CARPETA_FOTOS, `${id}.${ext}`), buffer);
+  for (const otra of new Set(Object.values(TIPOS_IMAGEN))) {
+    if (otra !== ext) rmSync(join(CARPETA_FOTOS, `${id}.${otra}`), { force: true });
+  }
+  return `/uploads/productos/${id}.${ext}`;
+}
+
+/** Cuánto ocupa en disco la foto de un producto (0 si ya no está el archivo). */
+function pesoFoto(foto) {
+  const nombre = String(foto || '').split('/').pop();
+  if (!nombre || !/^\d+\.[a-z]+$/i.test(nombre)) return 0;
+  try {
+    return statSync(join(CARPETA_FOTOS, nombre)).size;
+  } catch {
+    return 0;
+  }
 }
 
 const ENTIDADES_VALIDAS = new Set(Object.keys(db.ENTIDADES));
@@ -353,8 +377,7 @@ async function api(req, res, url) {
           if (p.fila === null || !imagenes.has(p.fila)) continue;
           if (p.tieneFoto) { informe.fotosConservadas += 1; continue; }
           const img = imagenes.get(p.fila);
-          writeFileSync(join(CARPETA_FOTOS, `${p.id}.${img.extension}`), img.datos);
-          db.actualizar('productos', p.id, { foto: `/uploads/productos/${p.id}.${img.extension}` });
+          db.actualizar('productos', p.id, { foto: guardarFoto(p.id, img.datos, img.extension) });
           informe.fotos += 1;
         }
       }
@@ -390,9 +413,21 @@ async function api(req, res, url) {
       return json(res, 400, { error: err.message });
     }
 
-    writeFileSync(join(CARPETA_FOTOS, `${id}.${ext}`), buffer);
-    const fila = db.actualizar('productos', Number(id), { foto: `/uploads/productos/${id}.${ext}` });
-    return json(res, 200, fila);
+    const foto = guardarFoto(Number(id), buffer, ext);
+    const fila = db.actualizar('productos', Number(id), { foto });
+    return json(res, 200, { ...fila, bytes: buffer.length });
+  }
+
+  // GET /api/productos/fotos -> qué foto tiene cada producto y cuánto ocupa.
+  // Lo usa el gestor de fotos del navegador para saber cuáles vale la pena
+  // achicar; las achica ahí (con el canvas) y las vuelve a subir.
+  if (recurso === 'productos' && partes[1] === 'fotos' && req.method === 'GET') {
+    const fotos = db.productosConFoto()
+      .map((p) => ({ id: p.id, descripcion: p.descripcion, foto: p.foto, bytes: pesoFoto(p.foto) }));
+    return json(res, 200, {
+      fotos,
+      total: fotos.reduce((s, f) => s + f.bytes, 0),
+    });
   }
 
   // CRUD manual sobre las entidades (para editar a mano en la interfaz)

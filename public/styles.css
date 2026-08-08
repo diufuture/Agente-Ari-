@@ -822,13 +822,15 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
 }
 .barra-productos input[type="search"]:focus { border-color: var(--acento); }
 .barra-productos .mini { padding: 11px 16px; }
+.gestor-fotos:empty { display: none; }
 
 .ficha-producto-cab { display: flex; gap: 16px; align-items: flex-start; }
 .foto-producto {
   width: 84px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; align-items: center;
 }
 .foto-producto img {
-  width: 84px; height: 84px; object-fit: cover; border-radius: 12px;
+  width: 84px; height: 84px; max-width: 84px; max-height: 84px;
+  object-fit: contain; border-radius: 12px;
   border: 1px solid var(--borde); background: var(--panel-alto);
 }
 .foto-producto .foto-vacia {
@@ -869,6 +871,15 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
 }
 .import-hoja th { padding: 10px 12px; }
 .import-hoja td { font-size: 12.5px; max-width: 220px; }
+
+/* Ninguna imagen dentro de una tabla es más que una uña, venga de donde venga.
+   Va sin anidar bajo ninguna vista a propósito: una foto de 4000 píxeles del
+   Excel de un proveedor no puede reventar la pantalla porque la regla más
+   específica no llegó a aplicarse. */
+table img {
+  max-width: 58px; max-height: 58px; width: auto; height: auto;
+  object-fit: contain; vertical-align: middle;
+}
 
 /* Las fotos que trae el Excel, para confirmarlas antes de importar */
 .import-hoja .th-foto {

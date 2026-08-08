@@ -480,6 +480,14 @@ export function eliminar(tabla, id) {
 export const categoriasProductos = () =>
   all("SELECT DISTINCT categoria FROM productos WHERE categoria IS NOT NULL AND categoria <> '' ORDER BY categoria COLLATE NOCASE");
 
+/**
+ * Todos los productos que tienen foto, incluidos los descontinuados y sin el
+ * tope de 100 de `consultar`: el gestor de fotos necesita verlas todas para
+ * poder achicar las que quedaron pesadas.
+ */
+export const productosConFoto = () =>
+  all("SELECT id, descripcion, foto FROM productos WHERE foto IS NOT NULL AND foto <> '' ORDER BY id");
+
 const numeroOn = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
 
 /** Clave con la que se reconoce un producto entre una lista y la siguiente. */

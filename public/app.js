@@ -2,6 +2,8 @@
    Clic Control · Ari — interfaz
    ══════════════════════════════════════════════════════════════════ */
 
+import { encoger, encogerOTalCual, aDataUrl, pesoLegible, LADO, PESO_SANO } from './foto.js';
+
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
@@ -56,14 +58,7 @@ const truncar = (v, n = 80) => {
 const atajoPegar = () =>
   (navigator.platform || navigator.userAgent).includes('Mac') ? 'Cmd+V' : 'Ctrl+V';
 
-function archivoABase64(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result);
-    r.onerror = () => reject(new Error('No pude leer el archivo.'));
-    r.readAsDataURL(file);
-  });
-}
+const archivoABase64 = aDataUrl;
 
 /* ─────────── API ─────────── */
 
@@ -76,6 +71,47 @@ async function api(ruta, opciones = {}) {
   const datos = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(datos.error || `Error ${r.status}`);
   return datos;
+}
+
+/* ─────────── Gestor de fotos ─────────── */
+
+/**
+ * Vuelve a achicar una foto que ya está guardada en el servidor. Sirve para
+ * las que entraron por otro camino: las que venían adentro del Excel del
+ * proveedor y las que se bajaron de una dirección web (ésas las descarga el
+ * servidor, que no sabe redimensionar; acá sí, con el canvas del navegador).
+ *
+ * Devuelve cuánto se ahorró, o null si no había nada que ganar.
+ */
+async function achicarGuardada(producto) {
+  const { dataUrl, bytes } = await encoger(producto.foto);
+  if (producto.bytes && bytes >= producto.bytes) return null; // ya estaba bien
+  await api(`/productos/${producto.id}/foto`, { method: 'POST', body: { imagen_base64: dataUrl } });
+  return { antes: producto.bytes || 0, despues: bytes };
+}
+
+/** Achica todas las fotos guardadas que hayan quedado pesadas. */
+async function achicarTodas(alAvanzar) {
+  const { fotos } = await api('/productos/fotos');
+  const pesadas = fotos.filter((f) => f.bytes > PESO_SANO);
+  let hechas = 0;
+  let antes = 0;
+  let despues = 0;
+
+  for (const f of pesadas) {
+    alAvanzar?.(hechas, pesadas.length);
+    try {
+      const r = await achicarGuardada(f);
+      if (r) {
+        hechas += 1;
+        antes += r.antes;
+        despues += r.despues;
+      }
+    } catch {
+      // Una foto rota no puede frenar a las demás.
+    }
+  }
+  return { hechas, pesadas: pesadas.length, antes, despues };
 }
 
 /* ─────────── Avisos ─────────── */
@@ -602,7 +638,7 @@ function detalleProducto(p, movimientos = []) {
         <div class="ficha-producto-cab">
           <div class="foto-producto">
             ${p.foto
-              ? `<img src="${escapar(p.foto)}" alt="" />`
+              ? `<img src="${escapar(p.foto)}" alt="" width="84" height="84" loading="lazy" />`
               : '<span class="foto-vacia">Sin foto</span>'}
             <button class="mini" data-accion="cambiar-foto" data-id="${p.id}">${p.foto ? 'Cambiar' : 'Subir'}</button>
             <button class="mini" data-accion="buscar-foto" data-id="${p.id}">Buscar en la web</button>
@@ -773,7 +809,7 @@ function tarjetaHojaImportacion(hoja, indice) {
   const filasHtml = filasVista.map((f, i) => {
     const foto = fotos[mapeo.filaInicioDatos + i];
     const celdaFoto = hayFotos
-      ? `<td class="celda-foto">${foto ? `<img src="${foto}" alt="" />` : '<span class="sin-foto">—</span>'}</td>`
+      ? `<td class="celda-foto">${foto ? `<img src="${foto}" alt="" width="58" height="58" />` : '<span class="sin-foto">—</span>'}</td>`
       : '';
     return `<tr>${celdaFoto}${
       Array.from({ length: totalColumnas }, (_, c) => `<td>${escapar(truncar(f[c], 40))}</td>`).join('')}</tr>`;
@@ -1000,6 +1036,7 @@ async function pintar() {
         <button class="mini" data-accion="alternar-nuevo-producto">${estado.nuevoProducto ? 'Cancelar' : '+ Agregar producto'}</button>
         ${descontinuados ? `<button class="mini${estado.verDescontinuados ? ' destacado' : ''}" data-accion="alternar-descontinuados">${
           estado.verDescontinuados ? 'Ocultar descontinuados' : `Ver descontinuados (${descontinuados})`}</button>` : ''}
+        <span class="gestor-fotos"></span>
       </div>`;
 
       contenedor.innerHTML = barra
@@ -1010,6 +1047,17 @@ async function pintar() {
         + tabla('productos', ['categoria', 'referencia', 'descripcion', 'stock', 'precio_cliente'], filas,
           { vacio: 'Todavía no hay productos en el catálogo. Importá una lista de precios o agregá uno a mano.' });
       $('#buscar-productos')?.focus();
+
+      // El botón de achicar fotos sólo aparece si hay algo que achicar, y se
+      // consulta aparte para no demorar la lista mientras se mide el disco.
+      api('/productos/fotos').then(({ fotos }) => {
+        const pesadas = fotos.filter((f) => f.bytes > PESO_SANO);
+        const hueco = $('.gestor-fotos');
+        if (!hueco || !pesadas.length) return;
+        const sobra = pesadas.reduce((s, f) => s + f.bytes, 0);
+        hueco.innerHTML = `<button class="mini" data-accion="achicar-fotos" title="Las deja todas de ${LADO} píxeles, que es lo que se ve en una cotización">Achicar ${pesadas.length} foto${
+          pesadas.length === 1 ? '' : 's'} pesada${pesadas.length === 1 ? '' : 's'} (${pesoLegible(sobra)})</button>`;
+      }).catch(() => {});
     } catch (e) {
       contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
     }
@@ -1425,6 +1473,23 @@ $('#contenido').addEventListener('click', async (e) => {
     $('#input-foto').click();
     return;
   }
+  if (accion === 'achicar-fotos') {
+    const boton = e.target.closest('[data-accion="achicar-fotos"]');
+    boton.disabled = true;
+    try {
+      const r = await achicarTodas((hechas, total) => {
+        boton.textContent = `Achicando ${hechas + 1} de ${total}…`;
+      });
+      avisar(r.hechas
+        ? `${r.hechas} fotos achicadas: ${pesoLegible(r.antes)} → ${pesoLegible(r.despues)}`
+        : 'Las fotos ya estaban en su tamaño.');
+      await pintar();
+    } catch (err) {
+      boton.disabled = false;
+      avisar(err.message, true);
+    }
+    return;
+  }
   if (accion === 'buscar-foto') {
     // Se abre una búsqueda de imágenes con lo que identifica al producto. La
     // foto no se elige sola: la mirás y la traés vos, que es lo único
@@ -1522,6 +1587,16 @@ $('#contenido').addEventListener('click', async (e) => {
         tarjeta.querySelector('.import-resultado').textContent =
           `${inf.nuevos.length} nuevos · ${inf.actualizados.length} actualizados`;
         avisar(`"${categoria}": ${inf.nuevos.length} nuevos, ${inf.actualizados.length} actualizados`);
+
+        // Las fotos del Excel entran tal cual las guardó el proveedor: algunas
+        // pesan 200 KB. Se achican enseguida, sin que haya que pedirlo.
+        if (inf.fotos) {
+          tarjeta.querySelector('.import-resultado').textContent += ' · achicando fotos…';
+          const r = await achicarTodas();
+          tarjeta.querySelector('.import-resultado').textContent =
+            `${inf.nuevos.length} nuevos · ${inf.actualizados.length} actualizados · ${inf.fotos} fotos${
+              r.hechas ? ` (${pesoLegible(r.antes)} → ${pesoLegible(r.despues)})` : ''}`;
+        }
       }
     } catch (err) {
       boton.disabled = false;
@@ -1777,7 +1852,10 @@ $('#contenido').addEventListener('submit', async (e) => {
     const url = new FormData(e.target).get('url');
     if (!url) return avisar('Pegá la dirección de la imagen.', true);
     try {
-      await api(`/productos/${e.target.dataset.id}/foto`, { method: 'POST', body: { imagen_url: url } });
+      // La baja el servidor (muchos sitios no dejan que la lea el navegador),
+      // y una vez que es propia se la achica acá como a todas las demás.
+      const p = await api(`/productos/${e.target.dataset.id}/foto`, { method: 'POST', body: { imagen_url: url } });
+      await achicarGuardada({ id: p.id, foto: p.foto, bytes: p.bytes }).catch(() => null);
       avisar('Foto cargada ✓');
       await pintar();
     } catch (err) {
@@ -1945,7 +2023,7 @@ document.addEventListener('paste', async (e) => {
 
   e.preventDefault();
   try {
-    const imagen_base64 = await archivoABase64(archivo);
+    const imagen_base64 = await encogerOTalCual(archivo);
     await api(`/productos/${estado.productoAbierto}/foto`, { method: 'POST', body: { imagen_base64 } });
     avisar('Foto pegada ✓');
     await pintar();
@@ -1960,9 +2038,11 @@ $('#input-foto').addEventListener('change', async (e) => {
   e.target.value = '';
   if (!archivo || !estado.subiendoFotoPara) return;
   try {
-    const imagen_base64 = await archivoABase64(archivo);
-    await api(`/productos/${estado.subiendoFotoPara}/foto`, { method: 'POST', body: { imagen_base64 } });
-    avisar('Foto actualizada ✓');
+    const { dataUrl, bytes, bytesAntes } = await encoger(archivo);
+    await api(`/productos/${estado.subiendoFotoPara}/foto`, { method: 'POST', body: { imagen_base64: dataUrl } });
+    avisar(bytesAntes > bytes * 1.5
+      ? `Foto actualizada ✓ (achicada de ${pesoLegible(bytesAntes)} a ${pesoLegible(bytes)})`
+      : 'Foto actualizada ✓');
     await pintar();
   } catch (err) {
     avisar(err.message, true);

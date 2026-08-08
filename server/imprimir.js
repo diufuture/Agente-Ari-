@@ -115,7 +115,8 @@ const ESTILOS = `
     margin-top: 2px; white-space: pre-line;
   }
   .foto-celda img {
-    width: 46px; height: 46px; object-fit: contain; border: 1px solid var(--linea); border-radius: 4px;
+    width: 46px; height: 46px; max-width: 46px; max-height: 46px;
+    object-fit: contain; border: 1px solid var(--linea); border-radius: 4px;
   }
   .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
@@ -192,7 +193,7 @@ export function paginaCotizacion(id) {
     ${g.items.map((it) => `
       <tr>
         <td>${esc(it.referencia || '')}</td>
-        ${hayFotos ? `<td class="foto-celda">${it.foto ? `<img src="${esc(it.foto)}" alt="" />` : ''}</td>` : ''}
+        ${hayFotos ? `<td class="foto-celda">${it.foto ? `<img src="${esc(it.foto)}" alt="" width="46" height="46" />` : ''}</td>` : ''}
         <td>
           <span class="desc">${esc(primeraLinea(it.descripcion))}</span>
           ${restoDeLineas(it.descripcion) ? `<span class="especificacion">${esc(restoDeLineas(it.descripcion))}</span>` : ''}
