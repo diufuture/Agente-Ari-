@@ -130,16 +130,60 @@ comprobar('el total de la cotización enviada no cambió', cotDespues.monto, cot
 comprobar('el renglón conserva su precio de entonces',
   db.obtenerPorId('cotizacion_items', items[1].id).precio_unitario, 262070);
 
+/* 7b · Editar una cotización ya terminada --------------------------- */
+// El cliente pide cambios sobre la oferta ya enviada: se le cambia el nombre
+// al renglón, se le pone el área, y recién ahí se aprueba.
+db.actualizarItem(items[0].id, {
+  descripcion: 'Panel táctil de 4 pulgadas\nMarco de aluminio, blanco',
+  area: 'Sala',
+  seccion: 'Control',
+});
+const editado = db.obtenerPorId('cotizacion_items', items[0].id);
+comprobar('se le cambia el nombre al renglón', editado.descripcion.split('\n')[0], 'Panel táctil de 4 pulgadas');
+comprobar('se le pone el área', editado.area, 'Sala');
+comprobar('el precio no se movió al renombrarlo', editado.precio_unitario, Math.round(247790 * 1.15));
+
+// Un campo que no existe no puede colarse dentro del SQL
+db.actualizarItem(items[0].id, { 'x = 1, cantidad': 99 });
+comprobar('un campo inventado se ignora', db.obtenerPorId('cotizacion_items', items[0].id).cantidad, 7);
+
 /* 8 · Impresión ----------------------------------------------------- */
 const html = imprimir.paginaCotizacion(cotId);
 comprobar('la página imprimible se genera', typeof html === 'string' && html.includes('Cotización N.º'), true);
 comprobar('trae el total impreso', html.includes(new Intl.NumberFormat('es-CO').format(Math.round(cotDespues.monto))), true);
 comprobar('cotización inexistente devuelve null', imprimir.paginaCotizacion(9999), null);
+comprobar('el nombre editado sale impreso', html.includes('Panel táctil de 4 pulgadas'), true);
+comprobar('la ficha técnica sale aparte', html.includes('Marco de aluminio, blanco'), true);
+comprobar('aparece la columna de área porque se usó', html.includes('<th style="width:92px">Área</th>'), true);
+comprobar('y el área del renglón', html.includes('<td class="area">Sala</td>'), true);
+
+// Representante: el de la cotización manda sobre el de la empresa
+db.guardarAjustes({ representante: 'Mostrador', representante_telefono: '601 000' });
+comprobar('sin representante propio, sale el de la empresa',
+  imprimir.paginaCotizacion(cotId).includes('Mostrador'), true);
+db.actualizar('cotizaciones', cotId, { representante: 'Andrés Gómez', representante_telefono: '310 555' });
+const conRep = imprimir.paginaCotizacion(cotId);
+comprobar('el de la cotización le gana al de la empresa', conRep.includes('Andrés Gómez'), true);
+comprobar('y desplaza al de la empresa', conRep.includes('Mostrador'), false);
+
+// Logo: sale el que se cargó en ajustes
+db.guardarAjustes({ logo: '/uploads/marca/logo.webp?v=9' });
+comprobar('el logo cargado encabeza la hoja',
+  imprimir.paginaCotizacion(cotId).includes('src="/uploads/marca/logo.webp?v=9"'), true);
+
+// Una cotización sin áreas no debe traer la columna
+t('crear_cotizacion', { cliente: 'Sin áreas', titulo: 'Simple' });
+const cotSimple = db.cotizacionActiva().id;
+t('agregar_item_cotizacion', { descripcion: 'Visita técnica', precio_unitario: 90000 });
+t('finalizar_cotizacion', {});
+comprobar('sin áreas cargadas, la columna no aparece',
+  imprimir.paginaCotizacion(cotSimple).includes('>Área</th>'), false);
 
 /* 9 · Borrados en cadena -------------------------------------------- */
 t('eliminar', { entidad: 'productos', id: 1 });
 comprobar('borrar del catálogo no borra el renglón',
-  db.obtenerPorId('cotizacion_items', items[0].id).descripcion, 'Interruptor 2 canales');
+  db.obtenerPorId('cotizacion_items', items[0].id).descripcion.split('\n')[0],
+  'Panel táctil de 4 pulgadas');
 
 /* ------------------------------------------------------------------ */
 

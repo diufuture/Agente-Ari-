@@ -203,11 +203,45 @@ CREATE INDEX IF NOT EXISTS idx_items_cot ON cotizacion_items(cotizacion_id);
   // Lo que va impreso y puede cambiar de una oferta a otra.
   if (!cot.includes('validez')) db.exec('ALTER TABLE cotizaciones ADD COLUMN validez TEXT');
   if (!cot.includes('condiciones')) db.exec('ALTER TABLE cotizaciones ADD COLUMN condiciones TEXT');
+  // Quién firma esta oferta. Si queda vacío se imprime el de los ajustes.
+  if (!cot.includes('representante')) db.exec('ALTER TABLE cotizaciones ADD COLUMN representante TEXT');
+  if (!cot.includes('representante_telefono')) db.exec('ALTER TABLE cotizaciones ADD COLUMN representante_telefono TEXT');
+  if (!cot.includes('representante_email')) db.exec('ALTER TABLE cotizaciones ADD COLUMN representante_email TEXT');
+
+  // En qué parte de la casa va cada renglón (Sala, Cocina, Habitación...).
+  // Es opcional: si nadie la usa, la columna no aparece impresa.
+  const item = columnasDe('cotizacion_items');
+  if (!item.includes('area')) db.exec('ALTER TABLE cotizacion_items ADD COLUMN area TEXT');
 
   const mov = columnasDe('movimientos_stock');
   if (!mov.includes('cotizacion_id')) {
     db.exec('ALTER TABLE movimientos_stock ADD COLUMN cotizacion_id INTEGER REFERENCES cotizaciones(id) ON DELETE SET NULL');
   }
+}
+
+/**
+ * Las columnas reales de cada tabla, para no dejar que un nombre de campo
+ * inventado entre a armar el SQL. `actualizar`/`insertar` reciben lo que
+ * mandó el navegador, y aunque haya que tener sesión para llegar hasta acá,
+ * el nombre de una columna no es algo que se pueda pasar como parámetro: si
+ * no se filtra, se está concatenando texto ajeno adentro de la consulta.
+ */
+const COLUMNAS = new Map();
+export function columnasReales(tabla) {
+  if (!COLUMNAS.has(tabla)) {
+    COLUMNAS.set(tabla, new Set(db.prepare(`PRAGMA table_info(${tabla})`).all().map((c) => c.name)));
+  }
+  return COLUMNAS.get(tabla);
+}
+
+/** Deja sólo los campos que la tabla realmente tiene. */
+function soloColumnas(tabla, datos) {
+  const validas = columnasReales(tabla);
+  const limpio = {};
+  for (const [k, v] of Object.entries(datos)) {
+    if (validas.has(k) && v !== undefined) limpio[k] = v;
+  }
+  return limpio;
 }
 
 /* ------------------------------------------------------------------ */
@@ -444,8 +478,10 @@ export function resolverProducto(texto) {
 /* Inserciones genéricas                                               */
 /* ------------------------------------------------------------------ */
 
-export function insertar(tabla, datos) {
-  const campos = Object.keys(datos).filter((k) => datos[k] !== undefined);
+export function insertar(tabla, entrada) {
+  const datos = soloColumnas(tabla, entrada);
+  const campos = Object.keys(datos);
+  if (!campos.length) throw new Error('No recibí ningún dato para guardar.');
   const marcas = campos.map(() => '?').join(', ');
   const r = run(
     `INSERT INTO ${tabla} (${campos.join(', ')}) VALUES (${marcas})`,
@@ -458,8 +494,9 @@ export function obtenerPorId(tabla, id) {
   return one(`${selectConCliente(tabla)} WHERE ${tabla === 'clientes' ? '' : 't.'}id = ?`, [id]);
 }
 
-export function actualizar(tabla, id, datos) {
-  const campos = Object.keys(datos).filter((k) => datos[k] !== undefined);
+export function actualizar(tabla, id, entrada) {
+  const datos = soloColumnas(tabla, entrada);
+  const campos = Object.keys(datos);
   if (!campos.length) return obtenerPorId(tabla, id);
   run(
     `UPDATE ${tabla} SET ${campos.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`,
@@ -666,6 +703,8 @@ export function conciliarProductos(categoria, filas, opciones = {}) {
 
 const AJUSTES_POR_DEFECTO = {
   empresa: 'Click Control',
+  // Dirección del logo que encabeza las cotizaciones, subido desde ⚙ Ajustes.
+  logo: '',
   nit: '',
   direccion: '',
   telefono: '',
@@ -834,6 +873,7 @@ export function agregarItem(cotizacionId, datos = {}) {
     cotizacion_id: cotizacionId,
     producto_id: base.producto_id ?? null,
     seccion: datos.seccion ?? base.seccion ?? null,
+    area: datos.area ?? null,
     descripcion,
     referencia: datos.referencia ?? base.referencia ?? null,
     marca: datos.marca ?? base.marca ?? null,

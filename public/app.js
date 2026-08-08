@@ -20,6 +20,7 @@ const estado = {
   buscarProductos: '',     // texto del buscador del catálogo
   nuevoProducto: false,    // el formulario de alta manual de producto está abierto
   subiendoFotoPara: null,  // id del producto al que se le está por asignar una foto
+  itemEditando: null,      // id del renglón de cotización abierto para editar
   buscarCatalogo: '',      // texto del buscador de productos dentro de una cotización
   resultadosCatalogo: null, // null = todavía no se buscó nada
   verDescontinuados: false, // mostrar los productos que salieron de la lista
@@ -229,7 +230,7 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
     const acciones = `<td class="num acciones"><div class="acciones-fila">
       ${compacta ? '' : `
       ${entidad === 'cotizaciones'
-        ? `<button class="mini destacado" data-accion="abrir-cotizacion" data-id="${f.id}">Abonos</button>`
+        ? `<button class="mini destacado" data-accion="abrir-cotizacion" data-id="${f.id}">Abrir y editar</button>`
         : ''}
       ${entidad === 'clientes'
         ? `<button class="mini destacado" data-accion="abrir-cliente" data-id="${f.id}">Ver ficha</button>`
@@ -282,6 +283,39 @@ function lineaTiempo(citas) {
 /* ─────────── Renglones de una cotización ─────────── */
 
 /** La tabla de ítems, agrupada por sección como en el formato impreso. */
+/** El nombre corto de un renglón: la ficha técnica va en las líneas de abajo. */
+const primeraLineaDe = (texto) => String(texto ?? '').split('\n')[0].trim();
+
+/**
+ * El renglón abierto para editar.
+ *
+ * Lo que trae un producto del catálogo es su nombre genérico —"Interruptor 2
+ * canales"— y muchas veces en la oferta hay que llamarlo como lo conoce el
+ * cliente. Se cambia acá, y sólo en esta cotización: el catálogo no se toca.
+ */
+function filaEditorItem(it) {
+  return `<tr class="fila-editor"><td colspan="6">
+    <form class="form-item" data-id="${it.id}">
+      <label class="ancho"><span>Descripción — la primera línea es el nombre; lo de abajo sale como ficha técnica</span>
+        <textarea name="descripcion" rows="3" required>${escapar(it.descripcion)}</textarea></label>
+      <label><span>Referencia</span>
+        <input name="referencia" type="text" value="${escapar(it.referencia || '')}" /></label>
+      <label><span>Marca</span>
+        <input name="marca" type="text" value="${escapar(it.marca || '')}" /></label>
+      <label><span>Sección</span>
+        <input name="seccion" type="text" list="lista-secciones" value="${escapar(it.seccion || '')}"
+               placeholder="Iluminación, Mano de obra…" /></label>
+      <label><span>Área (opcional)</span>
+        <input name="area" type="text" list="lista-areas" value="${escapar(it.area || '')}"
+               placeholder="Sala, Cocina, Habitación…" /></label>
+      <div class="form-acciones">
+        <button type="submit">Guardar renglón</button>
+        <button type="button" class="mini" data-accion="cancelar-item">Cancelar</button>
+      </div>
+    </form>
+  </td></tr>`;
+}
+
 function tablaItems(cot, items) {
   if (!items.length) {
     return `<div class="tarjeta"><div class="vacio">
@@ -299,12 +333,22 @@ function tablaItems(cot, items) {
       : '';
     seccionActual = seccion;
 
+    // Abierto para editar: el renglón se despliega en un formulario con todo
+    // lo que va impreso, incluido el texto largo de la ficha técnica.
+    if (it.id === estado.itemEditando) {
+      return `${cabecera}${filaEditorItem(it)}`;
+    }
+
     return `${cabecera}
       <tr>
         <td data-rotulo="Referencia" class="col-ref">${escapar(it.referencia || '—')}</td>
         <td data-rotulo="Descripción" class="principal-col" title="${escapar(it.descripcion)}">
-          ${escapar(truncar(it.descripcion, 60))}
+          ${escapar(truncar(primeraLineaDe(it.descripcion), 60))}
+          ${it.area ? `<em class="area-item">${escapar(it.area)}</em>` : ''}
           ${it.marca ? `<em class="marca-item">${escapar(it.marca)}</em>` : ''}
+          ${it.producto_id && !it.foto
+            ? '<em class="falta-foto" title="Este producto no tiene foto: va a salir vacío en el PDF">sin foto</em>'
+            : ''}
         </td>
         <td data-rotulo="Cant." class="num">
           <input class="celda-num" type="number" min="0" step="1" value="${escapar(it.cantidad)}"
@@ -316,6 +360,8 @@ function tablaItems(cot, items) {
         </td>
         <td data-rotulo="Vr. total" class="num total-item">${fmtDinero(it.total, cot.moneda)}</td>
         <td class="num acciones"><div class="acciones-fila">
+          <button class="mini" data-accion="editar-item" data-id="${it.id}"
+                  title="Cambiarle el nombre, la sección o el área" aria-label="Editar renglón">✎</button>
           <button class="mini" data-accion="porcentaje-item" data-id="${it.id}"
                   title="Subirle o bajarle un porcentaje" aria-label="Ajustar por porcentaje">%</button>
           <button class="mini peligro" data-accion="borrar-item" data-id="${it.id}"
@@ -324,13 +370,20 @@ function tablaItems(cot, items) {
       </tr>`;
   }).join('');
 
+  // Para no volver a escribir a mano lo que ya se usó en esta cotización.
+  const sugerencias = (campo) => [...new Set(items.map((i) => i[campo]).filter(Boolean))]
+    .map((v) => `<option value="${escapar(v)}"></option>`).join('');
+
   return `<div class="tarjeta"><div class="tabla-envoltura"><table class="tabla-items">
     <thead><tr>
       <th>Ref.</th><th>Descripción</th><th class="num">Cant.</th>
       <th class="num">Vr. unit.</th><th class="num">Vr. total</th><th class="num"></th>
     </tr></thead>
     <tbody>${filas}</tbody>
-  </table></div></div>`;
+  </table></div>
+  <datalist id="lista-secciones">${sugerencias('seccion')}</datalist>
+  <datalist id="lista-areas">${sugerencias('area')}</datalist>
+  </div>`;
 }
 
 /** Subtotal, servicio, IVA y total, con los porcentajes editables. */
@@ -489,6 +542,10 @@ const CAMPOS = {
     { n: 'estado', e: 'Estado', opciones: ['pendiente', 'enviada', 'aprobada', 'rechazada'] },
     { n: 'moneda', e: 'Moneda' },
     { n: 'validez', e: 'Validez de la oferta' },
+    // Si quedan vacíos se imprime el representante de los datos de la empresa.
+    { n: 'representante', e: 'Representante de ventas (si no, el de ⚙ Datos de la empresa)' },
+    { n: 'representante_telefono', e: 'Teléfono del representante' },
+    { n: 'representante_email', e: 'Correo del representante', tipo: 'email' },
     { n: 'descripcion', e: 'Descripción', area: true, ancho: true },
     { n: 'condiciones', e: 'Condiciones comerciales (van impresas)', area: true, ancho: true },
   ],
@@ -753,15 +810,34 @@ function vistaAjustes(aj) {
   return `
     <p class="ayuda" style="margin-bottom:16px">
       Estos datos encabezan y cierran las cotizaciones que imprimís. Se usan como
-      punto de partida: cada cotización puede llevar su propia validez y sus
-      propias condiciones si hace falta.
+      punto de partida: cada cotización puede llevar su propia validez, sus
+      propias condiciones y su propio representante si hace falta.
     </p>
-    <div class="tarjeta">
-      <form class="form-editar" id="form-ajustes">
-        ${campos}
-        <div class="form-acciones"><button type="submit">Guardar</button></div>
-      </form>
-    </div>`;
+
+    ${bloque('Logo de la empresa', `
+      <div class="tarjeta">
+        <div class="logo-ajuste">
+          <div class="logo-vista">${aj.logo
+            ? `<img src="${escapar(aj.logo)}" alt="Logo" />`
+            : '<span class="foto-vacia">Sin logo</span>'}</div>
+          <div class="logo-texto">
+            <p class="ayuda" style="margin:0 0 10px">
+              Va arriba a la izquierda de cada cotización impresa. Sirve un PNG con
+              fondo transparente; se guarda a 600 píxeles de ancho como máximo.
+            </p>
+            <button class="mini destacado" data-accion="subir-logo">${aj.logo ? 'Cambiar logo' : 'Subir logo'}</button>
+            ${aj.logo ? '<button class="mini peligro" data-accion="quitar-logo">Quitar</button>' : ''}
+          </div>
+        </div>
+      </div>`)}
+
+    ${bloque('Datos que van impresos', `
+      <div class="tarjeta">
+        <form class="form-editar" id="form-ajustes">
+          ${campos}
+          <div class="form-acciones"><button type="submit">Guardar</button></div>
+        </form>
+      </div>`)}`;
 }
 
 /* ─────────── Importar lista de precios ─────────── */
@@ -1473,6 +1549,31 @@ $('#contenido').addEventListener('click', async (e) => {
     $('#input-foto').click();
     return;
   }
+  if (accion === 'editar-item') {
+    estado.itemEditando = estado.itemEditando === Number(id) ? null : Number(id);
+    await pintar();
+    return;
+  }
+  if (accion === 'cancelar-item') {
+    estado.itemEditando = null;
+    await pintar();
+    return;
+  }
+  if (accion === 'quitar-logo') {
+    if (!confirm('¿Quitar el logo de las cotizaciones?')) return;
+    try {
+      await api('/ajustes/logo', { method: 'DELETE' });
+      avisar('Logo quitado ✓');
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+  if (accion === 'subir-logo') {
+    $('#input-logo').click();
+    return;
+  }
   if (accion === 'achicar-fotos') {
     const boton = e.target.closest('[data-accion="achicar-fotos"]');
     boton.disabled = true;
@@ -1847,6 +1948,21 @@ $('#contenido').addEventListener('submit', async (e) => {
     return;
   }
 
+  if (e.target.classList.contains('form-item')) {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    try {
+      await api(`/cotizacion_items/${e.target.dataset.id}`, { method: 'PATCH', body: d });
+      estado.itemEditando = null;
+      avisar('Renglón actualizado ✓');
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+
   if (e.target.id === 'form-foto-url') {
     e.preventDefault();
     const url = new FormData(e.target).get('url');
@@ -2043,6 +2159,22 @@ $('#input-foto').addEventListener('change', async (e) => {
     avisar(bytesAntes > bytes * 1.5
       ? `Foto actualizada ✓ (achicada de ${pesoLegible(bytesAntes)} a ${pesoLegible(bytes)})`
       : 'Foto actualizada ✓');
+    await pintar();
+  } catch (err) {
+    avisar(err.message, true);
+  }
+});
+
+// El logo de la empresa. Se achica igual que las fotos, pero a 600 píxeles:
+// tiene que verse nítido arriba de la hoja, no es una uña de catálogo.
+$('#input-logo').addEventListener('change', async (e) => {
+  const archivo = e.target.files[0];
+  e.target.value = '';
+  if (!archivo) return;
+  try {
+    const imagen_base64 = await encogerOTalCual(archivo, { lado: 600, calidad: 0.9 });
+    await api('/ajustes/logo', { method: 'POST', body: { imagen_base64 } });
+    avisar('Logo actualizado ✓');
     await pintar();
   } catch (err) {
     avisar(err.message, true);

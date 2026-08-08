@@ -40,6 +40,9 @@ const [db, tools, asistente, auth, xlsx, imprimir] = await Promise.all([
 const CARPETA_FOTOS = join(PUBLICO, 'uploads', 'productos');
 mkdirSync(CARPETA_FOTOS, { recursive: true });
 
+const CARPETA_MARCA = join(PUBLICO, 'uploads', 'marca');
+mkdirSync(CARPETA_MARCA, { recursive: true });
+
 // Cuántas filas de ejemplo se muestran al revisar una hoja antes de importarla.
 // Tiene que coincidir con lo que pinta la interfaz.
 const FILAS_DE_MUESTRA = 4;
@@ -246,6 +249,34 @@ async function api(req, res, url) {
     if (idCot) return json(res, 200, db.activarCotizacion(Number(idCot)));
     db.cerrarCotizacionActiva();
     return json(res, 200, { ok: true });
+  }
+
+  // POST /api/ajustes/logo -> el logo que encabeza las cotizaciones. Se sube
+  // desde la pantalla de ajustes en vez de tener que dejar un archivo por FTP.
+  if (recurso === 'ajustes' && partes[1] === 'logo') {
+    if (req.method === 'POST') {
+      const { imagen_base64 } = await leerJson(req, 8_000_000);
+      let buffer;
+      let ext;
+      try {
+        ({ buffer, ext } = leerImagenBase64(imagen_base64));
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+      writeFileSync(join(CARPETA_MARCA, `logo.${ext}`), buffer);
+      for (const otra of new Set(Object.values(TIPOS_IMAGEN))) {
+        if (otra !== ext) rmSync(join(CARPETA_MARCA, `logo.${otra}`), { force: true });
+      }
+      // La fecha en la dirección obliga al navegador a volver a pedirlo: si no,
+      // se cambia el logo y se sigue viendo el anterior.
+      return json(res, 200, db.guardarAjustes({ logo: `/uploads/marca/logo.${ext}?v=${Date.now()}` }));
+    }
+    if (req.method === 'DELETE') {
+      for (const otra of new Set(Object.values(TIPOS_IMAGEN))) {
+        rmSync(join(CARPETA_MARCA, `logo.${otra}`), { force: true });
+      }
+      return json(res, 200, db.guardarAjustes({ logo: '' }));
+    }
   }
 
   // GET|PATCH /api/ajustes -> datos de la empresa que van en las impresiones

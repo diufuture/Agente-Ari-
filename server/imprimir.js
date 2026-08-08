@@ -118,6 +118,8 @@ const ESTILOS = `
     width: 46px; height: 46px; max-width: 46px; max-height: 46px;
     object-fit: contain; border: 1px solid var(--linea); border-radius: 4px;
   }
+  .foto-celda .sin-foto { color: #b8c6d3; font-size: 13px; }
+  td.area { color: var(--tenue); font-size: 10.5px; }
   .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
   .cierre { display: flex; justify-content: space-between; gap: 26px; margin-top: 18px; }
@@ -182,23 +184,37 @@ export function paginaCotizacion(id) {
   const cliente = cot.cliente_id ? db.obtenerCliente(cot.cliente_id) : null;
   const grupos = porSecciones(items);
   const hayFotos = items.some((i) => i.foto);
+  // El área (Sala, Cocina, Habitación…) es opcional: la columna sólo aparece
+  // si al menos un renglón la tiene cargada.
+  const hayAreas = items.some((i) => String(i.area || '').trim());
+
+  // Quien firma esta oferta: el que se le puso a la cotización, y si no, el
+  // de los datos de la empresa.
+  const rep = {
+    nombre: cot.representante || aj.representante,
+    telefono: cot.representante_telefono || aj.representante_telefono,
+    email: cot.representante_email || aj.representante_email,
+  };
 
   const filaDato = (rotulo, valor) =>
     valor ? `<div class="fila"><span>${esc(rotulo)}</span><b>${esc(valor)}</b></div>` : '';
 
-  const columnas = hayFotos ? 6 : 5;
+  const columnas = 5 + (hayFotos ? 1 : 0) + (hayAreas ? 1 : 0);
 
   const cuerpo = grupos.map((g) => `
     <tr class="seccion"><td colspan="${columnas}">${esc(g.nombre)}</td></tr>
     ${g.items.map((it) => `
       <tr>
         <td>${esc(it.referencia || '')}</td>
-        ${hayFotos ? `<td class="foto-celda">${it.foto ? `<img src="${esc(it.foto)}" alt="" width="46" height="46" />` : ''}</td>` : ''}
+        ${hayFotos ? `<td class="foto-celda">${it.foto
+          ? `<img src="${esc(it.foto)}" alt="" width="46" height="46" />`
+          : '<span class="sin-foto" title="Este renglón no tiene foto">—</span>'}</td>` : ''}
         <td>
           <span class="desc">${esc(primeraLinea(it.descripcion))}</span>
           ${restoDeLineas(it.descripcion) ? `<span class="especificacion">${esc(restoDeLineas(it.descripcion))}</span>` : ''}
           ${it.marca ? `<span class="especificacion">${esc(it.marca)}</span>` : ''}
         </td>
+        ${hayAreas ? `<td class="area">${esc(it.area || '')}</td>` : ''}
         <td class="num">${esc(formatearCantidad(it.cantidad))}</td>
         <td class="num">${dinero(it.precio_unitario, cot.moneda)}</td>
         <td class="num">${dinero(it.total, cot.moneda)}</td>
@@ -229,7 +245,7 @@ export function paginaCotizacion(id) {
 
   <header class="tope">
     <div class="marca">
-      <img src="/logo.png" alt="${esc(aj.empresa)}"
+      <img src="${esc(aj.logo || '/logo.png')}" alt="${esc(aj.empresa)}"
            onerror="if (this.dataset.n) { this.remove(); } else { this.dataset.n = 1; this.src = '/logo.svg'; }" />
       <h1>${esc(aj.empresa)}</h1>
       <div class="datos">
@@ -264,9 +280,9 @@ export function paginaCotizacion(id) {
     <div class="bloque">
       <h2>Representante de ventas</h2>
       ${[
-        filaDato('Nombre', aj.representante),
-        filaDato('Teléfono', aj.representante_telefono),
-        filaDato('Correo', aj.representante_email),
+        filaDato('Nombre', rep.nombre),
+        filaDato('Teléfono', rep.telefono),
+        filaDato('Correo', rep.email),
       ].join('') || '<div class="fila"><span>Sin datos cargados</span></div>'}
     </div>
   </div>
@@ -281,6 +297,7 @@ export function paginaCotizacion(id) {
         <th style="width:88px">Ref.</th>
         ${hayFotos ? '<th style="width:56px">Foto</th>' : ''}
         <th>Descripción</th>
+        ${hayAreas ? '<th style="width:92px">Área</th>' : ''}
         <th class="num" style="width:44px">Cant.</th>
         <th class="num" style="width:96px">Vr. unitario</th>
         <th class="num" style="width:104px">Vr. total</th>
