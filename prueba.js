@@ -288,6 +288,88 @@ comprobar('los cuatro interruptores quedan con su foto',
   [1, 2, 3, 4].map((f) => hojaLeida.imagenes.get(f)?.datos[8] ?? null), [1, 2, 3, 4]);
 comprobar('y ninguna queda sin ubicar', hojaLeida.imagenes.sinUbicar, 0);
 
+/* 8c · La lista de precios que vive en línea ------------------------ */
+const remoto = await import('./server/remoto.js');
+
+// La dirección que uno copia del navegador es para mirar la hoja, no para
+// bajarla. Se traduce sola.
+comprobar('la hoja de Google se convierte en descarga de CSV',
+  remoto.direccionDeDescarga('https://docs.google.com/spreadsheets/d/1AbC_dEf/edit#gid=847'),
+  'https://docs.google.com/spreadsheets/d/1AbC_dEf/export?format=csv&gid=847');
+comprobar('Dropbox baja el archivo en vez de mostrarlo',
+  remoto.direccionDeDescarga('https://www.dropbox.com/s/xyz/lista.xlsx?dl=0'),
+  'https://www.dropbox.com/s/xyz/lista.xlsx?dl=1');
+
+// No puede salir a la red interna del hosting
+for (const mala of ['http://127.0.0.1:8734/api', 'http://192.168.1.10/lista.csv', 'http://localhost/x']) {
+  let bloqueada = false;
+  try { remoto.validarDireccion(mala); } catch { bloqueada = true; }
+  comprobar(`rechaza la dirección interna ${mala}`, bloqueada, true);
+}
+let sinProtocolo = false;
+try { remoto.validarDireccion('file:///etc/passwd'); } catch { sinProtocolo = true; }
+comprobar('rechaza lo que no sea http o https', sinProtocolo, true);
+
+// El CSV como lo exporta una hoja en español: punto y coma de separador,
+// puntos de miles, y un campo entrecomillado con comas y comillas adentro.
+const csv = `LISTA DE PRECIOS CLIC CONTROL;;;
+REF;DESCRIPCION;PRECIO CANAL;PRECIO CLIENTE FINAL
+G7-1;Interruptor 1 canal;98.500;120.000
+G7-2;Interruptor 2 canales;154.868;247.790
+G7-4;"Interruptor 4 canales, línea ""Key Look""";190.000;295.000
+`;
+const filasCsv = remoto.leerCsv(csv);
+comprobar('separa por punto y coma', filasCsv[1], ['REF', 'DESCRIPCION', 'PRECIO CANAL', 'PRECIO CLIENTE FINAL']);
+comprobar('los miles con punto quedan como número', filasCsv[2][3], 120000);
+comprobar('respeta las comas dentro de comillas', filasCsv[4][1], 'Interruptor 4 canales, línea "Key Look"');
+comprobar('y el precio de esa fila también', filasCsv[4][3], 295000);
+
+// De ahí en más es el mismo camino que una lista subida a mano
+const mapeoCsv = xlsx.sugerirMapeo(filasCsv);
+const productosCsv = xlsx.filasDesdeMapeo(filasCsv, mapeoCsv);
+comprobar('reconoce los tres productos', productosCsv.length, 3);
+comprobar('y de qué columna sale el precio', productosCsv[1],
+  { fila: 3, referencia: 'G7-2', descripcion: 'Interruptor 2 canales', marca: null, unidad: null,
+    precio_canal: 154868, precio_constructor: null, precio_cliente: 247790, stock: null });
+
+const infCsv = db.conciliarProductos('Desde la hoja', productosCsv, {});
+comprobar('la hoja en línea alimenta el catálogo', infCsv.nuevos.length, 3);
+
+// Y una segunda pasada con la hoja ya editada: precio nuevo y una referencia
+// que desapareció, sin perder nada de lo cargado a mano.
+const idG71 = db.consultar('productos', { texto: 'G7-1' })[0].id;
+db.actualizar('productos', idG71, { foto: '/uploads/productos/x.webp', notas: 'la trajo Andrés' });
+const infCsv2 = db.conciliarProductos('Desde la hoja', remoto.leerCsv(csv.replace('120.000', '125.000'))
+  .slice(2).map((f, i) => ({ fila: i + 2, referencia: f[0], descripcion: f[1], precio_canal: f[2], precio_cliente: f[3] })), {});
+comprobar('al volver a traerla sólo cambia el precio', infCsv2.actualizados.length, 1);
+comprobar('y conserva la foto cargada a mano', db.obtenerPorId('productos', idG71).foto, '/uploads/productos/x.webp');
+
+// La forma de la lista real: un título arriba, el encabezado, y debajo los
+// subtítulos de los tres niveles de precio. El encabezado tiene que ser el del
+// medio —no el título, que también dice "precios"— y "Interruptor 2 canales"
+// no puede confundirse con la columna de precio de canal.
+const conSubtitulos = [
+  ['LISTA DE PRECIOS ENERO 2025', null, null, null, null],
+  ['REF', 'DESCRIPCION', 'PRECIO', null, null],
+  [null, null, 'CANAL', 'CONSTRUCTOR', 'CLIENTE FINAL'],
+  ['G7-2', 'Interruptor 2 canales', 154868, 216816, 247790],
+  ['G7-3', 'Interruptor 3 canales', 163793, 229311, 262070],
+];
+const mapeoReal = xlsx.sugerirMapeo(conSubtitulos);
+comprobar('el encabezado es el del medio, no el título', mapeoReal.filaEncabezado, 1);
+comprobar('los datos empiezan después de los subtítulos', mapeoReal.filaInicioDatos, 3);
+comprobar('cada nivel de precio cae en su columna',
+  [mapeoReal.columnas.referencia, mapeoReal.columnas.descripcion, mapeoReal.columnas.precio_canal,
+    mapeoReal.columnas.precio_constructor, mapeoReal.columnas.precio_cliente], [0, 1, 2, 3, 4]);
+
+// Una hoja de la que no se entiende cuál columna es el producto no se importa
+// a medias: se para y lo dice.
+let sinDescripcion = false;
+try {
+  xlsx.filasDesdeMapeo([[1, 2], [3, 4]], { columnas: { referencia: 0 }, filaInicioDatos: 0 });
+} catch { sinDescripcion = true; }
+comprobar('sin columna de descripción no importa nada', sinDescripcion, true);
+
 /* 9 · Borrados en cadena -------------------------------------------- */
 t('eliminar', { entidad: 'productos', id: 1 });
 comprobar('borrar del catálogo no borra el renglón',

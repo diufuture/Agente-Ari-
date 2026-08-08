@@ -331,12 +331,26 @@ export function leerXlsx(buffer, { conImagenes = false } = {}) {
 export function sugerirMapeo(filas) {
   const normaliza = (v) => String(v ?? '').toLowerCase();
 
+  // Cuál fila es el encabezado: la que más celdas tenga con pinta de rótulo.
+  //
+  // Antes alcanzaba con que la fila dijera "precio", y eso se tropieza con el
+  // título de la hoja —"LISTA DE PRECIOS CLIC CONTROL"— que está justo arriba
+  // y también lo dice. Contar cuántas celdas parecen rótulo separa el título
+  // (una sola) del encabezado de verdad (varias). En empate gana la de más
+  // arriba, que deja los subtítulos donde estaban.
+  const ROTULOS = [
+    'ref', 'model', 'codigo', 'código', 'descri', 'nombre', 'goods', 'item',
+    'precio', 'price', 'valor', 'canal', 'constructor', 'cliente',
+    'marca', 'unidad', 'stock', 'cantidad', 'existencia',
+  ];
+  const puntaje = (fila) =>
+    (fila || []).filter((c) => ROTULOS.some((r) => normaliza(c).includes(r))).length;
+
   let filaEncabezado = 0;
-  for (let i = 0; i < Math.min(6, filas.length); i++) {
-    if ((filas[i] || []).some((c) => normaliza(c).includes('precio'))) {
-      filaEncabezado = i;
-      break;
-    }
+  let mejor = 0;
+  for (let i = 0; i < Math.min(8, filas.length); i++) {
+    const p = puntaje(filas[i]);
+    if (p > mejor) { mejor = p; filaEncabezado = i; }
   }
 
   const encabezado = filas[filaEncabezado] || [];
@@ -372,8 +386,10 @@ export function sugerirMapeo(filas) {
   };
 
   const columnas = {
-    referencia: buscar([['model', 'referen'], ['product name', 'item']], encabezado),
-    descripcion: buscar([['descri'], ['name of goods', 'goods', 'nombre']], encabezado),
+    // También en los subtítulos: si el encabezado quedó siendo una fila con
+    // celdas combinadas, el rótulo de la columna puede estar una fila abajo.
+    referencia: buscar([['model', 'referen', 'codigo', 'código'], ['product name', 'item'], ['ref']], encabezado, ...filasSub),
+    descripcion: buscar([['descri'], ['name of goods', 'goods', 'nombre']], encabezado, ...filasSub),
     precio_canal: buscar([['canal']], ...filasSub, encabezado),
     precio_constructor: buscar([['constructor']], ...filasSub, encabezado),
     precio_cliente: buscar([['cliente final', 'cliente', 'final']], ...filasSub, encabezado),
@@ -395,4 +411,39 @@ export function sugerirMapeo(filas) {
   if (filaInicioDatos === filas.length) filaInicioDatos = filaEncabezado + 1;
 
   return { filaEncabezado, filaInicioDatos, columnas };
+}
+
+/**
+ * Convierte las filas crudas de una hoja en productos, usando un mapeo de
+ * columnas ya confirmado.
+ *
+ * Es lo mismo que arma la pantalla de importación antes de mandar la lista,
+ * pero acá también, para que una lista que se trae sola desde su dirección en
+ * línea no necesite que haya alguien mirando la pantalla.
+ *
+ * El índice de fila se conserva: es lo que vincula cada producto con la foto
+ * que el Excel tiene anclada a esa misma fila.
+ */
+export function filasDesdeMapeo(filas, mapeo) {
+  const col = mapeo?.columnas ?? {};
+  const dato = (f, campo) => (col[campo] === null || col[campo] === undefined ? null : f[col[campo]] ?? null);
+
+  if (col.descripcion === null || col.descripcion === undefined) {
+    throw new Error('No sé cuál columna es la descripción del producto.');
+  }
+
+  return filas
+    .map((f, i) => ({
+      fila: i,
+      referencia: dato(f, 'referencia'),
+      descripcion: f[col.descripcion],
+      marca: dato(f, 'marca'),
+      unidad: dato(f, 'unidad'),
+      precio_canal: dato(f, 'precio_canal'),
+      precio_constructor: dato(f, 'precio_constructor'),
+      precio_cliente: dato(f, 'precio_cliente'),
+      stock: dato(f, 'stock'),
+    }))
+    .slice(mapeo.filaInicioDatos ?? 0)
+    .filter((f) => f.descripcion !== null && f.descripcion !== undefined && String(f.descripcion).trim() !== '');
 }

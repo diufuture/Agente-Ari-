@@ -714,6 +714,9 @@ const AJUSTES_POR_DEFECTO = {
   representante_telefono: '',
   representante_email: '',
   validez: '8 días',
+  // Listas de precios que viven en línea, en JSON. Se editan en su hoja y el
+  // sistema las va a buscar; acá sólo queda la dirección y cómo leerlas.
+  listas: '[]',
   condiciones: [
     'Tiempo de entrega: según cronograma de obra.',
     'Garantía: 1 año.',
@@ -732,6 +735,59 @@ export function guardarAjustes(datos = {}) {
     if (clave in AJUSTES_POR_DEFECTO) escribirAjuste(clave, valor);
   }
   return leerAjustes();
+}
+
+/* ---- Listas de precios en línea ---------------------------------- */
+
+/** Las listas configuradas, ya como objetos. */
+export function leerListas() {
+  try {
+    const v = JSON.parse(leerAjustes().listas);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+export function guardarListas(listas) {
+  escribirAjuste('listas', JSON.stringify(listas));
+  return leerListas();
+}
+
+/** Agrega una lista y devuelve la que quedó guardada. */
+export function agregarLista(datos) {
+  const listas = leerListas();
+  const lista = {
+    id: Math.max(0, ...listas.map((l) => Number(l.id) || 0)) + 1,
+    nombre: String(datos.nombre || datos.categoria || 'Lista').trim(),
+    url: String(datos.url || '').trim(),
+    categoria: String(datos.categoria || '').trim() || null,
+    hoja: Number(datos.hoja) || 0,
+    manejaInventario: Boolean(datos.manejaInventario),
+    descontinuarAusentes: Boolean(datos.descontinuarAusentes),
+    mapeo: datos.mapeo ?? null,
+    ultima: null,
+    ultimoInforme: null,
+  };
+  guardarListas([...listas, lista]);
+  return lista;
+}
+
+export function actualizarLista(id, cambios) {
+  const listas = leerListas();
+  const i = listas.findIndex((l) => Number(l.id) === Number(id));
+  if (i < 0) return null;
+  listas[i] = { ...listas[i], ...cambios, id: listas[i].id };
+  guardarListas(listas);
+  return listas[i];
+}
+
+export function eliminarLista(id) {
+  const listas = leerListas();
+  const quedan = listas.filter((l) => Number(l.id) !== Number(id));
+  if (quedan.length === listas.length) return false;
+  guardarListas(quedan);
+  return true;
 }
 
 const escribirAjuste = (clave, valor) =>

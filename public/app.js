@@ -21,6 +21,8 @@ const estado = {
   nuevoProducto: false,    // el formulario de alta manual de producto está abierto
   subiendoFotoPara: null,  // id del producto al que se le está por asignar una foto
   itemEditando: null,      // id del renglón de cotización abierto para editar
+  viendoListas: false,     // pantalla de listas de precios conectadas en línea
+  pruebaLista: null,       // resultado de probar una dirección, antes de conectarla
   buscarCatalogo: '',      // texto del buscador de productos dentro de una cotización
   resultadosCatalogo: null, // null = todavía no se buscó nada
   verDescontinuados: false, // mostrar los productos que salieron de la lista
@@ -989,6 +991,88 @@ function vistaImportacion() {
   `;
 }
 
+/* ─────────── Listas de precios en línea ─────────── */
+
+/**
+ * Las hojas conectadas: en vez de exportar el Excel y subirlo, la lista se
+ * edita donde ya está y el sistema la va a buscar.
+ */
+function vistaListas(listas, prueba) {
+  const tarjetas = listas.length
+    ? listas.map((l) => `
+      <div class="tarjeta lista-online" data-id="${l.id}">
+        <div class="lista-cab">
+          <div>
+            <h3>${escapar(l.nombre)}</h3>
+            <p>${l.categoria ? `Categoría <b>${escapar(l.categoria)}</b> · ` : ''}${
+              l.ultima
+                ? `última vez ${escapar(fmtFecha(String(l.ultima).slice(0, 10)))}${
+                    l.ultimoInforme ? ` · ${l.ultimoInforme.nuevos} nuevos, ${l.ultimoInforme.actualizados} actualizados` : ''}`
+                : 'todavía no se ha traído'}</p>
+          </div>
+          <div class="acciones-fila">
+            <button class="mini" data-accion="revisar-lista" data-id="${l.id}">Ver qué cambiaría</button>
+            <button class="mini destacado" data-accion="sincronizar-lista" data-id="${l.id}">Traer ahora</button>
+            <button class="mini peligro" data-accion="borrar-lista" data-id="${l.id}">Quitar</button>
+          </div>
+        </div>
+        <p class="lista-url" title="${escapar(l.url)}">${escapar(truncar(l.url, 90))}</p>
+        <label class="check"><input type="checkbox" class="lista-descontinuar" data-id="${l.id}"${
+          l.descontinuarAusentes ? ' checked' : ''} /> Descontinuar los que dejen de venir en la hoja</label>
+        <div class="lista-informe"></div>
+      </div>`).join('')
+    : '<div class="tarjeta"><div class="vacio"><strong>Ninguna lista conectada</strong>Pegá abajo la dirección de tu hoja y probala.</div></div>';
+
+  const vista = prueba ? `
+    <div class="tarjeta">
+      <p class="ayuda" style="padding:16px 18px 0;margin:0">
+        Llegaron <b>${prueba.totalFilas} filas</b> (${escapar(prueba.formato.toUpperCase())}${
+          prueba.hoja ? ` · hoja «${escapar(prueba.hoja)}»` : ''}) y reconocí <b>${prueba.productos} productos</b>.
+        Revisá que las columnas estén bien antes de conectarla.
+      </p>
+      <form class="form-editar" id="form-conectar-lista">
+        <label><span>Nombre para reconocerla</span>
+          <input name="nombre" type="text" required value="${escapar(prueba.hoja || 'Lista oficial')}" /></label>
+        <label><span>Categoría de los productos</span>
+          <input name="categoria" type="text" value="${escapar(prueba.hoja || '')}" /></label>
+        <label class="ancho check"><input name="manejaInventario" type="checkbox" value="1" />
+          Son productos propios de Clic Control (llevar inventario)</label>
+        <div class="form-acciones">
+          <button type="submit">Conectar esta lista</button>
+          <button type="button" class="mini" data-accion="cancelar-prueba">Cancelar</button>
+        </div>
+      </form>
+      <div class="tabla-envoltura"><table class="tabla-muestra">
+        <tbody>${prueba.muestra.map((f, i) => `<tr class="${i >= prueba.mapeo.filaInicioDatos ? 'es-dato' : 'es-encabezado'}">${
+          f.map((c) => `<td>${escapar(truncar(c, 28))}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table></div>
+      <p class="ayuda" style="padding:0 18px 16px;margin:0">${
+        Object.entries(prueba.mapeo.columnas).filter(([, v]) => v !== null)
+          .map(([k, v]) => `<b>${escapar(ENCABEZADOS[k] || k)}</b> = columna ${v + 1}`).join(' · ') || 'No reconocí ninguna columna.'}</p>
+    </div>` : '';
+
+  return `
+    <button class="volver" data-accion="cerrar-listas">← Productos</button>
+    <p class="ayuda" style="margin-bottom:16px">
+      Conectá la hoja donde ya llevás la lista de precios y traela cuando quieras,
+      sin exportar ni subir nada. Sirve Google Sheets, OneDrive o Dropbox: la hoja
+      tiene que estar compartida por enlace o publicada.
+      Lo que cargues acá a mano —fotos, notas, inventario— no se pisa nunca.
+    </p>
+
+    ${bloque('Conectar una hoja', `
+      <div class="tarjeta">
+        <form class="form-abono" id="form-probar-lista">
+          <label class="ancho"><span>Dirección de la hoja</span>
+            <input name="url" type="url" required
+                   placeholder="https://docs.google.com/spreadsheets/d/…" /></label>
+          <button type="submit">Probar</button>
+        </form>
+      </div>`)}
+    ${vista}
+    ${bloque(`Listas conectadas · ${listas.length}`, tarjetas)}`;
+}
+
 /* ─────────── Vistas ─────────── */
 
 async function pintar() {
@@ -999,6 +1083,19 @@ async function pintar() {
   if (estado.importacion) {
     $('#titulo-vista').textContent = 'Importar lista de precios';
     contenedor.innerHTML = vistaImportacion();
+    return;
+  }
+
+  // Hojas conectadas en línea
+  if (estado.viendoListas) {
+    $('#titulo-vista').textContent = 'Listas de precios en línea';
+    contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
+    try {
+      const { listas } = await api('/listas');
+      contenedor.innerHTML = vistaListas(listas, estado.pruebaLista);
+    } catch (e) {
+      contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
+    }
     return;
   }
 
@@ -1123,6 +1220,7 @@ async function pintar() {
       const barra = `<div class="barra-productos">
         <input type="search" id="buscar-productos" placeholder="Buscar por referencia, descripción, categoría…" value="${escapar(estado.buscarProductos)}" />
         <button class="mini" data-accion="importar-lista">Importar lista de precios</button>
+        <button class="mini" data-accion="ver-listas">Listas en línea</button>
         <button class="mini" data-accion="alternar-nuevo-producto">${estado.nuevoProducto ? 'Cancelar' : '+ Agregar producto'}</button>
         ${descontinuados ? `<button class="mini${estado.verDescontinuados ? ' destacado' : ''}" data-accion="alternar-descontinuados">${
           estado.verDescontinuados ? 'Ocultar descontinuados' : `Ver descontinuados (${descontinuados})`}</button>` : ''}
@@ -1588,6 +1686,52 @@ $('#contenido').addEventListener('click', async (e) => {
     $('#input-logo').click();
     return;
   }
+  if (accion === 'ver-listas' || accion === 'cerrar-listas') {
+    estado.viendoListas = accion === 'ver-listas';
+    estado.pruebaLista = null;
+    await pintar();
+    return;
+  }
+  if (accion === 'cancelar-prueba') {
+    estado.pruebaLista = null;
+    await pintar();
+    return;
+  }
+  if (accion === 'borrar-lista') {
+    if (!confirm('¿Quitar esta lista? Los productos que ya trajo se quedan en el catálogo.')) return;
+    try {
+      await api(`/listas/${id}`, { method: 'DELETE' });
+      avisar('Lista quitada ✓');
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+  if (accion === 'revisar-lista' || accion === 'sincronizar-lista') {
+    const simular = accion === 'revisar-lista';
+    const boton = e.target.closest('[data-accion]');
+    const tarjeta = boton.closest('.lista-online');
+    const antes = boton.textContent;
+    boton.disabled = true;
+    boton.textContent = simular ? 'Comparando…' : 'Trayendo…';
+    try {
+      const inf = await api(`/listas/${id}/sincronizar`, { method: 'POST', body: { simular } });
+      tarjeta.querySelector('.lista-informe').innerHTML = informeImportacion(inf, { aplicado: !simular });
+      boton.textContent = antes;
+      boton.disabled = false;
+      if (!simular) {
+        avisar(`${inf.nuevos.length} nuevos, ${inf.actualizados.length} actualizados`);
+        await refrescarResumen();
+      }
+    } catch (err) {
+      boton.textContent = antes;
+      boton.disabled = false;
+      tarjeta.querySelector('.lista-informe').innerHTML =
+        `<p class="ayuda" style="color:var(--rojo);margin:8px 0 0">${escapar(err.message)}</p>`;
+    }
+    return;
+  }
   if (accion === 'achicar-fotos') {
     const boton = e.target.closest('[data-accion="achicar-fotos"]');
     boton.disabled = true;
@@ -1962,6 +2106,47 @@ $('#contenido').addEventListener('submit', async (e) => {
     return;
   }
 
+  if (e.target.id === 'form-probar-lista') {
+    e.preventDefault();
+    const boton = e.target.querySelector('button[type="submit"]');
+    boton.disabled = true;
+    boton.textContent = 'Probando…';
+    try {
+      const url = new FormData(e.target).get('url');
+      estado.pruebaLista = { ...await api('/listas/probar', { method: 'POST', body: { url } }), url };
+      await pintar();
+    } catch (err) {
+      boton.disabled = false;
+      boton.textContent = 'Probar';
+      avisar(err.message, true);
+    }
+    return;
+  }
+
+  if (e.target.id === 'form-conectar-lista') {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    try {
+      await api('/listas', {
+        method: 'POST',
+        body: {
+          nombre: d.nombre,
+          categoria: d.categoria,
+          url: estado.pruebaLista.url,
+          hoja: 0,
+          manejaInventario: d.manejaInventario === '1',
+          mapeo: estado.pruebaLista.mapeo,
+        },
+      });
+      estado.pruebaLista = null;
+      avisar('Lista conectada ✓ Ya podés traerla cuando quieras.');
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+
   if (e.target.classList.contains('form-item')) {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target));
@@ -2106,6 +2291,24 @@ $('#contenido').addEventListener('change', (e) => {
 
 // Edición directa de cantidad y precio en la tabla de renglones.
 $('#contenido').addEventListener('change', async (e) => {
+  // Descontinuar los ausentes es por lista y se recuerda: es la diferencia
+  // entre una hoja que manda sobre el catálogo y una que sólo lo alimenta.
+  const marca = e.target.closest('.lista-descontinuar');
+  if (marca) {
+    try {
+      await api(`/listas/${marca.dataset.id}`, {
+        method: 'PATCH',
+        body: { descontinuarAusentes: marca.checked },
+      });
+      avisar(marca.checked
+        ? 'Los que dejen de venir se van a descontinuar.'
+        : 'Los que dejen de venir se van a conservar.');
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+
   const campo = e.target.closest('input[data-item]');
   if (!campo) return;
   const valor = Number(campo.value);

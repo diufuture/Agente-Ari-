@@ -28,13 +28,14 @@ const PUERTO = process.env.PORT || 3000;
 // este archivo con require(), que no admite top-level await en el módulo.
 async function iniciar() {
 
-const [db, tools, asistente, auth, xlsx, imprimir] = await Promise.all([
+const [db, tools, asistente, auth, xlsx, imprimir, remoto] = await Promise.all([
   import('./db.js'),
   import('./tools.js'),
   import('./assistant.js'),
   import('./auth.js'),
   import('./xlsx.js'),
   import('./imprimir.js'),
+  import('./remoto.js'),
 ]);
 
 const CARPETA_FOTOS = join(PUBLICO, 'uploads', 'productos');
@@ -185,6 +186,56 @@ function pesoFoto(foto) {
   }
 }
 
+/**
+ * Trae una lista de precios desde su dirección y la cruza con el catálogo.
+ *
+ * Se apoya en la misma conciliación que la importación a mano, así que vale lo
+ * mismo: lo cargado acá —la foto, las notas, el inventario— no se pisa, y lo
+ * que ya no viene en la lista no se borra.
+ *
+ * Con `simular` sólo informa qué cambiaría. Sin eso, aplica y deja anotado
+ * cuándo fue la última vez.
+ */
+async function sincronizarLista(lista, { simular = false } = {}) {
+  const { filas } = await remoto.traerLista(lista.url, { hoja: lista.hoja });
+
+  // Si no se guardó un mapeo confirmado, se vuelve a adivinar. La hoja es la
+  // misma de siempre, así que en la práctica da igual; pero si alguien le
+  // agrega una columna, esto la toma sin tener que reconfigurar nada.
+  const mapeo = lista.mapeo ?? xlsx.sugerirMapeo(filas);
+  const productos = xlsx.filasDesdeMapeo(filas, mapeo);
+
+  // Una hoja vacía casi siempre significa que algo salió mal en el camino
+  // (el enlace dejó de ser público, la pestaña cambió de nombre). Aplicar eso
+  // con "descontinuar ausentes" prendido vaciaría el catálogo de un saque.
+  if (!productos.length) {
+    throw new Error(
+      'La lista llegó sin ningún producto. Puede que el enlace haya dejado de '
+      + 'ser público o que la hoja esté vacía; no toqué nada del catálogo.',
+    );
+  }
+
+  const informe = db.conciliarProductos(lista.categoria || null, productos, {
+    manejaInventario: Boolean(lista.manejaInventario),
+    descontinuarAusentes: Boolean(lista.descontinuarAusentes),
+    simular,
+  });
+  delete informe.paraFoto;   // acá no hay fotos que pegar: el CSV no las trae
+
+  if (!simular) {
+    db.actualizarLista(lista.id, {
+      ultima: new Date().toLocaleString('sv-SE'),
+      ultimoInforme: {
+        nuevos: informe.nuevos.length,
+        actualizados: informe.actualizados.length,
+        ausentes: informe.ausentes.length,
+      },
+    });
+  }
+
+  return { ...informe, total: productos.length, simulado: simular };
+}
+
 const ENTIDADES_VALIDAS = new Set(Object.keys(db.ENTIDADES));
 
 /* ------------------------------------------------------------------ */
@@ -284,6 +335,67 @@ async function api(req, res, url) {
     if (req.method === 'GET') return json(res, 200, db.leerAjustes());
     if (req.method === 'PATCH' || req.method === 'PUT') {
       return json(res, 200, db.guardarAjustes(await leerJson(req)));
+    }
+  }
+
+  // ---- Listas de precios que viven en línea -------------------------
+  // La hoja se edita donde ya está (Google, OneDrive, Dropbox) y el sistema la
+  // va a buscar. Acá sólo se guarda la dirección y cómo leerla.
+  if (recurso === 'listas') {
+    // POST /api/listas/probar -> baja la lista y propone cómo leerla, sin
+    // guardar nada: es la vista previa antes de conectarla.
+    if (partes[1] === 'probar' && req.method === 'POST') {
+      const { url, hoja } = await leerJson(req);
+      try {
+        const { filas, formato, hoja: nombreHoja } = await remoto.traerLista(url, { hoja });
+        const mapeo = xlsx.sugerirMapeo(filas);
+        return json(res, 200, {
+          formato,
+          hoja: nombreHoja,
+          direccion: remoto.direccionDeDescarga(url),
+          totalFilas: filas.length,
+          mapeo,
+          // Sólo el encabezado y unas pocas filas: alcanza para confirmar el
+          // mapeo y evita mandar la lista entera dos veces.
+          muestra: filas.slice(0, Math.min(filas.length, (mapeo.filaInicioDatos || 0) + 5)),
+          productos: xlsx.filasDesdeMapeo(filas, mapeo).length,
+        });
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+    }
+
+    // POST /api/listas/:id/sincronizar -> la trae y la cruza con el catálogo
+    if (id && partes[2] === 'sincronizar' && req.method === 'POST') {
+      const lista = db.leerListas().find((l) => Number(l.id) === Number(id));
+      if (!lista) return json(res, 404, { error: 'Esa lista no está configurada.' });
+      const { simular } = await leerJson(req).catch(() => ({}));
+      try {
+        return json(res, 200, await sincronizarLista(lista, { simular: Boolean(simular) }));
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+    }
+
+    if (req.method === 'GET') return json(res, 200, { listas: db.leerListas() });
+
+    if (req.method === 'POST') {
+      const datos = await leerJson(req);
+      try {
+        remoto.validarDireccion(datos.url);
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+      return json(res, 201, db.agregarLista(datos));
+    }
+
+    if (id && (req.method === 'PATCH' || req.method === 'PUT')) {
+      const fila = db.actualizarLista(Number(id), await leerJson(req));
+      return fila ? json(res, 200, fila) : json(res, 404, { error: 'No encontrada' });
+    }
+
+    if (id && req.method === 'DELETE') {
+      return json(res, db.eliminarLista(Number(id)) ? 200 : 404, { ok: true });
     }
   }
 

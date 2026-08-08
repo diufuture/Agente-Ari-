@@ -130,12 +130,14 @@ server/
   db.js         Esquema y consultas SQLite
   tools.js      Las 15 herramientas de Ari y su ejecución
   xlsx.js       Lector mínimo de archivos .xlsx (sin dependencias)
+  remoto.js     Listas de precios que viven en línea (CSV/xlsx por dirección)
   imprimir.js   Página A4 de una cotización, para «Guardar como PDF»
   assistant.js  El bucle de conversación con Claude
 public/
   index.html    Interfaz
   styles.css    Estilos (claro y oscuro automáticos)
   app.js        Dashboard, voz y conversación
+  foto.js       Achica las fotos antes de guardarlas
 prueba.js       Recorrido completo del sistema (npm test)
 ```
 
@@ -246,9 +248,33 @@ de la tabla se repite en cada página y ningún renglón queda partido a la
 mitad.
 
 Los datos de la empresa y del representante se cargan una sola vez en
-**Datos de la empresa** (abajo en la barra lateral). La validez y las
-condiciones comerciales salen de ahí, pero cada cotización puede llevar las
-suyas si esa oferta va con otra forma de pago o plazo.
+**Datos de la empresa** (abajo en la barra lateral). La validez, las
+condiciones comerciales y el representante salen de ahí, pero cada cotización
+puede llevar los suyos si esa oferta va con otra forma de pago, otro plazo o
+la atendió otra persona: lo que tenga la cotización manda sobre lo general.
+
+### Retocar la oferta durante la negociación
+
+Una cotización terminada se sigue editando: se abre desde **Cotizaciones →
+Abrir y editar** y ahí se le cambian cantidades y precios en la misma tabla, se
+quitan renglones, se agregan del catálogo o sueltos, y se ajustan los
+porcentajes. Es lo que pasa cuando el cliente pide sacar una cosa y agregar
+otra, y lo que quede al aprobarla es lo que se descuenta de la bodega.
+
+Cada renglón se abre con **✎** para cambiarle:
+
+- **La descripción.** El catálogo trae el nombre genérico ("Interruptor 2
+  canales") y en la oferta muchas veces hay que llamarlo como lo conoce el
+  cliente. La primera línea es el nombre; lo que va debajo sale impreso como
+  ficha técnica, más chico y en gris.
+- **La sección**, que es cómo se agrupan los renglones y dónde caen los
+  subtotales.
+- **El área** (Sala, Cocina, Habitación…), opcional. La columna sólo aparece
+  impresa si al menos un renglón la tiene, así que las ofertas que no la usan
+  salen igual que siempre.
+
+Todo eso vive en la cotización, no en el catálogo: renombrar un renglón acá no
+le cambia el nombre al producto ni toca las otras ofertas.
 
 El campo `monto` de la cotización se recalcula solo al tocar un renglón o un
 porcentaje. Es un valor derivado que se guarda a propósito: es lo que ya usaban
@@ -304,6 +330,37 @@ proveedores, sin retipear nada:
 3. Revisás el mapeo (podés corregir cualquier columna con el desplegable) y
    confirmás hoja por hoja.
 
+### Sin subir nada: la lista que vive en línea
+
+Si la lista de precios ya la llevás en una hoja en línea, no hace falta
+exportarla ni subirla: se conecta una vez y de ahí en más se trae sola desde
+**Productos → Listas en línea**.
+
+1. Pegás la dirección de la hoja y le das **Probar**. Se baja, se muestran las
+   primeras filas y qué columna reconoció como cada cosa.
+2. Le ponés nombre y categoría, y **Conectar**.
+3. Cada vez que quieras, **Ver qué cambiaría** (no toca nada) o **Traer ahora**.
+
+Sirven Google Sheets, OneDrive y Dropbox. La dirección que copiás del navegador
+es la de *mirar* la hoja, no la de bajarla; se traduce sola, así que pegás la
+que tenés a mano. La hoja tiene que estar compartida por enlace o publicada —lo
+cual también quiere decir que cualquiera con la dirección puede leerla, así que
+que sea una lista de precios y no algo reservado.
+
+Lee CSV y `.xlsx`, con punto y coma o coma de separador, y entiende los miles
+como se escriben acá: `98.500` son noventa y ocho mil quinientos, no noventa y
+ocho con cinco (lo que los separa es que el separador de miles agrupa siempre
+de a tres dígitos).
+
+Vale lo mismo que al subir el archivo a mano: **lo que cargaste vos —la foto,
+las notas, el inventario— no se pisa**, y lo que dejó de venir no se borra
+salvo que marques la casilla de descontinuar. Si la hoja llega vacía —porque el
+enlace dejó de ser público, por ejemplo— no se aplica nada: vaciar el catálogo
+por un archivo que no llegó bien sería el peor final posible.
+
+Lo único que el CSV no trae son las fotos, porque un CSV es sólo texto. Las que
+ya tengan los productos se conservan, y las nuevas se suben desde la ficha.
+
 ### Volver a subir una lista actualizada
 
 Es lo normal: el proveedor manda la lista nueva, con precios distintos,
@@ -348,6 +405,19 @@ estaba anclada a su fila.
 La vista previa muestra la foto junto a cada fila de ejemplo, para confirmar
 que cada una cae sobre el producto que le toca antes de importar nada. Sólo
 esas: mandar las demás al navegador sería mandar el Excel entero de vuelta.
+
+Excel ancla las imágenes de tres maneras, y las listas usan las tres: pegadas a
+una celda, estiradas de una celda a otra, o puestas sueltas en la hoja. Las dos
+primeras se siguen hasta su producto aunque la foto arranque una fila más
+arriba o dos fotos empiecen en la misma. Las sueltas no tienen forma de saber a
+qué producto pertenecen, así que no se adivinan: se avisa cuántas son.
+
+Una foto que falta no desaparece en silencio. Se ve en tres lugares:
+
+- En la **vista previa**, cuántas imágenes no están ancladas a ninguna fila.
+- Al **importar**, qué productos quedaron sin foto, con referencia y nombre.
+- En la **tabla de renglones**, los que van a salir sin foto en el PDF quedan
+  marcados antes de mandar la oferta.
 
 ### Cuando la lista viene sin fotos
 
@@ -454,9 +524,13 @@ dependencia en todo el proyecto.
 
 ## Logo
 
-Si colocás tu logo en `public/logo.png` (o `logo.svg`), la barra lateral y la
-pantalla de acceso lo usan automáticamente. Si no hay archivo, se dibuja una
-versión de respaldo con los colores de la marca.
+El de las **cotizaciones impresas** se sube desde ⚙ **Datos de la empresa →
+Logo de la empresa**. Se achica a 600 píxeles y queda guardado; sirve un PNG
+con fondo transparente.
+
+Para la **barra lateral y la pantalla de acceso**, el archivo va en
+`public/logo.png` (o `logo.svg`). Si no hay ninguno, se dibuja una versión de
+respaldo con los colores de la marca.
 
 ---
 
