@@ -311,7 +311,9 @@ Los que dejaron de venir en la lista **no se borran nunca**: pueden estar
 citados en cotizaciones anteriores y tener existencias en bodega. Podés marcar
 *«Descontinuar los que ya no vengan»* para que dejen de aparecer al cotizar;
 siguen ahí, con su historial, y si vuelven a aparecer en una lista futura se
-reactivan solos.
+reactivan solos. Para verlos, el botón **«Ver descontinuados»** de la pantalla
+de Productos, que aparece sólo cuando hay alguno; se reactivan desde su ficha
+con la casilla *«Disponible en el catálogo»*.
 
 Si la lista trae columna de stock y son productos propios, la diferencia con lo
 que había queda registrada como un movimiento de inventario («Ajuste por lista
@@ -319,6 +321,24 @@ de precios»), no como un número que cambió sin explicación.
 
 También se puede agregar un producto suelto a mano —por voz o desde el botón
 **+ Agregar producto**— y ponerle una foto propia desde su ficha.
+
+### Las fotos del Excel
+
+Las listas de precios traen la foto de cada producto pegada sobre su fila. Esas
+fotos se importan solas: si la hoja tiene imágenes, aparece la casilla **«Traer
+las fotos del Excel»** (marcada por defecto) y cada producto queda con la que
+estaba anclada a su fila.
+
+De ahí en más las fotos viajan con el producto: se ven en su ficha, al buscarlo
+para cotizar, y **salen impresas en el PDF de la cotización**, en su columna,
+como en las ofertas en papel.
+
+Al volver a subir una lista, **una foto que hayas puesto vos no se reemplaza**
+por la del proveedor. Si querés cambiarla, es desde la ficha del producto.
+
+En un `.xlsx` las imágenes no viven dentro de las celdas: son objetos flotantes
+que guardan a qué fila están pegados. El lector sigue ese rastro (hoja →
+dibujo → imagen) para saber de qué producto es cada foto.
 
 ### Inventario de los productos propios
 

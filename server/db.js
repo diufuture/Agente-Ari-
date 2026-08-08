@@ -518,6 +518,9 @@ export function conciliarProductos(categoria, filas, opciones = {}) {
 
   const informe = {
     nuevos: [], actualizados: [], sinCambios: [], ausentes: [], ajustesStock: [], duplicadosEnArchivo: 0,
+    // De qué fila del Excel salió cada producto, para poder pegarle la foto
+    // que estaba anclada ahí. Se llena para todos, hayan cambiado o no.
+    paraFoto: [],
   };
 
   for (const f of filas) {
@@ -557,10 +560,15 @@ export function conciliarProductos(categoria, filas, opciones = {}) {
         proveedor: entrantes.proveedor,
         maneja_inventario: manejaInventario ? 1 : 0,
       };
-      informe.nuevos.push({ referencia, descripcion, precio: nuevo.precio_cliente });
+      // `fila` es de dónde salió en el Excel: sirve para pegarle después la
+      // foto que estaba anclada a esa misma fila.
+      const registro = { referencia, descripcion, precio: nuevo.precio_cliente, fila: f.fila ?? null, id: null };
+      informe.nuevos.push(registro);
 
       if (!simular) {
         const creado = insertar('productos', nuevo);
+        registro.id = creado.id;
+        informe.paraFoto.push({ id: creado.id, fila: f.fila ?? null, tieneFoto: false });
         if (manejaInventario && Number(f.stock) > 0) {
           insertar('movimientos_stock', {
             producto_id: creado.id, cantidad: Number(f.stock), motivo: 'Importación de lista de precios',
@@ -568,6 +576,10 @@ export function conciliarProductos(categoria, filas, opciones = {}) {
         }
       }
       continue;
+    }
+
+    if (!simular) {
+      informe.paraFoto.push({ id: existente.id, fila: f.fila ?? null, tieneFoto: Boolean(existente.foto) });
     }
 
     // Ya existe: sólo se cambian los campos que la lista realmente trae.

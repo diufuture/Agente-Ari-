@@ -20,6 +20,7 @@ const estado = {
   subiendoFotoPara: null,  // id del producto al que se le está por asignar una foto
   buscarCatalogo: '',      // texto del buscador de productos dentro de una cotización
   resultadosCatalogo: null, // null = todavía no se buscó nada
+  verDescontinuados: false, // mostrar los productos que salieron de la lista
 };
 
 /* ─────────── Formateo ─────────── */
@@ -463,6 +464,7 @@ const CAMPOS = {
     { n: 'precio_constructor', e: 'Precio constructor', tipo: 'number' },
     { n: 'precio_cliente', e: 'Precio cliente final', tipo: 'number', req: true },
     { n: 'maneja_inventario', e: 'Es un producto propio de Clic Control (llevar inventario)', tipo: 'checkbox' },
+    { n: 'activo', e: 'Disponible en el catálogo (destildalo para descontinuarlo)', tipo: 'checkbox' },
     { n: 'notas', e: 'Notas', area: true, ancho: true },
   ],
 };
@@ -635,6 +637,9 @@ function detalleProducto(p, movimientos = []) {
 /** Formulario para agregar un producto a mano, sin pasar por el Excel. */
 function formularioNuevoProducto() {
   const campos = CAMPOS.productos.map((c) => {
+    // Un producto que se está creando siempre nace disponible: la casilla de
+    // descontinuarlo sólo tiene sentido al editar uno que ya existe.
+    if (c.n === 'activo') return '';
     if (c.tipo === 'checkbox') {
       // Justo debajo, el stock con el que arranca (sólo se usa si se marca la casilla).
       return `<label class="ancho check"><input name="${c.n}" type="checkbox" value="1" /> ${c.e}</label>
@@ -743,6 +748,7 @@ function tarjetaHojaImportacion(hoja, indice) {
         <label><span>Categoría</span><input type="text" class="import-categoria" value="${escapar(hoja.nombre)}" /></label>
         <label class="check"><input type="checkbox" class="import-inventario" /> Son productos propios de Clic Control (llevar inventario)</label>
         <label class="check"><input type="checkbox" class="import-descontinuar" /> Descontinuar los que ya no vengan en la lista</label>
+        ${hoja.conImagenes ? '<label class="check"><input type="checkbox" class="import-fotos" checked /> Traer las fotos del Excel</label>' : ''}
         <button class="mini destacado" data-accion="revisar-hoja" data-hoja="${indice}">Ver qué cambiaría (${filasValidas} productos)</button>
         <span class="import-resultado"></span>
       </div>
@@ -795,6 +801,10 @@ function informeImportacion(inf, { aplicado = false } = {}) {
     ${nada
       ? '<p class="ayuda" style="margin:0">Esta lista no cambia nada: todo está igual que en el catálogo.</p>'
       : cuerpo}
+    ${inf.fotos
+      ? `<p class="ayuda" style="margin:8px 0 0">Se cargaron <b>${inf.fotos} fotos</b> del Excel.${
+          inf.fotosConservadas ? ` Otras ${inf.fotosConservadas} se dejaron como estaban, porque esos productos ya tenían foto propia.` : ''}</p>`
+      : ''}
     ${inf.duplicadosEnArchivo
       ? `<p class="ayuda" style="margin:8px 0 0">Se ignoraron ${inf.duplicadosEnArchivo} fila(s) repetidas dentro del archivo.</p>`
       : ''}
@@ -937,15 +947,28 @@ async function pintar() {
   if (v === 'productos') {
     contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
     try {
-      const q = estado.buscarProductos ? `?texto=${encodeURIComponent(estado.buscarProductos)}` : '';
-      const { filas } = await api(`/productos${q}`);
+      const filtros = new URLSearchParams();
+      if (estado.buscarProductos) filtros.set('texto', estado.buscarProductos);
+      if (estado.verDescontinuados) filtros.set('incluir_inactivos', '1');
+      const { filas } = await api(`/productos?${filtros}`);
+
+      // Cuántos hay descontinuados, para no ofrecer un filtro que no sirve.
+      const { filas: todos } = await api('/productos?incluir_inactivos=1&limite=300');
+      const descontinuados = todos.filter((p) => !p.activo).length;
+
       const barra = `<div class="barra-productos">
         <input type="search" id="buscar-productos" placeholder="Buscar por referencia, descripción, categoría…" value="${escapar(estado.buscarProductos)}" />
         <button class="mini" data-accion="importar-lista">Importar lista de precios</button>
         <button class="mini" data-accion="alternar-nuevo-producto">${estado.nuevoProducto ? 'Cancelar' : '+ Agregar producto'}</button>
+        ${descontinuados ? `<button class="mini${estado.verDescontinuados ? ' destacado' : ''}" data-accion="alternar-descontinuados">${
+          estado.verDescontinuados ? 'Ocultar descontinuados' : `Ver descontinuados (${descontinuados})`}</button>` : ''}
       </div>`;
+
       contenedor.innerHTML = barra
         + (estado.nuevoProducto ? formularioNuevoProducto() : '')
+        + (estado.verDescontinuados
+          ? '<p class="ayuda">Los descontinuados son los que dejaron de venir en la lista del proveedor. Siguen guardados con su historial; para volver a usarlos, abrilos y marcá «Disponible en el catálogo».</p>'
+          : '')
         + tabla('productos', ['categoria', 'referencia', 'descripcion', 'stock', 'precio_cliente'], filas,
           { vacio: 'Todavía no hay productos en el catálogo. Importá una lista de precios o agregá uno a mano.' });
       $('#buscar-productos')?.focus();
@@ -1378,6 +1401,11 @@ $('#contenido').addEventListener('click', async (e) => {
     await pintar();
     return;
   }
+  if (accion === 'alternar-descontinuados') {
+    estado.verDescontinuados = !estado.verDescontinuados;
+    await pintar();
+    return;
+  }
   // Importar es en dos tiempos: primero se muestra qué cambiaría, y sólo
   // después se aplica. Una lista de precios toca todo el catálogo, así que
   // conviene verlo antes que enterarse después.
@@ -1398,8 +1426,11 @@ $('#contenido').addEventListener('click', async (e) => {
     }
 
     const columna = (f, campo) => (mapaColumnas[campo] !== undefined ? f[mapaColumnas[campo]] : null);
-    const filas = hoja.filas.slice(hoja.mapeo.filaInicioDatos)
-      .map((f) => ({
+    const filas = hoja.filas
+      // El índice de fila se conserva: es lo que vincula cada producto con la
+      // foto que el Excel tiene anclada a esa misma fila.
+      .map((f, i) => ({
+        fila: i,
         referencia: columna(f, 'referencia'),
         descripcion: f[mapaColumnas.descripcion],
         marca: columna(f, 'marca'),
@@ -1409,18 +1440,24 @@ $('#contenido').addEventListener('click', async (e) => {
         precio_cliente: columna(f, 'precio_cliente'),
         stock: columna(f, 'stock'),
       }))
+      .slice(hoja.mapeo.filaInicioDatos)
       .filter((f) => f.descripcion !== null && f.descripcion !== undefined && String(f.descripcion).trim() !== '');
 
     const simular = accion === 'revisar-hoja';
     boton.disabled = true;
     boton.textContent = simular ? 'Comparando…' : 'Aplicando…';
     try {
+      const traerFotos = tarjeta.querySelector('.import-fotos')?.checked ?? false;
       const inf = await api('/productos/importar', {
         method: 'POST',
         body: {
           categoria, filas, simular,
           maneja_inventario: manejaInventario,
           descontinuar_ausentes: descontinuar,
+          // El archivo sólo se reenvía al aplicar, y sólo si hay fotos que traer.
+          ...(!simular && traerFotos
+            ? { traer_fotos: true, archivo_base64: estado.importacion.archivo, hoja: Number(boton.dataset.hoja) }
+            : {}),
         },
       });
       tarjeta.querySelector('.import-informe').innerHTML = informeImportacion(inf, { aplicado: !simular });
@@ -1807,7 +1844,9 @@ $('#input-excel').addEventListener('change', async (e) => {
     const archivo_base64 = await archivoABase64(archivo);
     const { hojas } = await api('/productos/analizar', { method: 'POST', body: { archivo_base64 } });
     if (!hojas.length) return avisar('Ese Excel no tiene hojas con datos.', true);
-    estado.importacion = { hojas };
+    // Se guarda el archivo: al importar se vuelve a mandar para sacarle las
+    // fotos, que no se traen al analizar porque pesan y ahí no hacen falta.
+    estado.importacion = { hojas, archivo: archivo_base64 };
     await pintar();
   } catch (err) {
     avisar(err.message, true);

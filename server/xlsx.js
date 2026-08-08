@@ -142,12 +142,87 @@ function relaciones(xml) {
   return mapa;
 }
 
+/** Resuelve un Target de rels (que puede traer '../') contra su carpeta. */
+function rutaRelativa(desdeCarpeta, target) {
+  const partes = `${desdeCarpeta}/${target}`.split('/');
+  const pila = [];
+  for (const p of partes) {
+    if (!p || p === '.') continue;
+    if (p === '..') pila.pop();
+    else pila.push(p);
+  }
+  return pila.join('/');
+}
+
+const EXTENSIONES_IMAGEN = { png: 'png', jpg: 'jpg', jpeg: 'jpg', gif: 'gif', webp: 'webp' };
+
 /**
- * Lee un .xlsx completo. Devuelve { hojas: [{ nombre, filas }] }, en el mismo
- * orden en que aparecen en el libro. `filas` es un arreglo de arreglos
- * (fila -> columna, 0-indexado), con texto, número o null en cada celda.
+ * Las fotos de una hoja, con la fila a la que están ancladas.
+ *
+ * En un .xlsx las imágenes no viven en las celdas: son objetos flotantes que
+ * cuelgan de un "dibujo" y guardan a qué fila y columna están pegados. Hay que
+ * seguir tres saltos: hoja -> dibujo -> imagen. Como las listas de precios
+ * ponen la foto del producto sobre su fila, esa fila es la que la vincula con
+ * el producto.
+ *
+ * @returns {Map<number, {datos: Buffer, extension: string}>} fila (0-indexada) -> imagen
  */
-export function leerXlsx(buffer) {
+function imagenesDeHoja(zip, rutaHoja) {
+  const porFila = new Map();
+
+  const carpetaHoja = rutaHoja.slice(0, rutaHoja.lastIndexOf('/'));
+  const nombreHoja = rutaHoja.slice(rutaHoja.lastIndexOf('/') + 1);
+  const relsHoja = relaciones(
+    zip.leer(`${carpetaHoja}/_rels/${nombreHoja}.rels`)?.toString('utf8'),
+  );
+
+  for (const [, target] of relsHoja) {
+    if (!/drawings?\/.*\.xml$/i.test(target)) continue;
+
+    const rutaDibujo = rutaRelativa(carpetaHoja, target);
+    const dibujoXml = zip.leer(rutaDibujo)?.toString('utf8');
+    if (!dibujoXml) continue;
+
+    const carpetaDibujo = rutaDibujo.slice(0, rutaDibujo.lastIndexOf('/'));
+    const nombreDibujo = rutaDibujo.slice(rutaDibujo.lastIndexOf('/') + 1);
+    const relsDibujo = relaciones(
+      zip.leer(`${carpetaDibujo}/_rels/${nombreDibujo}.rels`)?.toString('utf8'),
+    );
+
+    // Cada anclaje trae la fila de arranque y la imagen que le corresponde.
+    for (const anclaje of dibujoXml.matchAll(/<xdr:(?:one|two)CellAnchor[\s\S]*?<\/xdr:(?:one|two)CellAnchor>/g)) {
+      const bloque = anclaje[0];
+      const fila = bloque.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/);
+      const blip = bloque.match(/<a:blip[^>]*r:embed="([^"]+)"/);
+      if (!fila || !blip) continue;
+
+      const destino = relsDibujo.get(blip[1]);
+      if (!destino) continue;
+
+      const rutaImagen = rutaRelativa(carpetaDibujo, destino);
+      const datos = zip.leer(rutaImagen);
+      if (!datos) continue;
+
+      const ext = EXTENSIONES_IMAGEN[(rutaImagen.split('.').pop() || '').toLowerCase()];
+      if (!ext) continue;
+
+      const numeroFila = Number(fila[1]);
+      // Si hay varias sobre la misma fila, se queda la primera.
+      if (!porFila.has(numeroFila)) porFila.set(numeroFila, { datos, extension: ext });
+    }
+  }
+
+  return porFila;
+}
+
+/**
+ * Lee un .xlsx completo. Devuelve { hojas: [{ nombre, filas, imagenes }] }, en
+ * el mismo orden en que aparecen en el libro. `filas` es un arreglo de
+ * arreglos (fila -> columna, 0-indexado), con texto, número o null en cada
+ * celda. `imagenes` sólo se llena si se piden: pesan, y para adivinar el
+ * mapeo de columnas no hacen falta.
+ */
+export function leerXlsx(buffer, { conImagenes = false } = {}) {
   const zip = abrirZip(buffer);
 
   const wbXml = zip.leer('xl/workbook.xml')?.toString('utf8');
@@ -168,7 +243,11 @@ export function leerXlsx(buffer) {
 
     const hojaXml = zip.leer(destino)?.toString('utf8');
     if (!hojaXml) continue;
-    hojas.push({ nombre, filas: leerHoja(hojaXml, sharedStrings) });
+    hojas.push({
+      nombre,
+      filas: leerHoja(hojaXml, sharedStrings),
+      imagenes: conImagenes ? imagenesDeHoja(zip, destino) : new Map(),
+    });
   }
 
   return { hojas };

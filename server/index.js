@@ -231,13 +231,16 @@ async function api(req, res, url) {
   // mapear sus columnas, para que el usuario lo confirme antes de importar.
   if (recurso === 'productos' && partes[1] === 'analizar' && req.method === 'POST') {
     try {
-      const { archivo_base64 } = await leerJson(req, 15_000_000);
+      const { archivo_base64 } = await leerJson(req, 25_000_000);
       const buffer = decodificarBase64(archivo_base64);
-      const { hojas } = xlsx.leerXlsx(buffer);
+      const { hojas } = xlsx.leerXlsx(buffer, { conImagenes: true });
       const resultado = hojas.map((h) => ({
         nombre: h.nombre,
         filas: h.filas,
         mapeo: xlsx.sugerirMapeo(h.filas),
+        // Sólo cuántas hay: las imágenes en sí se sacan al importar, para no
+        // mandar megabytes de fotos que a esta altura no se usan.
+        conImagenes: h.imagenes.size,
       }));
       return json(res, 200, { hojas: resultado });
     } catch (err) {
@@ -249,8 +252,8 @@ async function api(req, res, url) {
   // `simular: true` sólo informa qué pasaría, sin tocar nada: así el usuario
   // ve qué se va a actualizar antes de aceptarlo.
   if (recurso === 'productos' && partes[1] === 'importar' && req.method === 'POST') {
-    const { categoria, filas, maneja_inventario, descontinuar_ausentes, simular } =
-      await leerJson(req, 15_000_000);
+    const { categoria, filas, maneja_inventario, descontinuar_ausentes, simular,
+      archivo_base64, hoja, traer_fotos } = await leerJson(req, 25_000_000);
     if (!Array.isArray(filas)) return json(res, 400, { error: 'Faltan las filas a importar.' });
     try {
       const informe = db.conciliarProductos(categoria || null, filas, {
@@ -258,6 +261,27 @@ async function api(req, res, url) {
         descontinuarAusentes: Boolean(descontinuar_ausentes),
         simular: Boolean(simular),
       });
+
+      // Las fotos vienen ancladas a una fila del Excel, así que se pegan a los
+      // productos que salieron de esa misma fila. Sólo a los que no tienen
+      // foto: una que se haya subido a mano vale más que la del proveedor.
+      informe.fotos = 0;
+      informe.fotosConservadas = 0;
+      if (!simular && traer_fotos && archivo_base64) {
+        const libro = xlsx.leerXlsx(decodificarBase64(archivo_base64), { conImagenes: true });
+        const imagenes = libro.hojas[Number(hoja) || 0]?.imagenes ?? new Map();
+
+        for (const p of informe.paraFoto) {
+          if (p.fila === null || !imagenes.has(p.fila)) continue;
+          if (p.tieneFoto) { informe.fotosConservadas += 1; continue; }
+          const img = imagenes.get(p.fila);
+          writeFileSync(join(CARPETA_FOTOS, `${p.id}.${img.extension}`), img.datos);
+          db.actualizar('productos', p.id, { foto: `/uploads/productos/${p.id}.${img.extension}` });
+          informe.fotos += 1;
+        }
+      }
+      delete informe.paraFoto; // detalle interno, no hace falta en el navegador
+
       return json(res, 200, informe);
     } catch (err) {
       return json(res, 400, { error: err.message });
