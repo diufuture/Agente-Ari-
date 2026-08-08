@@ -53,6 +53,9 @@ const truncar = (v, n = 80) => {
   return s.length > n ? `${s.slice(0, n)}…` : s;
 };
 
+const atajoPegar = () =>
+  (navigator.platform || navigator.userAgent).includes('Mac') ? 'Cmd+V' : 'Ctrl+V';
+
 function archivoABase64(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -474,7 +477,16 @@ function formularioEdicion(entidad, fila) {
   const campos = CAMPOS[entidad].map((c) => {
     const valor = fila[c.n] ?? '';
     if (c.tipo === 'checkbox') {
-      return `<label class="ancho check"><input name="${c.n}" type="checkbox" value="1"${valor ? ' checked' : ''} /> ${c.e}</label>`;
+      const casilla = `<label class="ancho check"><input name="${c.n}" type="checkbox" value="1"${valor ? ' checked' : ''} /> ${c.e}</label>`;
+      // Junto a "llevar inventario", cuánto hay ahora: poner la cantidad
+      // directo es más natural que registrar un movimiento a mano. La
+      // diferencia con lo que había queda igual anotada en el historial.
+      if (c.n === 'maneja_inventario') {
+        return `${casilla}
+          <label><span>Cantidad disponible</span>
+            <input name="stock_objetivo" type="number" step="1" value="${escapar(fila.stock ?? 0)}" /></label>`;
+      }
+      return casilla;
     }
     const control = c.opciones
       ? `<select name="${c.n}">${c.opciones
@@ -592,7 +604,8 @@ function detalleProducto(p, movimientos = []) {
             ${p.foto
               ? `<img src="${escapar(p.foto)}" alt="" />`
               : '<span class="foto-vacia">Sin foto</span>'}
-            <button class="mini" data-accion="cambiar-foto" data-id="${p.id}">${p.foto ? 'Cambiar foto' : 'Agregar foto'}</button>
+            <button class="mini" data-accion="cambiar-foto" data-id="${p.id}">${p.foto ? 'Cambiar' : 'Subir'}</button>
+            <button class="mini" data-accion="buscar-foto" data-id="${p.id}">Buscar en la web</button>
           </div>
           <div>
             <h2>${escapar(p.descripcion)}</h2>
@@ -615,6 +628,20 @@ function detalleProducto(p, movimientos = []) {
     </div>
 
     ${estado.editando ? formularioEdicion('productos', p) : ''}
+
+    ${bloque('Foto del producto', `
+      <div class="tarjeta zona-foto" data-id="${p.id}">
+        <p class="ayuda" style="margin:0 0 12px">
+          Si la lista del proveedor vino sin fotos: tocá <b>Buscar en la web</b> arriba —abre
+          una búsqueda de imágenes con la referencia de este producto—, y cuando encuentres la
+          que sirve, copiala y <b>pegala acá</b> (${atajoPegar()}), o pegá su dirección abajo.
+        </p>
+        <form class="form-abono" id="form-foto-url" data-id="${p.id}">
+          <label class="ancho"><span>Dirección de la imagen</span>
+            <input name="url" type="url" placeholder="https://…/foto-del-producto.jpg" /></label>
+          <button type="submit">Traer</button>
+        </form>
+      </div>`)}
 
     ${p.maneja_inventario ? `
       ${bloque('Movimientos de inventario', `<div class="tarjeta"><div class="lista-abonos">${historial}</div></div>`)}
@@ -1398,6 +1425,18 @@ $('#contenido').addEventListener('click', async (e) => {
     $('#input-foto').click();
     return;
   }
+  if (accion === 'buscar-foto') {
+    // Se abre una búsqueda de imágenes con lo que identifica al producto. La
+    // foto no se elige sola: la mirás y la traés vos, que es lo único
+    // sensato cuando va a terminar impresa en una oferta.
+    const p = await api(`/productos/${id}`).catch(() => null);
+    if (!p) return;
+    const consulta = [p.referencia, p.marca, !p.referencia && truncar(p.descripcion, 60)]
+      .filter(Boolean).join(' ');
+    window.open(`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(consulta)}`, '_blank', 'noopener');
+    avisar('Copiá la imagen que sirva y pegala en la ficha (o pegá su dirección).');
+    return;
+  }
   if (accion === 'importar-lista') {
     $('#input-excel').click();
     return;
@@ -1613,6 +1652,12 @@ $('#contenido').addEventListener('submit', async (e) => {
     const datos = Object.fromEntries(new FormData(e.target));
     // Las casillas sin marcar no aparecen en FormData: hay que agregarlas.
     e.target.querySelectorAll('input[type="checkbox"]').forEach((cb) => { datos[cb.name] = cb.checked ? 1 : 0; });
+
+    // La cantidad disponible no es una columna: se guarda como el movimiento
+    // que hace falta para llegar a ese número, y así queda en el historial.
+    const objetivo = datos.stock_objetivo;
+    delete datos.stock_objetivo;
+
     // Un campo vacío se guarda como nulo, no como cadena vacía.
     for (const k of Object.keys(datos)) {
       if (datos[k] === '') datos[k] = null;
@@ -1620,6 +1665,17 @@ $('#contenido').addEventListener('submit', async (e) => {
     }
     try {
       await api(`/${entidad}/${id}`, { method: 'PATCH', body: datos });
+
+      if (entidad === 'productos' && datos.maneja_inventario && objetivo !== null && objetivo !== undefined && objetivo !== '') {
+        const actual = Number((await api(`/productos/${id}`)).stock) || 0;
+        const diferencia = Number(objetivo) - actual;
+        if (diferencia) {
+          await api('/movimientos_stock', {
+            method: 'POST',
+            body: { producto_id: Number(id), cantidad: diferencia, motivo: 'Cantidad ajustada a mano' },
+          });
+        }
+      }
       estado.editando = false;
       avisar('Datos actualizados ✓');
       await refrescarResumen();
@@ -1709,6 +1765,20 @@ $('#contenido').addEventListener('submit', async (e) => {
       });
       avisar('Totales actualizados ✓');
       await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+
+  if (e.target.id === 'form-foto-url') {
+    e.preventDefault();
+    const url = new FormData(e.target).get('url');
+    if (!url) return avisar('Pegá la dirección de la imagen.', true);
+    try {
+      await api(`/productos/${e.target.dataset.id}/foto`, { method: 'POST', body: { imagen_url: url } });
+      avisar('Foto cargada ✓');
       await pintar();
     } catch (err) {
       avisar(err.message, true);
@@ -1858,6 +1928,26 @@ $('#input-excel').addEventListener('change', async (e) => {
     // Se guarda el archivo: al importar se vuelve a mandar para sacarle las
     // fotos, que no se traen al analizar porque pesan y ahí no hacen falta.
     estado.importacion = { hojas, archivo: archivo_base64 };
+    await pintar();
+  } catch (err) {
+    avisar(err.message, true);
+  }
+});
+
+// Pegar una imagen copiada de la web directo en la ficha del producto.
+document.addEventListener('paste', async (e) => {
+  const zona = $('.zona-foto');
+  if (!zona || !estado.productoAbierto) return;
+
+  const archivo = [...(e.clipboardData?.items || [])]
+    .find((i) => i.type.startsWith('image/'))?.getAsFile();
+  if (!archivo) return; // se pegó texto: que siga su curso normal
+
+  e.preventDefault();
+  try {
+    const imagen_base64 = await archivoABase64(archivo);
+    await api(`/productos/${estado.productoAbierto}/foto`, { method: 'POST', body: { imagen_base64 } });
+    avisar('Foto pegada ✓');
     await pintar();
   } catch (err) {
     avisar(err.message, true);

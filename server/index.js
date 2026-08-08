@@ -98,6 +98,66 @@ function decodificarBase64(texto) {
   return Buffer.from(limpio, 'base64');
 }
 
+const TIPOS_IMAGEN = { png: 'png', jpeg: 'jpg', jpg: 'jpg', webp: 'webp', gif: 'gif' };
+const PESO_MAXIMO_IMAGEN = 5_000_000;
+
+/** Una imagen que llega como data URL (archivo elegido o pegada). */
+function leerImagenBase64(dato) {
+  const m = String(dato || '').match(/^data:image\/(png|jpe?g|webp|gif);base64,/);
+  if (!m) throw new Error('La imagen tiene que ser PNG, JPG, WEBP o GIF.');
+  const buffer = decodificarBase64(dato);
+  if (buffer.length > PESO_MAXIMO_IMAGEN) throw new Error('La imagen pesa demasiado (máximo 5MB).');
+  return { buffer, ext: TIPOS_IMAGEN[m[1]] };
+}
+
+/**
+ * Una imagen que llega como dirección web (la del sitio del fabricante, por
+ * ejemplo). Se descarga acá y no en el navegador porque muchos sitios no
+ * permiten que otra página lea sus imágenes.
+ *
+ * La dirección la escribe el dueño de la aplicación, pero igual se acota a
+ * http/https y se rechazan las direcciones internas: una dirección pegada de
+ * apuro no debería poder hacer que el servidor se consulte a sí mismo o a la
+ * red del hosting.
+ */
+async function descargarImagen(url) {
+  let destino;
+  try {
+    destino = new URL(String(url).trim());
+  } catch {
+    return Promise.reject(new Error('Esa no parece una dirección válida.'));
+  }
+  if (!/^https?:$/.test(destino.protocol)) {
+    throw new Error('La dirección tiene que empezar con http o https.');
+  }
+  const host = destino.hostname.toLowerCase();
+  const esInterna = host === 'localhost'
+    || /^(127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(host)
+    || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+    || host.endsWith('.local') || host === '[::1]' || host === '::1';
+  if (esInterna) throw new Error('Esa dirección es de la red interna, no de internet.');
+
+  const corte = AbortSignal.timeout(12_000);
+  let r;
+  try {
+    r = await fetch(destino, { signal: corte, redirect: 'follow' });
+  } catch {
+    throw new Error('No pude descargar esa imagen. Revisá la dirección o probá con otra.');
+  }
+  if (!r.ok) throw new Error(`El sitio respondió ${r.status}. Probá copiando la imagen y pegándola.`);
+
+  const tipo = (r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  const ext = TIPOS_IMAGEN[tipo.replace('image/', '')];
+  if (!tipo.startsWith('image/') || !ext) {
+    throw new Error('Esa dirección no es una imagen. Asegurate de copiar la dirección de la imagen, no la de la página.');
+  }
+
+  const buffer = Buffer.from(await r.arrayBuffer());
+  if (!buffer.length) throw new Error('La imagen llegó vacía.');
+  if (buffer.length > PESO_MAXIMO_IMAGEN) throw new Error('La imagen pesa demasiado (máximo 5MB).');
+  return { buffer, ext };
+}
+
 const ENTIDADES_VALIDAS = new Set(Object.keys(db.ENTIDADES));
 
 /* ------------------------------------------------------------------ */
@@ -311,18 +371,24 @@ async function api(req, res, url) {
     return json(res, 200, { categorias: db.categoriasProductos() });
   }
 
-  // POST /api/productos/:id/foto -> sube (o reemplaza) la foto de un producto
+  // POST /api/productos/:id/foto -> pone la foto de un producto. Acepta la
+  // imagen en sí (archivo o pegada del portapapeles) o su dirección en la web,
+  // que es lo cómodo cuando la lista del proveedor vino sin fotos.
   if (recurso === 'productos' && id && partes[2] === 'foto' && req.method === 'POST') {
     const producto = db.obtenerPorId('productos', Number(id));
     if (!producto) return json(res, 404, { error: 'No encontrado' });
 
-    const { imagen_base64 } = await leerJson(req, 8_000_000);
-    const m = String(imagen_base64 || '').match(/^data:image\/(png|jpe?g|webp);base64,/);
-    if (!m) return json(res, 400, { error: 'La imagen tiene que ser PNG, JPG o WEBP.' });
-    const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+    const { imagen_base64, imagen_url } = await leerJson(req, 8_000_000);
 
-    const buffer = decodificarBase64(imagen_base64);
-    if (buffer.length > 5_000_000) return json(res, 400, { error: 'La imagen pesa demasiado (máximo 5MB).' });
+    let buffer;
+    let ext;
+    try {
+      ({ buffer, ext } = imagen_url
+        ? await descargarImagen(imagen_url)
+        : leerImagenBase64(imagen_base64));
+    } catch (err) {
+      return json(res, 400, { error: err.message });
+    }
 
     writeFileSync(join(CARPETA_FOTOS, `${id}.${ext}`), buffer);
     const fila = db.actualizar('productos', Number(id), { foto: `/uploads/productos/${id}.${ext}` });
@@ -377,8 +443,12 @@ async function api(req, res, url) {
       try {
         let fila = db.actualizar(tabla, Number(id), datos);
         if (!fila) return json(res, 404, { error: 'No encontrado' });
-        // Cambiar los porcentajes cambia el total de la cotización.
-        if (tabla === 'cotizaciones') fila = db.recalcularCotizacion(Number(id)) ?? fila;
+        if (tabla === 'cotizaciones') {
+          fila = db.recalcularCotizacion(Number(id)) ?? fila; // los porcentajes cambian el total
+          // Aprobarla saca sus productos propios de la bodega; desaprobarla los devuelve.
+          const { descontados } = db.sincronizarInventario(Number(id));
+          if (descontados.length) fila.descontadosDelInventario = descontados;
+        }
         return json(res, 200, fila);
       } catch (err) {
         return json(res, 400, { error: err.message });

@@ -802,8 +802,18 @@ export function ejecutar(nombre, args) {
     case 'actualizar_estado': {
       const fila = db.actualizar(args.entidad, args.id, { estado: args.estado });
       if (!fila) throw new Error(`No existe ${args.entidad} con id ${args.id}.`);
+
+      // Aprobar una cotización saca sus productos propios de la bodega.
+      let detalleStock = '';
+      if (args.entidad === 'cotizaciones') {
+        const { descontados } = db.sincronizarInventario(args.id);
+        if (descontados.length) {
+          detalleStock = ' Descontado del inventario: ' +
+            descontados.map((d) => `${d.cantidad} de ${d.descripcion.slice(0, 40)} (quedan ${d.stock})`).join('; ') + '.';
+        }
+      }
       return {
-        resumen: `${args.entidad} id=${args.id} ahora está en estado "${args.estado}".`,
+        resumen: `${args.entidad} id=${args.id} ahora está en estado "${args.estado}".${detalleStock}`,
         vista: vistaDe(args.entidad, 'Registro actualizado', [fila]),
         cambio: true,
       };

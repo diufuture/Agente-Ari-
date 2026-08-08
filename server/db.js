@@ -162,6 +162,10 @@ CREATE TABLE IF NOT EXISTS movimientos_stock (
   producto_id  INTEGER NOT NULL REFERENCES productos(id) ON DELETE CASCADE,
   cantidad     REAL NOT NULL,     -- positiva = entrada, negativa = salida
   motivo       TEXT,
+  -- Cuando la salida la causó aprobar una cotización, queda anotado cuál: así
+  -- se sabe cuáles son automáticos y se pueden rehacer si la cotización
+  -- cambia de estado o de cantidades.
+  cotizacion_id INTEGER REFERENCES cotizaciones(id) ON DELETE SET NULL,
   creado_en    TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
@@ -199,6 +203,11 @@ CREATE INDEX IF NOT EXISTS idx_items_cot ON cotizacion_items(cotizacion_id);
   // Lo que va impreso y puede cambiar de una oferta a otra.
   if (!cot.includes('validez')) db.exec('ALTER TABLE cotizaciones ADD COLUMN validez TEXT');
   if (!cot.includes('condiciones')) db.exec('ALTER TABLE cotizaciones ADD COLUMN condiciones TEXT');
+
+  const mov = columnasDe('movimientos_stock');
+  if (!mov.includes('cotizacion_id')) {
+    db.exec('ALTER TABLE movimientos_stock ADD COLUMN cotizacion_id INTEGER REFERENCES cotizaciones(id) ON DELETE SET NULL');
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -830,6 +839,7 @@ export function agregarItem(cotizacionId, datos = {}) {
   });
 
   recalcularCotizacion(cotizacionId);
+  sincronizarInventario(cotizacionId); // si ya estaba aprobada, el renglón nuevo también sale de bodega
   return item;
 }
 
@@ -841,6 +851,7 @@ export function actualizarItem(itemId, datos = {}) {
   delete limpio.cotizacion_id;
   const actualizado = actualizar('cotizacion_items', itemId, limpio);
   recalcularCotizacion(item.cotizacion_id);
+  sincronizarInventario(item.cotizacion_id);
   return actualizado;
 }
 
@@ -849,7 +860,57 @@ export function eliminarItem(itemId) {
   if (!item) return false;
   const ok = eliminar('cotizacion_items', itemId);
   recalcularCotizacion(item.cotizacion_id);
+  sincronizarInventario(item.cotizacion_id);
   return ok;
+}
+
+/**
+ * Deja el inventario a tono con el estado de una cotización.
+ *
+ * Aprobar una cotización es la señal de que esos productos salen de bodega,
+ * así que se descuentan los que sean propios. Si después cambia de estado o
+ * se le tocan las cantidades, hay que rehacerlo: por eso los movimientos que
+ * genera quedan marcados con la cotización y se rehacen enteros cada vez, en
+ * vez de intentar calcular diferencias.
+ *
+ * Los movimientos automáticos se borran al desaprobar en lugar de compensarse
+ * con una entrada: no son hechos que hayan pasado en la bodega, son
+ * consecuencia del estado de la cotización. Anotar +7 y -7 cada vez que se
+ * corrige un estado sólo llenaría el historial de ruido.
+ *
+ * @returns {{descontados: Array<{descripcion: string, cantidad: number, stock: number}>}}
+ */
+export function sincronizarInventario(cotizacionId) {
+  const cot = one('SELECT * FROM cotizaciones WHERE id = ?', [cotizacionId]);
+  if (!cot) return { descontados: [] };
+
+  run('DELETE FROM movimientos_stock WHERE cotizacion_id = ?', [cotizacionId]);
+  if (cot.estado !== 'aprobada') return { descontados: [] };
+
+  // Se suman las cantidades por producto: un mismo producto puede estar en
+  // varios renglones de la misma cotización.
+  const porProducto = all(
+    `SELECT i.producto_id, SUM(i.cantidad) AS cantidad
+       FROM cotizacion_items i
+       JOIN productos p ON p.id = i.producto_id
+      WHERE i.cotizacion_id = ? AND p.maneja_inventario = 1
+      GROUP BY i.producto_id`,
+    [cotizacionId],
+  );
+
+  const descontados = [];
+  for (const fila of porProducto) {
+    if (!(Number(fila.cantidad) > 0)) continue;
+    insertar('movimientos_stock', {
+      producto_id: fila.producto_id,
+      cantidad: -Number(fila.cantidad),
+      motivo: `Cotización #${cotizacionId} aprobada`,
+      cotizacion_id: cotizacionId,
+    });
+    const p = obtenerPorId('productos', fila.producto_id);
+    descontados.push({ descripcion: p.descripcion, cantidad: Number(fila.cantidad), stock: p.stock });
+  }
+  return { descontados };
 }
 
 /* ------------------------------------------------------------------ */

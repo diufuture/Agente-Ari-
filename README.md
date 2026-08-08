@@ -349,6 +349,24 @@ La vista previa muestra la foto junto a cada fila de ejemplo, para confirmar
 que cada una cae sobre el producto que le toca antes de importar nada. Sólo
 esas: mandar las demás al navegador sería mandar el Excel entero de vuelta.
 
+### Cuando la lista viene sin fotos
+
+Muchas listas traen sólo referencia y precio. Desde la ficha del producto:
+
+- **Buscar en la web** abre una búsqueda de imágenes con la referencia y la
+  marca de ese producto.
+- La foto que sirva se **copia y se pega en la ficha** (Cmd+V / Ctrl+V), o se
+  pega **su dirección** en el campo de abajo y el servidor la descarga.
+
+La foto no se elige sola a propósito. Ari podría inventarse una dirección que
+parezca correcta, y terminaría una imagen equivocada —o rota— impresa en una
+oferta ya enviada al cliente. La buscás vos, la ves, y recién ahí entra.
+
+La descarga por dirección la hace el servidor, no el navegador, porque muchos
+sitios no permiten que otra página lea sus imágenes. Se acepta sólo http/https,
+se rechazan las direcciones de la red interna, y se comprueba que lo que llegó
+sea realmente una imagen y no la página que la contiene.
+
 De ahí en más las fotos viajan con el producto: se ven en su ficha, al buscarlo
 para cotizar, y **salen impresas en el PDF de la cotización**, en su columna,
 como en las ofertas en papel.
@@ -380,6 +398,25 @@ editándolo después). Sólo esos llevan stock:
 - Pedirle a Ari que ajuste el inventario de un producto que no lo maneja
   (uno de catálogo de proveedor) da un aviso en vez de hacerlo — primero hay
   que marcarlo como propio.
+- Para poner cuánto hay, alcanza con escribirlo en **Cantidad disponible** al
+  editar el producto: se guarda la diferencia como movimiento, así queda
+  anotado por qué cambió.
+
+### Aprobar una cotización descuenta de la bodega
+
+Cotizar no mueve nada —es una oferta—, pero **marcar la cotización como
+aprobada** saca sus productos propios del inventario, con el motivo
+«Cotización #N aprobada». Los que son de catálogo de un proveedor no se tocan:
+no hay bodega detrás.
+
+Si después cambian las cantidades de esa cotización, el descuento se rehace
+solo; y si deja de estar aprobada, el stock vuelve. Volver a aprobarla no
+descuenta dos veces.
+
+Esos movimientos se rehacen enteros en vez de compensarse con entradas, porque
+no son hechos que hayan pasado en la bodega: son consecuencia del estado de la
+cotización, y anotar +7 y −7 cada vez que se corrige un estado sólo llenaría el
+historial de ruido.
 
 El lector del Excel es propio: no se agregó ninguna librería para esto. El
 paquete `xlsx` de npm tiene una vulnerabilidad conocida sin parche, así que

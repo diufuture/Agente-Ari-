@@ -80,6 +80,33 @@ let rechazado = false;
 try { t('ajustar_inventario', { producto: 'G7-2', cantidad: 5 }); } catch { rechazado = true; }
 comprobar('rechaza inventario en producto de proveedor', rechazado, true);
 
+/* 5b · Aprobar descuenta del inventario ----------------------------- */
+const stockAntes = db.consultar('productos', { texto: 'CC-CAM' })[0].stock;   // 21
+t('crear_cotizacion', { cliente: 'Ferretería El Tornillo', titulo: 'Cámaras' });
+const cotStock = db.cotizacionActiva().id;
+t('agregar_item_cotizacion', { producto: 'CC-CAM', cantidad: 6 });
+t('agregar_item_cotizacion', { producto: 'G7-3', cantidad: 2 });  // de proveedor: no toca bodega
+t('finalizar_cotizacion', {});
+
+comprobar('cotizar todavía no descuenta', db.consultar('productos', { texto: 'CC-CAM' })[0].stock, stockAntes);
+
+t('actualizar_estado', { entidad: 'cotizaciones', id: cotStock, estado: 'aprobada' });
+comprobar('al aprobar, descuenta', db.consultar('productos', { texto: 'CC-CAM' })[0].stock, stockAntes - 6);
+
+// Cambiar la cantidad de un renglón de una cotización ya aprobada
+const itemCam = db.consultar('cotizacion_items', { cotizacion_id: cotStock })
+  .find((i) => i.referencia === 'CC-CAM');
+db.actualizarItem(itemCam.id, { cantidad: 10 });
+comprobar('cambiar la cantidad rehace el descuento', db.consultar('productos', { texto: 'CC-CAM' })[0].stock, stockAntes - 10);
+
+// Aprobarla de nuevo no debe descontar dos veces
+t('actualizar_estado', { entidad: 'cotizaciones', id: cotStock, estado: 'aprobada' });
+comprobar('re-aprobar no descuenta dos veces', db.consultar('productos', { texto: 'CC-CAM' })[0].stock, stockAntes - 10);
+
+// Y si deja de estar aprobada, vuelve
+t('actualizar_estado', { entidad: 'cotizaciones', id: cotStock, estado: 'rechazada' });
+comprobar('desaprobar devuelve el stock', db.consultar('productos', { texto: 'CC-CAM' })[0].stock, stockAntes);
+
 /* 6 · Lista actualizada -------------------------------------------- */
 db.actualizar('productos', 1, { foto: '/uploads/productos/1.png', notas: 'no borrar' });
 const inf = db.conciliarProductos('Interruptores', [
