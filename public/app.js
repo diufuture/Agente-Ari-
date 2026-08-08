@@ -738,9 +738,19 @@ function tarjetaHojaImportacion(hoja, indice) {
       </select>
     </th>`).join('');
 
-  const filasHtml = filasVista.map((f) => `
-    <tr>${Array.from({ length: totalColumnas }, (_, c) => `<td>${escapar(truncar(f[c], 40))}</td>`).join('')}</tr>
-  `).join('');
+  // Las fotos van en su propia columna, al principio: así se ve de una que
+  // cada una cae sobre el producto que le toca, antes de importar nada.
+  const fotos = hoja.imagenesMuestra || {};
+  const hayFotos = Object.keys(fotos).length > 0;
+
+  const filasHtml = filasVista.map((f, i) => {
+    const foto = fotos[mapeo.filaInicioDatos + i];
+    const celdaFoto = hayFotos
+      ? `<td class="celda-foto">${foto ? `<img src="${foto}" alt="" />` : '<span class="sin-foto">—</span>'}</td>`
+      : '';
+    return `<tr>${celdaFoto}${
+      Array.from({ length: totalColumnas }, (_, c) => `<td>${escapar(truncar(f[c], 40))}</td>`).join('')}</tr>`;
+  }).join('');
 
   return `
     <div class="tarjeta import-hoja" data-hoja="${indice}">
@@ -753,9 +763,10 @@ function tarjetaHojaImportacion(hoja, indice) {
         <span class="import-resultado"></span>
       </div>
       <div class="import-informe"></div>
-      <p class="ayuda">Elegí en cada columna qué es (o "ignorar"). Se muestran las primeras filas como ejemplo.</p>
+      <p class="ayuda">Elegí en cada columna qué es (o "ignorar"). Se muestran las primeras filas como ejemplo${
+        hayFotos ? ', con la foto que trae cada una' : ''}.</p>
       <div class="tabla-envoltura"><table>
-        <thead><tr>${cabeceras}</tr></thead>
+        <thead><tr>${hayFotos ? '<th class="th-foto">Foto</th>' : ''}${cabeceras}</tr></thead>
         <tbody>${filasHtml}</tbody>
       </table></div>
     </div>`;

@@ -870,6 +870,19 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
 .import-hoja th { padding: 10px 12px; }
 .import-hoja td { font-size: 12.5px; max-width: 220px; }
 
+/* Las fotos que trae el Excel, para confirmarlas antes de importar */
+.import-hoja .th-foto {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .7px; color: var(--texto-3); width: 74px;
+}
+.import-hoja .celda-foto { width: 74px; }
+.import-hoja .celda-foto img {
+  width: 58px; height: 58px; object-fit: contain;
+  border: 1px solid var(--borde); border-radius: 8px; background: var(--panel-alto);
+  display: block;
+}
+.import-hoja .celda-foto .sin-foto { color: var(--texto-3); }
+
 /* Informe de qué cambia al cruzar la lista con el catálogo */
 .informe { padding: 4px 18px 0; display: flex; flex-wrap: wrap; gap: 18px; }
 .informe-grupo { flex: 1 1 260px; min-width: 0; }

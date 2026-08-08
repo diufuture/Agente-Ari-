@@ -345,6 +345,10 @@ fotos se importan solas: si la hoja tiene imágenes, aparece la casilla **«Trae
 las fotos del Excel»** (marcada por defecto) y cada producto queda con la que
 estaba anclada a su fila.
 
+La vista previa muestra la foto junto a cada fila de ejemplo, para confirmar
+que cada una cae sobre el producto que le toca antes de importar nada. Sólo
+esas: mandar las demás al navegador sería mandar el Excel entero de vuelta.
+
 De ahí en más las fotos viajan con el producto: se ven en su ficha, al buscarlo
 para cotizar, y **salen impresas en el PDF de la cotización**, en su columna,
 como en las ofertas en papel.

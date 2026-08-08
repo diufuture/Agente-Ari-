@@ -40,6 +40,10 @@ const [db, tools, asistente, auth, xlsx, imprimir] = await Promise.all([
 const CARPETA_FOTOS = join(PUBLICO, 'uploads', 'productos');
 mkdirSync(CARPETA_FOTOS, { recursive: true });
 
+// Cuántas filas de ejemplo se muestran al revisar una hoja antes de importarla.
+// Tiene que coincidir con lo que pinta la interfaz.
+const FILAS_DE_MUESTRA = 4;
+
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
@@ -234,14 +238,28 @@ async function api(req, res, url) {
       const { archivo_base64 } = await leerJson(req, 25_000_000);
       const buffer = decodificarBase64(archivo_base64);
       const { hojas } = xlsx.leerXlsx(buffer, { conImagenes: true });
-      const resultado = hojas.map((h) => ({
-        nombre: h.nombre,
-        filas: h.filas,
-        mapeo: xlsx.sugerirMapeo(h.filas),
-        // Sólo cuántas hay: las imágenes en sí se sacan al importar, para no
-        // mandar megabytes de fotos que a esta altura no se usan.
-        conImagenes: h.imagenes.size,
-      }));
+
+      const resultado = hojas.map((h) => {
+        const mapeo = xlsx.sugerirMapeo(h.filas);
+
+        // Las fotos de las filas que se ven en la vista previa, para poder
+        // confirmar que cada una cae en el producto correcto antes de
+        // importar. Sólo esas: mandar el resto sería mandar el Excel entero.
+        const muestra = {};
+        for (let f = mapeo.filaInicioDatos; f < mapeo.filaInicioDatos + FILAS_DE_MUESTRA; f++) {
+          const img = h.imagenes.get(f);
+          if (img) muestra[f] = `data:image/${img.extension};base64,${img.datos.toString('base64')}`;
+        }
+
+        return {
+          nombre: h.nombre,
+          filas: h.filas,
+          mapeo,
+          // Cuántas hay en total; las demás se sacan recién al importar.
+          conImagenes: h.imagenes.size,
+          imagenesMuestra: muestra,
+        };
+      });
       return json(res, 200, { hojas: resultado });
     } catch (err) {
       return json(res, 400, { error: `No pude leer ese archivo: ${err.message}` });
