@@ -372,6 +372,9 @@ async function api(req, res, url) {
           mapeo,
           // Cuántas hay en total; las demás se sacan recién al importar.
           conImagenes: h.imagenes.size,
+          // Las que están en el archivo pero no se pudieron atribuir a ninguna
+          // fila: van a faltar en el PDF y conviene saberlo antes.
+          imagenesSinUbicar: h.imagenes.sinUbicar || 0,
           imagenesMuestra: muestra,
         };
       });
@@ -400,13 +403,19 @@ async function api(req, res, url) {
       // foto: una que se haya subido a mano vale más que la del proveedor.
       informe.fotos = 0;
       informe.fotosConservadas = 0;
+      informe.sinFoto = [];
       if (!simular && traer_fotos && archivo_base64) {
         const libro = xlsx.leerXlsx(decodificarBase64(archivo_base64), { conImagenes: true });
         const imagenes = libro.hojas[Number(hoja) || 0]?.imagenes ?? new Map();
 
         for (const p of informe.paraFoto) {
-          if (p.fila === null || !imagenes.has(p.fila)) continue;
           if (p.tieneFoto) { informe.fotosConservadas += 1; continue; }
+          if (p.fila === null || !imagenes.has(p.fila)) {
+            // Quedó sin foto: hay que poder verlo acá y no en el PDF ya enviado.
+            const prod = db.obtenerPorId('productos', p.id);
+            if (prod) informe.sinFoto.push({ referencia: prod.referencia, descripcion: prod.descripcion });
+            continue;
+          }
           const img = imagenes.get(p.fila);
           db.actualizar('productos', p.id, { foto: guardarFoto(p.id, img.datos, img.extension) });
           informe.fotos += 1;

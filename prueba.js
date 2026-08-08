@@ -10,6 +10,53 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { deflateRawSync } from 'node:zlib';
+
+/** Un .zip mínimo pero de verdad, para poder armar un .xlsx de prueba. */
+const CRC = (() => {
+  const t = [];
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+const crc32 = (b) => {
+  let c = 0xFFFFFFFF;
+  for (const x of b) c = CRC[(c ^ x) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+};
+
+function armarZip(archivos) {
+  const locales = [];
+  const central = [];
+  let off = 0;
+  for (const [nombre, contenido] of Object.entries(archivos)) {
+    const datos = Buffer.isBuffer(contenido) ? contenido : Buffer.from(contenido, 'utf8');
+    const comp = deflateRawSync(datos);
+    const n = Buffer.from(nombre, 'utf8');
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(8, 8);
+    lh.writeUInt32LE(crc32(datos), 14); lh.writeUInt32LE(comp.length, 18);
+    lh.writeUInt32LE(datos.length, 22); lh.writeUInt16LE(n.length, 26);
+    locales.push(lh, n, comp);
+    const ch = Buffer.alloc(46);
+    ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6);
+    ch.writeUInt16LE(8, 10); ch.writeUInt32LE(crc32(datos), 16); ch.writeUInt32LE(comp.length, 20);
+    ch.writeUInt32LE(datos.length, 24); ch.writeUInt16LE(n.length, 28); ch.writeUInt32LE(off, 42);
+    central.push(ch, n);
+    off += lh.length + n.length + comp.length;
+  }
+  const cuerpo = Buffer.concat(locales);
+  const dir = Buffer.concat(central);
+  const fin = Buffer.alloc(22);
+  fin.writeUInt32LE(0x06054b50, 0);
+  fin.writeUInt16LE(Object.keys(archivos).length, 8);
+  fin.writeUInt16LE(Object.keys(archivos).length, 10);
+  fin.writeUInt32LE(dir.length, 12); fin.writeUInt32LE(cuerpo.length, 16);
+  return Buffer.concat([cuerpo, dir, fin]);
+}
 
 const carpeta = mkdtempSync(join(tmpdir(), 'ari-prueba-'));
 process.env.ARI_DB = join(carpeta, 'prueba.db');
@@ -178,6 +225,68 @@ t('agregar_item_cotizacion', { descripcion: 'Visita técnica', precio_unitario: 
 t('finalizar_cotizacion', {});
 comprobar('sin áreas cargadas, la columna no aparece',
   imprimir.paginaCotizacion(cotSimple).includes('>Área</th>'), false);
+
+/* 8b · Cómo Excel ancla las fotos ----------------------------------- */
+// Cuatro switches, cuatro maneras de pegar la foto en la misma hoja. Es
+// exactamente lo que pasa cuando alguien arma la lista a mano.
+const xlsx = await import('./server/xlsx.js');
+
+const anclaje = (tipo, desde, hasta, id) => `
+  <xdr:${tipo}>
+    ${tipo === 'absoluteAnchor' ? '<xdr:pos x="100" y="200"/>' : `<xdr:from><xdr:col>0</xdr:col><xdr:row>${desde}</xdr:row></xdr:from>`}
+    ${tipo === 'twoCellAnchor' ? `<xdr:to><xdr:col>1</xdr:col><xdr:row>${hasta}</xdr:row></xdr:to>` : ''}
+    <xdr:pic><xdr:blipFill><a:blip r:embed="${id}"/></xdr:blipFill></xdr:pic>
+  </xdr:${tipo}>`;
+
+const dibujo = `<xdr:wsDr>
+  ${anclaje('oneCellAnchor', 1, 1, 'rId1')}
+  ${anclaje('twoCellAnchor', 2, 4, 'rId2')}
+  ${anclaje('twoCellAnchor', 2, 5, 'rId3')}
+  ${anclaje('absoluteAnchor', 0, 0, 'rId4')}
+</xdr:wsDr>`;
+
+const { anclajes, sinFila } = xlsx.anclajesDeDibujo(dibujo);
+comprobar('lee los anclajes que sí tienen fila', anclajes.length, 3);
+comprobar('la foto estirada conserva hasta dónde llega', anclajes[1], { desde: 2, hasta: 4, embed: 'rId2' });
+comprobar('una foto pegada a una sola celda empieza y termina igual', anclajes[0], { desde: 1, hasta: 1, embed: 'rId1' });
+comprobar('la foto suelta se cuenta como no ubicable', sinFila, 1);
+
+// Y sobre un .xlsx armado de verdad: cuatro interruptores, cuatro fotos
+// pegadas de distinta manera. Dos arrancan en la misma fila porque alguien
+// estiró una hacia arriba, que es lo que pasa cuando la lista se arma a mano.
+// Antes de cubrir el rango completo del anclaje, la tercera se perdía sin
+// avisar y el producto salía sin foto en la oferta ya enviada.
+const png = (b) => Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), Buffer.from([b])]);
+const filaXml = (r, ref, desc, precio) =>
+  `<row r="${r}"><c r="A${r}" t="inlineStr"><is><t>${ref}</t></is></c>`
+  + `<c r="B${r}" t="inlineStr"><is><t>${desc}</t></is></c><c r="C${r}"><v>${precio}</v></c></row>`;
+const anc = (tipo, desde, hasta, id) => `<xdr:${tipo}>
+  <xdr:from><xdr:col>0</xdr:col><xdr:row>${desde}</xdr:row></xdr:from>
+  ${hasta === null ? '' : `<xdr:to><xdr:col>1</xdr:col><xdr:row>${hasta}</xdr:row></xdr:to>`}
+  <xdr:pic><xdr:blipFill><a:blip r:embed="${id}"/></xdr:blipFill></xdr:pic></xdr:${tipo}>`;
+
+const libro = armarZip({
+  'xl/workbook.xml': '<workbook><sheets><sheet name="Interruptores" sheetId="1" r:id="rId1"/></sheets></workbook>',
+  'xl/_rels/workbook.xml.rels': '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+  'xl/worksheets/sheet1.xml': `<worksheet><sheetData>
+    <row r="1"><c r="A1" t="inlineStr"><is><t>REF</t></is></c><c r="B1" t="inlineStr"><is><t>DESCRIPCION</t></is></c><c r="C1" t="inlineStr"><is><t>PRECIO CLIENTE</t></is></c></row>
+    ${filaXml(2, 'G7-1', 'Interruptor 1 canal', 120000)}${filaXml(3, 'G7-2', 'Interruptor 2 canales', 154868)}
+    ${filaXml(4, 'G7-3', 'Interruptor 3 canales', 163793)}${filaXml(5, 'G7-4', 'Interruptor 4 canales', 180000)}
+  </sheetData><drawing r:id="rIdD"/></worksheet>`,
+  'xl/worksheets/_rels/sheet1.xml.rels': '<Relationships><Relationship Id="rIdD" Target="../drawings/drawing1.xml"/></Relationships>',
+  'xl/drawings/drawing1.xml': `<xdr:wsDr>${anc('oneCellAnchor', 1, null, 'rId1')}${
+    anc('twoCellAnchor', 2, 3, 'rId2')}${anc('twoCellAnchor', 2, 4, 'rId3')}${anc('oneCellAnchor', 4, null, 'rId4')}</xdr:wsDr>`,
+  'xl/drawings/_rels/drawing1.xml.rels': `<Relationships>
+    <Relationship Id="rId1" Target="../media/image1.png"/><Relationship Id="rId2" Target="../media/image2.png"/>
+    <Relationship Id="rId3" Target="../media/image3.png"/><Relationship Id="rId4" Target="../media/image4.png"/></Relationships>`,
+  'xl/media/image1.png': png(1), 'xl/media/image2.png': png(2),
+  'xl/media/image3.png': png(3), 'xl/media/image4.png': png(4),
+});
+
+const hojaLeida = xlsx.leerXlsx(libro, { conImagenes: true }).hojas[0];
+comprobar('los cuatro interruptores quedan con su foto',
+  [1, 2, 3, 4].map((f) => hojaLeida.imagenes.get(f)?.datos[8] ?? null), [1, 2, 3, 4]);
+comprobar('y ninguna queda sin ubicar', hojaLeida.imagenes.sinUbicar, 0);
 
 /* 9 · Borrados en cadena -------------------------------------------- */
 t('eliminar', { entidad: 'productos', id: 1 });

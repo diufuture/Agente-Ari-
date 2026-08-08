@@ -157,6 +157,57 @@ function rutaRelativa(desdeCarpeta, target) {
 const EXTENSIONES_IMAGEN = { png: 'png', jpg: 'jpg', jpeg: 'jpg', gif: 'gif', webp: 'webp' };
 
 /**
+ * Los anclajes de un dibujo: qué imagen está pegada a qué filas.
+ *
+ * Excel tiene tres formas de anclar una imagen y las listas de proveedores
+ * usan las tres, a veces en el mismo archivo:
+ *
+ * - `oneCellAnchor`: pegada a una celda, con un tamaño fijo. Ocupa una fila.
+ * - `twoCellAnchor`: pegada de una celda a otra. Puede abarcar varias filas,
+ *   y es lo que pasa cuando alguien estira la foto sobre su renglón: el
+ *   `from` puede quedar una fila más arriba que el producto.
+ * - `absoluteAnchor`: puesta en una posición de la hoja, sin celda. No hay
+ *   forma de saber a qué producto pertenece.
+ *
+ * Antes sólo se miraba el `from`, así que una foto estirada caía en la fila
+ * de arriba y las absolutas se perdían sin avisar.
+ *
+ * @returns {{anclajes: {desde: number, hasta: number, embed: string}[], sinFila: number}}
+ */
+export function anclajesDeDibujo(dibujoXml) {
+  const anclajes = [];
+  let sinFila = 0;
+
+  const bloques = String(dibujoXml || '')
+    .matchAll(/<xdr:(oneCellAnchor|twoCellAnchor|absoluteAnchor)[\s\S]*?<\/xdr:\1>/g);
+
+  for (const [bloque, tipo] of bloques) {
+    const blip = bloque.match(/<a:blip[^>]*r:embed="([^"]+)"/);
+    if (!blip) continue;
+
+    const desde = bloque.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/);
+    if (!desde) {
+      // absoluteAnchor, o un anclaje sin fila: la imagen existe pero no hay
+      // manera de decir de qué producto es.
+      sinFila += 1;
+      continue;
+    }
+
+    const hasta = tipo === 'twoCellAnchor'
+      ? bloque.match(/<xdr:to>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/)
+      : null;
+
+    anclajes.push({
+      desde: Number(desde[1]),
+      hasta: hasta ? Number(hasta[1]) : Number(desde[1]),
+      embed: blip[1],
+    });
+  }
+
+  return { anclajes, sinFila };
+}
+
+/**
  * Las fotos de una hoja, con la fila a la que están ancladas.
  *
  * En un .xlsx las imágenes no viven en las celdas: son objetos flotantes que
@@ -169,6 +220,10 @@ const EXTENSIONES_IMAGEN = { png: 'png', jpg: 'jpg', jpeg: 'jpg', gif: 'gif', we
  */
 function imagenesDeHoja(zip, rutaHoja) {
   const porFila = new Map();
+  // Cuántas imágenes hay en la hoja que no se pudieron atribuir a ninguna
+  // fila. Se informa al importar: una foto que falta tiene que verse, no
+  // descubrirse cuando la oferta ya salió.
+  porFila.sinUbicar = 0;
 
   const carpetaHoja = rutaHoja.slice(0, rutaHoja.lastIndexOf('/'));
   const nombreHoja = rutaHoja.slice(rutaHoja.lastIndexOf('/') + 1);
@@ -189,14 +244,17 @@ function imagenesDeHoja(zip, rutaHoja) {
       zip.leer(`${carpetaDibujo}/_rels/${nombreDibujo}.rels`)?.toString('utf8'),
     );
 
-    // Cada anclaje trae la fila de arranque y la imagen que le corresponde.
-    for (const anclaje of dibujoXml.matchAll(/<xdr:(?:one|two)CellAnchor[\s\S]*?<\/xdr:(?:one|two)CellAnchor>/g)) {
-      const bloque = anclaje[0];
-      const fila = bloque.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/);
-      const blip = bloque.match(/<a:blip[^>]*r:embed="([^"]+)"/);
-      if (!fila || !blip) continue;
+    const { anclajes, sinFila } = anclajesDeDibujo(dibujoXml);
+    porFila.sinUbicar += sinFila;
 
-      const destino = relsDibujo.get(blip[1]);
+    // Primero cada imagen a la fila donde arranca, que es el caso normal.
+    // Recién después se reparten las que quedaron sin lugar por las filas que
+    // abarcan: así una foto estirada sobre su renglón no le roba la fila a la
+    // que sí empieza ahí.
+    const pendientes = [];
+
+    for (const a of anclajes) {
+      const destino = relsDibujo.get(a.embed);
       if (!destino) continue;
 
       const rutaImagen = rutaRelativa(carpetaDibujo, destino);
@@ -206,9 +264,20 @@ function imagenesDeHoja(zip, rutaHoja) {
       const ext = EXTENSIONES_IMAGEN[(rutaImagen.split('.').pop() || '').toLowerCase()];
       if (!ext) continue;
 
-      const numeroFila = Number(fila[1]);
-      // Si hay varias sobre la misma fila, se queda la primera.
-      if (!porFila.has(numeroFila)) porFila.set(numeroFila, { datos, extension: ext });
+      const imagen = { datos, extension: ext };
+      if (porFila.has(a.desde)) pendientes.push({ ...a, imagen });
+      else porFila.set(a.desde, imagen);
+    }
+
+    for (const p of pendientes) {
+      let ubicada = false;
+      for (let f = p.desde; f <= p.hasta; f++) {
+        if (porFila.has(f)) continue;
+        porFila.set(f, p.imagen);
+        ubicada = true;
+        break;
+      }
+      if (!ubicada) porFila.sinUbicar += 1;
     }
   }
 
@@ -246,7 +315,7 @@ export function leerXlsx(buffer, { conImagenes = false } = {}) {
     hojas.push({
       nombre,
       filas: leerHoja(hojaXml, sharedStrings),
-      imagenes: conImagenes ? imagenesDeHoja(zip, destino) : new Map(),
+      imagenes: conImagenes ? imagenesDeHoja(zip, destino) : Object.assign(new Map(), { sinUbicar: 0 }),
     });
   }
 

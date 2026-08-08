@@ -897,13 +897,18 @@ function tarjetaHojaImportacion(hoja, indice) {
         <label><span>Categoría</span><input type="text" class="import-categoria" value="${escapar(hoja.nombre)}" /></label>
         <label class="check"><input type="checkbox" class="import-inventario" /> Son productos propios de Clic Control (llevar inventario)</label>
         <label class="check"><input type="checkbox" class="import-descontinuar" /> Descontinuar los que ya no vengan en la lista</label>
-        ${hoja.conImagenes ? '<label class="check"><input type="checkbox" class="import-fotos" checked /> Traer las fotos del Excel</label>' : ''}
+        ${hoja.conImagenes ? `<label class="check"><input type="checkbox" class="import-fotos" checked /> Traer las fotos del Excel (${hoja.conImagenes})</label>` : ''}
         <button class="mini destacado" data-accion="revisar-hoja" data-hoja="${indice}">Ver qué cambiaría (${filasValidas} productos)</button>
         <span class="import-resultado"></span>
       </div>
       <div class="import-informe"></div>
       <p class="ayuda">Elegí en cada columna qué es (o "ignorar"). Se muestran las primeras filas como ejemplo${
         hayFotos ? ', con la foto que trae cada una' : ''}.</p>
+      ${hoja.imagenesSinUbicar ? `<p class="ayuda aviso-fotos">⚠ ${hoja.imagenesSinUbicar} ${
+        hoja.imagenesSinUbicar === 1 ? 'imagen del archivo no está anclada' : 'imágenes del archivo no están ancladas'
+      } a ninguna fila, así que ${hoja.imagenesSinUbicar === 1 ? 'va' : 'van'} a quedar sin producto. En Excel, seleccioná
+      la foto → clic derecho → «Tamaño y propiedades» → «Mover y cambiar de tamaño con las celdas», o subila a mano desde
+      la ficha del producto.</p>` : ''}
       <div class="tabla-envoltura"><table>
         <thead><tr>${hayFotos ? '<th class="th-foto">Foto</th>' : ''}${cabeceras}</tr></thead>
         <tbody>${filasHtml}</tbody>
@@ -954,6 +959,15 @@ function informeImportacion(inf, { aplicado = false } = {}) {
     ${inf.fotos
       ? `<p class="ayuda" style="margin:8px 0 0">Se cargaron <b>${inf.fotos} fotos</b> del Excel.${
           inf.fotosConservadas ? ` Otras ${inf.fotosConservadas} se dejaron como estaban, porque esos productos ya tenían foto propia.` : ''}</p>`
+      : ''}
+    ${inf.sinFoto?.length
+      ? `<div class="informe-grupo ausente" style="flex-basis:100%">
+          <h4>Quedaron sin foto · ${inf.sinFoto.length}</h4>
+          <ul>${inf.sinFoto.slice(0, 8).map((f) => `<li>${nombre(f)}</li>`).join('')}
+          ${inf.sinFoto.length > 8 ? `<li class="mas">…y ${inf.sinFoto.length - 8} más</li>` : ''}</ul>
+          <p class="ayuda" style="margin:6px 0 0">En el Excel no había una foto anclada a esa fila. Abrí cada
+          producto y subila desde su ficha, o buscala en la web desde ahí mismo.</p>
+        </div>`
       : ''}
     ${inf.duplicadosEnArchivo
       ? `<p class="ayuda" style="margin:8px 0 0">Se ignoraron ${inf.duplicadosEnArchivo} fila(s) repetidas dentro del archivo.</p>`
