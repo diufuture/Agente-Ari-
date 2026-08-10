@@ -258,6 +258,82 @@ comprobar('y conserva el PDF adjunto', db.obtenerPorId('cotizaciones', subida.id
 comprobar('la vista imprimible no se rompe sin renglones',
   imprimir.paginaCotizacion(subida.id).includes('todavía no tiene renglones'), true);
 
+/* 7d · Seguir trabajando sobre una cotización que ya existe ---------- */
+// "Agregale dos cámaras a la cotización de Jimmy" no puede abrir una nueva.
+// La de El Tornillo quedó rechazada al probar el inventario; se reabre, que
+// es como estaría en la vida real cuando el cliente sigue negociando.
+db.actualizar('cotizaciones', cotStock, { estado: 'enviada' });
+const cuantasAntes = db.consultar('cotizaciones', { limite: 300 }).length;
+db.cerrarCotizacionActiva();   // nadie está dictando: se llega por el cliente
+
+const camaras = () => db.consultar('cotizacion_items', { cotizacion_id: cotStock })
+  .filter((i) => i.referencia === 'CC-CAM');
+
+t('agregar_item_cotizacion', { cliente: 'Ferretería El Tornillo', producto: 'CC-CAM', cantidad: 2 });
+comprobar('agregar nombrando al cliente no crea otra cotización',
+  db.consultar('cotizaciones', { limite: 300 }).length, cuantasAntes);
+comprobar('el mismo producto no se repite como renglón nuevo', camaras().length, 1);
+comprobar('le suma la cantidad al que ya estaba', camaras()[0].cantidad, 12);
+
+// Salvo que vaya a otra parte de la casa: ahí sí son renglones distintos
+t('agregar_item_cotizacion', { cliente: 'Ferretería El Tornillo', producto: 'CC-CAM', cantidad: 3, seccion: 'Cocina' });
+comprobar('en otra sección va en su propio renglón', camaras().length, 2);
+comprobar('sin tocar el primero', camaras().find((i) => i.seccion !== 'Cocina').cantidad, 12);
+db.eliminarItem(camaras().find((i) => i.seccion === 'Cocina').id);
+
+// Y cambiar un renglón sin saber su número, nombrándolo como lo diría uno
+db.cerrarCotizacionActiva();
+t('ajustar_item_cotizacion', { cliente: 'Ferretería El Tornillo', producto: 'cámara', cantidad: 4 });
+comprobar('se le cambia la cantidad nombrando el producto',
+  db.consultar('cotizacion_items', { cotizacion_id: cotStock }).find((i) => i.referencia === 'CC-CAM').cantidad, 4);
+
+t('ajustar_item_cotizacion', { cliente: 'Ferretería El Tornillo', producto: 'cámara', porcentaje: 10 });
+comprobar('y se le sube un porcentaje igual',
+  db.consultar('cotizacion_items', { cotizacion_id: cotStock }).find((i) => i.referencia === 'CC-CAM').precio_unitario,
+  Math.round(380000 * 1.1));
+
+// Si lo que nombra no está, lo dice y muestra qué hay
+let noEsta = '';
+try {
+  t('ajustar_item_cotizacion', { cliente: 'Ferretería El Tornillo', producto: 'aire acondicionado' });
+} catch (e) { noEsta = e.message; }
+comprobar('un renglón que no existe se avisa con las opciones',
+  noEsta.includes('No encontré') && noEsta.includes('Renglones:'), true);
+
+/* 7e · Lo aprobado pasa a estar por cobrar --------------------------- */
+// Una cotización aprobada es una venta cerrada: lo que le falte es cobranza,
+// no algo que se esté negociando.
+const antes = db.resumen().contadores;
+const laQueAprobamos = db.insertar('cotizaciones', {
+  titulo: 'Obra aprobada', cliente_id: db.resolverCliente('Sr. Jimmy Forero').id,
+  monto: 5000000, estado: 'enviada',
+});
+comprobar('recién enviada, cuenta como cotizado',
+  db.resumen().contadores.saldoCotizado, antes.saldoCotizado + 5000000);
+comprobar('y todavía no como por cobrar', db.resumen().contadores.porCobrar, antes.porCobrar);
+
+t('actualizar_estado', { entidad: 'cotizaciones', id: laQueAprobamos.id, estado: 'aprobada' });
+const trasAprobar = db.resumen().contadores;
+comprobar('al aprobarla deja de estar en lo cotizado', trasAprobar.saldoCotizado, antes.saldoCotizado);
+comprobar('y pasa a estar por cobrar', trasAprobar.porCobrar, antes.porCobrar + 5000000);
+
+// Aparece en la pantalla de cobros, con su saldo al día
+const enCobros = db.cobrosDeCotizaciones().find((c) => c.id === laQueAprobamos.id);
+comprobar('sale en cobros con lo que falta', enCobros.monto, 5000000);
+comprobar('marcada como que viene de una cotización', enCobros.origen, 'cotizacion');
+
+// Y un abono la baja enseguida, sin tener que tocar nada más
+t('registrar_abono', { cliente: 'Jimmy', cotizacion: 'Obra aprobada', monto: 1500000 });
+comprobar('un abono baja lo que falta cobrar',
+  db.cobrosDeCotizaciones().find((c) => c.id === laQueAprobamos.id).monto, 3500000);
+comprobar('y baja el total por cobrar', db.resumen().contadores.porCobrar, antes.porCobrar + 3500000);
+
+// Saldada, desaparece de por cobrar
+t('registrar_abono', { cliente: 'Jimmy', cotizacion: 'Obra aprobada', monto: 3500000 });
+comprobar('saldada, sale de la lista',
+  db.cobrosDeCotizaciones().some((c) => c.id === laQueAprobamos.id), false);
+comprobar('y el total vuelve a lo de antes', db.resumen().contadores.porCobrar, antes.porCobrar);
+
 /* 8b · Cómo Excel ancla las fotos ----------------------------------- */
 // Cuatro switches, cuatro maneras de pegar la foto en la misma hoja. Es
 // exactamente lo que pasa cuando alguien arma la lista a mano.

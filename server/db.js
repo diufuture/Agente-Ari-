@@ -427,11 +427,20 @@ export function resolverCotizacion(texto, clienteId = null, { soloConSaldo = tru
         sugerencias: abiertas.map((c) => `#${c.id} ${c.titulo}`),
       };
     }
+    // Ninguna abierta, pero puede tener otras. Decir cuáles y en qué estado
+    // evita que se termine creando una cotización nueva sin que nadie la haya
+    // pedido, que es peor que quedarse sin hacer nada.
+    const otras = all(
+      `${selectConCliente('cotizaciones')} WHERE t.cliente_id = ? ORDER BY t.id DESC LIMIT 5`,
+      [clienteId],
+    );
     return {
-      error: soloConSaldo
-        ? 'Ese cliente no tiene cotizaciones con saldo pendiente.'
-        : 'Ese cliente no tiene ninguna cotización abierta. Creá una primero.',
-      sugerencias: [],
+      error: otras.length
+        ? (soloConSaldo
+          ? 'Ese cliente no tiene cotizaciones con saldo pendiente.'
+          : 'Ese cliente no tiene ninguna cotización abierta; las que tiene ya están cerradas.')
+        : 'Ese cliente todavía no tiene ninguna cotización.',
+      sugerencias: otras.map((c) => `#${c.id} ${c.titulo} (${c.estado})`),
     };
   }
 
@@ -925,6 +934,35 @@ export function agregarItem(cotizacionId, datos = {}) {
   const descripcion = String(datos.descripcion ?? base.descripcion ?? '').trim();
   if (!descripcion) throw new Error('El renglón necesita una descripción.');
 
+  const cantidad = Number(datos.cantidad) > 0 ? Number(datos.cantidad) : 1;
+  const precio = datos.precio_unitario !== undefined && datos.precio_unitario !== null
+    ? Number(datos.precio_unitario)
+    : (base.precio_unitario ?? 0);
+  const seccion = datos.seccion ?? base.seccion ?? null;
+  const area = datos.area ?? null;
+
+  // Agregar dos veces el mismo producto suma la cantidad en vez de repetir el
+  // renglón: "agregá dos cámaras… agregá dos cámaras más" son cuatro cámaras,
+  // no dos renglones de dos. Se exige que coincidan también la sección, el
+  // área y el precio, porque ahí sí son cosas distintas: las mismas cámaras
+  // para la cocina van aparte, y un renglón al que ya se le tocó el precio no
+  // puede tragarse unidades nuevas a ese precio sin que nadie lo pida.
+  if (base.producto_id) {
+    const igual = one(
+      `SELECT * FROM cotizacion_items
+        WHERE cotizacion_id = ? AND producto_id = ? AND precio_unitario = ?
+          AND COALESCE(seccion,'') = COALESCE(?,'') AND COALESCE(area,'') = COALESCE(?,'')
+        ORDER BY id DESC LIMIT 1`,
+      [cotizacionId, base.producto_id, precio, seccion, area],
+    );
+    if (igual) {
+      const item = actualizar('cotizacion_items', igual.id, { cantidad: igual.cantidad + cantidad });
+      recalcularCotizacion(cotizacionId);
+      sincronizarInventario(cotizacionId);
+      return { ...item, sumadoA: igual.id, cantidadAnterior: igual.cantidad };
+    }
+  }
+
   const siguiente = one(
     'SELECT COALESCE(MAX(orden), 0) + 1 n FROM cotizacion_items WHERE cotizacion_id = ?',
     [cotizacionId],
@@ -933,23 +971,59 @@ export function agregarItem(cotizacionId, datos = {}) {
   const item = insertar('cotizacion_items', {
     cotizacion_id: cotizacionId,
     producto_id: base.producto_id ?? null,
-    seccion: datos.seccion ?? base.seccion ?? null,
-    area: datos.area ?? null,
+    seccion,
+    area,
     descripcion,
     referencia: datos.referencia ?? base.referencia ?? null,
     marca: datos.marca ?? base.marca ?? null,
     unidad: datos.unidad ?? base.unidad ?? 'UND',
     foto: base.foto ?? null,
-    cantidad: Number(datos.cantidad) > 0 ? Number(datos.cantidad) : 1,
-    precio_unitario: datos.precio_unitario !== undefined && datos.precio_unitario !== null
-      ? Number(datos.precio_unitario)
-      : (base.precio_unitario ?? 0),
+    cantidad,
+    precio_unitario: precio,
     orden: datos.orden ?? siguiente,
   });
 
   recalcularCotizacion(cotizacionId);
   sincronizarInventario(cotizacionId); // si ya estaba aprobada, el renglón nuevo también sale de bodega
   return item;
+}
+
+/**
+ * Encuentra un renglón dentro de una cotización por cómo lo nombra el usuario.
+ *
+ * Al dictar nadie dice "el ítem 47": dice "los interruptores de tres canales".
+ * Se busca por referencia y por descripción, y si hay más de uno que encaja se
+ * devuelven las opciones en vez de elegir por adivinanza.
+ */
+export function resolverItemDeCotizacion(cotizacionId, texto) {
+  const q = String(texto ?? '').trim().toLowerCase();
+  const items = consultar('cotizacion_items', { cotizacion_id: cotizacionId, limite: 300 });
+  if (!items.length) return { error: 'Esa cotización todavía no tiene renglones.' };
+  if (!q) return { error: 'Decime cuál renglón.' };
+
+  const coincide = (i) => `${i.referencia ?? ''} ${i.descripcion ?? ''}`.toLowerCase();
+  let candidatos = items.filter((i) => coincide(i).includes(q));
+
+  // Si nada encaja entero, se prueba palabra por palabra: "interruptores de 3
+  // canales" contra "Interruptor 3 canales".
+  if (!candidatos.length) {
+    const palabras = q.split(/\s+/).filter((p) => p.length > 2);
+    candidatos = items.filter((i) => palabras.every((p) => coincide(i).includes(p)));
+  }
+
+  if (!candidatos.length) {
+    return {
+      error: `No encontré ningún renglón que diga "${texto}".`,
+      sugerencias: items.slice(0, 8).map((i) => i.descripcion.split('\n')[0]),
+    };
+  }
+  if (candidatos.length > 1) {
+    return {
+      error: `Hay ${candidatos.length} renglones que encajan con "${texto}".`,
+      sugerencias: candidatos.slice(0, 8).map((i) => `#${i.id} ${i.descripcion.split('\n')[0]}`),
+    };
+  }
+  return { id: candidatos[0].id, item: candidatos[0] };
 }
 
 export function actualizarItem(itemId, datos = {}) {
@@ -1131,6 +1205,35 @@ export function consultar(entidad, filtros = {}) {
 /* Resumen del dashboard                                               */
 /* ------------------------------------------------------------------ */
 
+/** Lo que falta cobrar de las cotizaciones ya aprobadas. */
+export const saldoAprobadas = () => one(`
+  SELECT COALESCE(SUM(saldo), 0) n FROM (
+    SELECT t.monto - ${SUMA_ABONOS} AS saldo
+    FROM cotizaciones t WHERE t.estado = 'aprobada'
+  ) WHERE saldo > 0`).n;
+
+/**
+ * Las cotizaciones aprobadas a las que todavía les falta plata, con la misma
+ * forma que un cobro, para poder mostrarlas juntas.
+ *
+ * No se crean cobros de verdad al aprobar a propósito: serían una copia del
+ * saldo que quedaría desactualizada apenas se registre un abono. Acá se
+ * calculan en el momento, así que un abono sobre la cotización se ve
+ * enseguida en la pantalla de cobros.
+ */
+export function cobrosDeCotizaciones() {
+  return all(`
+    SELECT t.id, t.cliente_id, c.nombre AS cliente, t.titulo AS concepto,
+           t.vence_en, t.moneda, t.archivo,
+           t.monto - ${SUMA_ABONOS} AS monto,
+           ${SUMA_ABONOS} AS abonado,
+           t.monto AS total
+      FROM cotizaciones t LEFT JOIN clientes c ON c.id = t.cliente_id
+     WHERE t.estado = 'aprobada' AND t.monto > ${SUMA_ABONOS}
+     ORDER BY COALESCE(t.vence_en, '9999') ASC, t.id DESC`)
+    .map((f) => ({ ...f, estado: 'pendiente', origen: 'cotizacion' }));
+}
+
 export function resumen() {
   const d = hoy();
   const contar = (sql, params = []) => one(sql, params).n;
@@ -1143,21 +1246,29 @@ export function resumen() {
     citasHoy: consultar('citas', { rango: 'hoy', estado: 'pendiente' }),
     pendientesHoy: consultar('recordatorios', { rango: 'hoy', estado: 'pendiente' }),
     vencidos: consultar('recordatorios', { rango: 'vencidos', estado: 'pendiente' }),
-    cobrosVencidos: consultar('cobros', { rango: 'vencidos', estado: 'pendiente' }),
+    cobrosVencidos: [
+      ...consultar('cobros', { rango: 'vencidos', estado: 'pendiente' }),
+      ...cobrosDeCotizaciones().filter((c) => c.vence_en && String(c.vence_en).slice(0, 10) < d),
+    ],
     proximasCitas: consultar('citas', { rango: 'proximos', estado: 'pendiente', limite: 8 }),
     contadores: {
       clientes: contar('SELECT COUNT(*) n FROM clientes'),
       citasHoy: contar("SELECT COUNT(*) n FROM citas WHERE substr(inicio,1,10) = ? AND estado='pendiente'", [d]),
       recordatorios: contar("SELECT COUNT(*) n FROM recordatorios WHERE estado='pendiente'"),
       cotizaciones: contar("SELECT COUNT(*) n FROM cotizaciones WHERE estado IN ('pendiente','enviada')"),
-      porCobrar: one(
-        "SELECT COALESCE(SUM(monto),0) n FROM cobros WHERE estado='pendiente'",
-      ).n,
-      // Lo que falta por recibir de las cotizaciones que no fueron rechazadas
+      // Plata que el cliente ya se comprometió a pagar: los cobros sueltos
+      // más el saldo de las cotizaciones aprobadas. Una cotización aprobada
+      // es una venta cerrada, así que lo que falte de ella es cobranza; antes
+      // sólo se miraba la tabla de cobros y por eso una oferta aprobada no
+      // aparecía por ningún lado.
+      porCobrar: one("SELECT COALESCE(SUM(monto),0) n FROM cobros WHERE estado='pendiente'").n
+        + saldoAprobadas(),
+      // Y esto es lo que todavía se está negociando: lo ofertado que aún no
+      // dijeron que sí. Aprobar una cotización la mueve de acá para allá.
       saldoCotizado: one(`
         SELECT COALESCE(SUM(saldo), 0) n FROM (
           SELECT t.monto - ${SUMA_ABONOS} AS saldo
-          FROM cotizaciones t WHERE t.estado <> 'rechazada'
+          FROM cotizaciones t WHERE t.estado IN ('pendiente', 'enviada')
         ) WHERE saldo > 0`).n,
     },
   };

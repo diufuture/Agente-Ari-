@@ -274,6 +274,24 @@ extensión ni lo que diga el navegador, y se sirve con su tipo declarado y
 `nosniff`: algo que se descarga desde el mismo dominio de la aplicación no puede
 ser cualquier cosa con el nombre cambiado. El tope es 12MB.
 
+### Seguir trabajando por voz sobre una que ya existe
+
+«Agregale dos cámaras a la cotización de Jimmy» agrega a **la que Jimmy ya
+tiene abierta**; no abre una nueva. Sólo se crea una cotización nueva cuando se
+pide con todas las letras («hacele una cotización nueva a Jimmy»). Ante la duda
+se agrega a la existente: deshacer un renglón es fácil, una cotización
+duplicada le ensucia el historial al cliente.
+
+Para cambiar algo no hace falta saber ningún número: «cambiale la cantidad de
+los interruptores de tres canales a siete», «subile 10% a la mano de obra»,
+«quitale las cámaras». El renglón se busca por cómo lo nombraste, y si hay más
+de uno que encaja te dice cuáles son en vez de elegir por adivinanza.
+
+Agregar dos veces el mismo producto **suma la cantidad** en vez de repetir el
+renglón. Salvo que vaya a otra sección o a otra área —las mismas cámaras para
+la cocina son otro renglón— o que le hayas tocado el precio a mano, porque ahí
+sí son cosas distintas.
+
 ### Retocar la oferta durante la negociación
 
 Una cotización terminada se sigue editando: se abre desde **Cotizaciones →
@@ -321,6 +339,25 @@ cotización con saldo, Ari sabe a cuál aplicar el abono sin que se lo digas.
 
 Borrar una cotización borra sus abonos; el saldo nunca queda desincronizado
 porque no se guarda: se calcula al leer.
+
+### Cotizado y por cobrar no son lo mismo
+
+Aprobar una cotización la mueve de una columna a la otra:
+
+| | Qué cuenta |
+|---|---|
+| **Saldo cotizado** | Lo que sigue en negociación: cotizaciones pendientes y enviadas |
+| **Por cobrar** | Lo que el cliente ya se comprometió a pagar: los cobros sueltos **más el saldo de las cotizaciones aprobadas** |
+
+Una cotización aprobada es una venta cerrada, así que lo que le falte es
+cobranza. En **Cobros** aparecen las dos cosas juntas, y las que vienen de una
+cotización se marcan como tales y llevan un botón para abrir la ficha y
+registrar el abono.
+
+No se crea un cobro de verdad al aprobar, a propósito: sería una copia del
+saldo que quedaría vieja apenas se registre un abono. Se calcula en el momento,
+así que un abono sobre la cotización baja el «por cobrar» enseguida, y cuando
+queda saldada desaparece sola de la lista.
 
 ## Ficha del cliente
 

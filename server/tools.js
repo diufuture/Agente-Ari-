@@ -130,7 +130,7 @@ export const HERRAMIENTAS = [
   {
     name: 'crear_cotizacion',
     description:
-      'Registra una cotización para un cliente. Úsala para "hazle una cotización a", "cotización de".',
+      'Empieza una cotización NUEVA para un cliente, vacía. Úsala sólo cuando el usuario pide una nueva con todas las letras: "hazle una cotización a Fulano", "armemos otra cotización", "cotización nueva para". NO la uses cuando pide agregar o cambiar algo sobre una cotización que ya existe ("agregale X a la cotización de Fulano") — para eso está agregar_item_cotizacion, que encuentra la que ya tiene abierta.',
     input_schema: {
       type: 'object',
       properties: {
@@ -155,7 +155,7 @@ export const HERRAMIENTAS = [
   {
     name: 'agregar_item_cotizacion',
     description:
-      'Agrega un renglón a la cotización que se está armando. Úsala para "agregá 2 interruptores de dos canales", "ponele 3 cámaras", "sumale mano de obra por 2 millones". SI HAY UNA COTIZACIÓN EN CURSO, no hace falta nombrar al cliente: el renglón va ahí. Sólo pasa "cliente" si el usuario nombra explícitamente otra cotización. Si el producto no está en el catálogo, pasa descripcion y precio_unitario a mano (sirve para mano de obra, obra civil, etc.).',
+      'Agrega un renglón a una cotización que ya existe. Úsala para "agregá 2 interruptores de dos canales", "ponele 3 cámaras", "sumale mano de obra por 2 millones", y también para "agregale esto a la cotización de Fulano". SI HAY UNA COTIZACIÓN EN CURSO, no hace falta nombrar al cliente: el renglón va ahí. Si el usuario nombra un cliente, pasa "cliente" y el renglón va a la cotización abierta de ESE cliente — NO uses crear_cotizacion para eso, que le duplicaría la cotización. Si el producto no está en el catálogo, pasa descripcion y precio_unitario a mano (sirve para mano de obra, obra civil, etc.).',
     input_schema: {
       type: 'object',
       properties: {
@@ -197,11 +197,23 @@ export const HERRAMIENTAS = [
   {
     name: 'ajustar_item_cotizacion',
     description:
-      'Cambia la cantidad o el precio de un renglón que ya está en una cotización, o le aplica un porcentaje. Úsala para "a ese ítem súbele 15%", "ponelo en 300 mil", "cambiá la cantidad a 7", "quitá ese renglón".',
+      'Cambia la cantidad o el precio de un renglón que YA está en una cotización, o le aplica un porcentaje, o lo quita. Úsala para "a ese ítem súbele 15%", "ponelo en 300 mil", "cambiá la cantidad de los interruptores de 3 canales a 7", "quitá ese renglón". Para decir cuál renglón es, lo normal es pasar "producto" con el nombre que usó el usuario (y "cliente" si nombró otra cotización); el item_id sólo si ya lo sabes.',
     input_schema: {
       type: 'object',
       properties: {
-        item_id: { type: 'integer', description: 'ID del renglón. Si no lo sabes, consulta primero los ítems de la cotización.' },
+        producto: {
+          type: 'string',
+          description: 'Cómo nombró el usuario el renglón: "los interruptores de 3 canales", "la mano de obra", una referencia. Se busca dentro de la cotización.',
+        },
+        cliente: {
+          ...clienteProp,
+          description: 'Sólo si el usuario nombra un cliente distinto al de la cotización en curso.',
+        },
+        cotizacion: {
+          type: 'string',
+          description: 'Número o parte del título, si el usuario nombra una cotización puntual.',
+        },
+        item_id: { type: 'integer', description: 'ID del renglón, si ya lo conoces. Si no, usa "producto".' },
         cantidad: { type: 'number' },
         precio_unitario: { type: 'number', description: 'Precio nuevo, si el usuario dicta un número exacto.' },
         porcentaje: {
@@ -210,7 +222,7 @@ export const HERRAMIENTAS = [
         },
         eliminar: { type: 'boolean', description: 'true para quitar el renglón de la cotización.' },
       },
-      required: ['item_id'],
+      required: [],
     },
   },
   {
@@ -584,11 +596,25 @@ export function ejecutar(nombre, args) {
     }
 
     case 'ajustar_item_cotizacion': {
-      const item = db.obtenerPorId('cotizacion_items', args.item_id);
-      if (!item) throw new Error(`No existe ningún renglón con id ${args.item_id}.`);
+      // Se puede llegar al renglón por su id o —lo normal al dictar— por cómo
+      // lo nombró el usuario dentro de la cotización de la que se está
+      // hablando. Nadie dice "el ítem 47".
+      let item;
+      if (args.item_id) {
+        item = db.obtenerPorId('cotizacion_items', args.item_id);
+        if (!item) throw new Error(`No existe ningún renglón con id ${args.item_id}.`);
+      } else {
+        const q = cotizacionEnCurso(args);
+        const r = db.resolverItemDeCotizacion(q.id, args.producto ?? args.descripcion ?? '');
+        if (r.error) {
+          const sug = r.sugerencias?.length ? ` Renglones: ${r.sugerencias.join('; ')}.` : '';
+          throw new Error(`${r.error}${sug}`);
+        }
+        item = r.item;
+      }
 
       if (args.eliminar) {
-        db.eliminarItem(args.item_id);
+        db.eliminarItem(item.id);
       } else {
         const cambios = {};
         if (args.cantidad !== undefined) cambios.cantidad = Number(args.cantidad);
@@ -597,7 +623,7 @@ export function ejecutar(nombre, args) {
           cambios.precio_unitario = Math.round(item.precio_unitario * (1 + Number(args.porcentaje) / 100));
         }
         if (!Object.keys(cambios).length) throw new Error('No dijiste qué cambiarle al renglón.');
-        db.actualizarItem(args.item_id, cambios);
+        db.actualizarItem(item.id, cambios);
       }
 
       const cot = db.obtenerPorId('cotizaciones', item.cotizacion_id);

@@ -1293,6 +1293,22 @@ async function pintar() {
 
   if (!CONSULTAS) { contenedor.innerHTML = '<div class="vacio">Vista desconocida.</div>'; return; }
 
+  // Los cobros se muestran junto al saldo de las cotizaciones aprobadas: una
+  // oferta aprobada es una venta cerrada, y lo que falte de ella es cobranza.
+  if (v === 'cobros') {
+    contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
+    try {
+      const [{ filas: pendientes, total }, { filas: todos }] = await Promise.all([
+        api('/cobros/pendientes'),
+        api('/cobros'),
+      ]);
+      contenedor.innerHTML = vistaCobros(pendientes, total, todos.filter((c) => c.estado !== 'pendiente'));
+    } catch (e) {
+      contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
+    }
+    return;
+  }
+
   contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
   try {
     const { filas } = await api(`/${CONSULTAS.entidad}?${CONSULTAS.filtros}`);
@@ -1301,6 +1317,52 @@ async function pintar() {
   } catch (e) {
     contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
   }
+}
+
+/** Lo que está por cobrar, venga de un cobro suelto o de una oferta aprobada. */
+function vistaCobros(pendientes, total, cerrados) {
+  const hoyStr = new Date().toLocaleDateString('sv-SE');
+
+  const filas = pendientes.map((c) => {
+    const vencido = c.vence_en && String(c.vence_en).slice(0, 10) < hoyStr;
+    return `<tr>
+      <td data-rotulo="Vence" class="${vencido ? 'vencido' : ''}">${
+        c.vence_en ? escapar(fmtFecha(String(c.vence_en).slice(0, 10))) : '—'}</td>
+      <td data-rotulo="Concepto" class="principal-col">
+        ${escapar(c.concepto || 'Cobro')}
+        ${c.origen === 'cotizacion'
+          ? `<em class="de-cotizacion">Cotización #${c.id} aprobada${
+              c.abonado ? ` · abonado ${fmtDinero(c.abonado, c.moneda)} de ${fmtDinero(c.total, c.moneda)}` : ''}</em>`
+          : ''}
+      </td>
+      <td data-rotulo="Cliente">${escapar(c.cliente || '—')}</td>
+      <td data-rotulo="Falta" class="num">${fmtDinero(c.monto, c.moneda)}</td>
+      <td class="num acciones"><div class="acciones-fila">
+        ${c.origen === 'cotizacion'
+          ? `<button class="mini destacado" data-accion="abrir-cotizacion" data-id="${c.id}">Abrir y abonar</button>`
+          : `<button class="mini" data-accion="estado" data-entidad="cobros" data-id="${c.id}" data-estado="pagado">Pagado</button>
+             <button class="mini peligro" data-accion="borrar" data-entidad="cobros" data-id="${c.id}">Borrar</button>`}
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  const lista = pendientes.length
+    ? `<div class="tarjeta"><div class="tabla-envoltura"><table>
+        <thead><tr><th>Vence</th><th>Concepto</th><th>Cliente</th><th class="num">Falta</th><th></th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table></div></div>`
+    : `<div class="tarjeta"><div class="vacio">
+        <strong>Nada por cobrar</strong>Las cotizaciones que apruebes aparecen acá con su saldo, sin tener que cargarlas de nuevo.
+      </div></div>`;
+
+  return `
+    <div class="metricas">
+      ${metrica(fmtDinero(total), 'Total por cobrar', 'dinero')}
+      ${metrica(pendientes.filter((c) => c.origen === 'cotizacion').length, 'Cotizaciones aprobadas')}
+      ${metrica(pendientes.filter((c) => c.origen === 'cobro').length, 'Cobros sueltos')}
+    </div>
+    ${bloque(`Por cobrar · ${pendientes.length}`, lista)}
+    ${cerrados.length ? bloque('Ya cobrados', tabla('cobros', ['vence_en', 'concepto', 'cliente', 'monto', 'estado'], cerrados, { compacta: true })) : ''}`;
 }
 
 /**

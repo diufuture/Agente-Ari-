@@ -1131,3 +1131,10 @@ a.mini { text-decoration: none; display: inline-flex; align-items: center; }
   background: var(--panel-alto); border: 1px dashed var(--borde); border-radius: 10px;
   padding: 12px; font-size: 13px; color: var(--texto-2); width: 100%;
 }
+
+/* Cobros que en realidad son el saldo de una cotización aprobada */
+.de-cotizacion {
+  display: block; font-style: normal; font-size: 11.5px;
+  color: var(--texto-3); margin-top: 3px;
+}
+td.vencido { color: var(--alerta); font-weight: 600; }

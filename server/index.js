@@ -335,6 +335,20 @@ async function api(req, res, url) {
     }
   }
 
+  // GET /api/cobros/pendientes -> todo lo que está por cobrar en un solo lugar:
+  // los cobros sueltos y el saldo de las cotizaciones aprobadas, que son una
+  // venta cerrada aunque no se haya hecho un cobro aparte.
+  if (recurso === 'cobros' && partes[1] === 'pendientes' && req.method === 'GET') {
+    const sueltos = db.consultar('cobros', { estado: 'pendiente', limite: 300 })
+      .map((c) => ({ ...c, origen: 'cobro' }));
+    const deCotizaciones = db.cobrosDeCotizaciones();
+    return json(res, 200, {
+      filas: [...sueltos, ...deCotizaciones]
+        .sort((a, b) => String(a.vence_en || '9999').localeCompare(String(b.vence_en || '9999'))),
+      total: [...sueltos, ...deCotizaciones].reduce((s, c) => s + (Number(c.monto) || 0), 0),
+    });
+  }
+
   // GET|PATCH /api/ajustes -> datos de la empresa que van en las impresiones
   if (recurso === 'ajustes') {
     if (req.method === 'GET') return json(res, 200, db.leerAjustes());

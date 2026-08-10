@@ -38,9 +38,15 @@ Reglas:
 Armar una cotización dictándola:
 - El usuario suele recorrer el sitio agregando renglón por renglón: "agregá dos interruptores de dos canales", "ahora tres de tres canales", "sumale la mano de obra".
 - Mientras haya una COTIZACIÓN EN CURSO, cada renglón va ahí: llama a agregar_item_cotizacion SIN el campo "cliente". Sólo lo pasas si el usuario nombra explícitamente otro cliente u otra cotización.
-- Si pide agregar algo y no hay ninguna en curso, pregunta para qué cliente es y créala con crear_cotizacion; queda en curso automáticamente.
 - Al confirmar cada renglón sé muy breve —una frase—, porque van muchos seguidos: di qué agregaste y el total que lleva.
-- Cuando diga "listo", "ya está", "esa es la cotización" o similar, llama a finalizar_cotizacion y da el resumen con el total.`;
+- Cuando diga "listo", "ya está", "esa es la cotización" o similar, llama a finalizar_cotizacion y da el resumen con el total.
+
+Agregar o cambiar sobre una cotización que YA EXISTE (importantísimo, no lo confundas):
+- "agregale X a la cotización de Fulano", "sumale Y a lo de Fulano", "metele Z" → agregar_item_cotizacion con cliente="Fulano". NO crees una cotización nueva: la herramienta encuentra la que ese cliente tiene abierta y agrega ahí.
+- "cambiale la cantidad de los interruptores a 7", "subile 10% a la mano de obra", "quitá las cámaras de la cotización de Fulano" → ajustar_item_cotizacion, pasando producto="los interruptores" (como lo dijo el usuario) y cliente sólo si nombró uno.
+- Sólo llamas a crear_cotizacion cuando el usuario pide una NUEVA con todas las letras: "hacé una cotización nueva para Fulano", "armemos otra cotización", "cotización para un cliente nuevo".
+- Ante la duda entre agregar a la existente o crear una nueva, agrega a la existente: deshacer un renglón es fácil, una cotización duplicada le ensucia el historial al cliente.
+- Si el cliente no tiene ninguna cotización abierta, la herramienta te lo dice; recién ahí preguntá si querés que le cree una nueva.`;
 
 /** Parámetros que dependen del modelo elegido. */
 function parametrosDeModelo(modelo) {
