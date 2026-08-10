@@ -22,6 +22,7 @@ const estado = {
   subiendoFotoPara: null,  // id del producto al que se le está por asignar una foto
   itemEditando: null,      // id del renglón de cotización abierto para editar
   nuevoCliente: false,     // el formulario de alta manual de cliente está abierto
+  citaEditando: null,      // id de la cita abierta para editar en la agenda
   tipoProducto: null,      // filtro del catálogo por tipo (Display, Switch EU…)
   tiposConocidos: [],      // los tipos ya usados, para sugerirlos al editar
   subiendoFichaPara: null, // id del producto al que se le va a adjuntar la ficha
@@ -317,6 +318,56 @@ function lineaTiempo(citas) {
     </div>`).join('')}</div></div>`;
 }
 
+/**
+ * La agenda, como fichas y no como tabla.
+ *
+ * El detalle de una reunión —qué hay que llevar, qué se va a tratar— es lo
+ * más importante que tiene, y en una celda de tabla salía cortado a los
+ * cuarenta y pico de caracteres. Acá va entero, con sus saltos de línea, que
+ * es como se dictó.
+ */
+function vistaAgenda(citas) {
+  if (!citas.length) {
+    return `<div class="tarjeta"><div class="vacio">
+      <strong>Agenda libre</strong>Pedísela a Ari por voz: «agendame mañana a las 3 visita a El Tornillo».
+    </div></div>`;
+  }
+
+  const hoyStr = new Date().toLocaleDateString('sv-SE');
+
+  return citas.map((c) => {
+    const dia = String(c.inicio || '').slice(0, 10);
+    const hora = String(c.inicio || '').split('T')[1]?.slice(0, 5) || '';
+    const esHoy = dia === hoyStr;
+
+    if (c.id === estado.citaEditando) {
+      return `<div class="cita-ficha editando">${formularioEdicion('citas', c)}</div>`;
+    }
+
+    return `<div class="cita-ficha${esHoy ? ' es-hoy' : ''}">
+      <div class="cita-cuando">
+        <strong>${escapar(esHoy ? 'Hoy' : fmtFecha(dia))}</strong>
+        <span>${escapar(hora)}</span>
+      </div>
+      <div class="cita-cuerpo">
+        <h3>${escapar(c.titulo)}</h3>
+        <p class="cita-quien">${escapar([c.cliente, c.lugar].filter(Boolean).join(' · ') || 'Sin cliente ni lugar')}</p>
+        ${c.notas
+          ? `<div class="cita-detalle">${escapar(c.notas)}</div>`
+          : '<p class="cita-sin-detalle">Sin detalle. Decile a Ari «agregale a esta reunión que…» o tocá Editar.</p>'}
+      </div>
+      <div class="cita-acciones">
+        <span class="pastilla ${escapar(c.estado)}">${escapar(c.estado)}</span>
+        <button class="mini destacado" data-accion="editar-cita" data-id="${c.id}">Editar</button>
+        ${c.estado === 'pendiente'
+          ? `<button class="mini" data-accion="estado" data-entidad="citas" data-id="${c.id}" data-estado="completada">Listo</button>`
+          : ''}
+        <button class="mini peligro" data-accion="borrar" data-entidad="citas" data-id="${c.id}">Borrar</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 /* ─────────── Renglones de una cotización ─────────── */
 
 /** La tabla de ítems, agrupada por sección como en el formato impreso. */
@@ -600,7 +651,7 @@ const CAMPOS = {
     { n: 'lugar', e: 'Lugar' },
     { n: 'estado', e: 'Estado', opciones: ['pendiente', 'completada', 'cancelada'] },
     // De qué se trata y qué hay que llevar. Es lo que se va agregando por voz.
-    { n: 'notas', e: 'Detalle — de qué se trata, qué hay que llevar', area: true, ancho: true },
+    { n: 'notas', e: 'Detalle — de qué se trata, qué hay que llevar', area: true, ancho: true, filas: 5 },
   ],
   recordatorios: [
     { n: 'texto', e: 'Qué hay que hacer', req: true, area: true, ancho: true },
@@ -669,7 +720,7 @@ function formularioEdicion(entidad, fila) {
       ? `<select name="${c.n}">${c.opciones
           .map((o) => `<option value="${o}"${o === valor ? ' selected' : ''}>${o}</option>`).join('')}</select>`
       : c.area
-        ? `<textarea name="${c.n}" rows="2">${escapar(valor)}</textarea>`
+        ? `<textarea name="${c.n}" rows="${c.filas || 2}">${escapar(valor)}</textarea>`
         : `<input name="${c.n}" type="${c.tipo || 'text'}" value="${escapar(valor)}"${
             c.lista ? ` list="${c.lista}"` : ''}${c.req ? ' required' : ''} />`;
     return `<label class="${c.ancho ? 'ancho' : ''}"><span>${c.e}</span>${control}</label>`;
@@ -1327,7 +1378,7 @@ async function pintar() {
       if (estado.verDescontinuados) filtros.set('incluir_inactivos', '1');
       if (estado.tipoProducto) filtros.set('tipo', estado.tipoProducto);
       filtros.set('limite', '300');
-      const [{ filas }, { filas: todos }, { tipos }] = await Promise.all([
+      const [{ filas }, { filas: todos }, { tipos, sinTipo }] = await Promise.all([
         api(`/productos?${filtros}`),
         api('/productos?incluir_inactivos=1&limite=300'),
         api('/productos/tipos'),
@@ -1349,10 +1400,14 @@ async function pintar() {
 
       // Los tipos que ya se usaron, como filtros de un toque: es lo que sirve
       // cuando hay que mostrarle algo puntual a un cliente en el momento.
-      const filtrosTipo = tipos.length ? `<div class="filtros-tipo">
-        <button class="chip${estado.tipoProducto ? '' : ' activo'}" data-accion="filtrar-tipo" data-tipo="">Todos</button>
+      const filtrosTipo = (tipos.length || sinTipo?.n) ? `<div class="filtros-tipo">
+        ${tipos.length ? `<button class="chip${estado.tipoProducto ? '' : ' activo'}" data-accion="filtrar-tipo" data-tipo="">Todos</button>` : ''}
         ${tipos.map((t) => `<button class="chip${estado.tipoProducto === t.tipo ? ' activo' : ''}"
           data-accion="filtrar-tipo" data-tipo="${escapar(t.tipo)}">${escapar(t.tipo)} <em>${t.n}</em></button>`).join('')}
+        ${sinTipo?.conCategoria
+          ? `<button class="chip agrupar" data-accion="agrupar-por-categoria"
+               title="Les pone como tipo el nombre de la pestaña con la que se importaron">↳ Agrupar ${sinTipo.conCategoria} sin tipo</button>`
+          : ''}
       </div>` : '';
 
       contenedor.innerHTML = barra
@@ -1390,6 +1445,18 @@ async function pintar() {
   }[v];
 
   if (!CONSULTAS) { contenedor.innerHTML = '<div class="vacio">Vista desconocida.</div>'; return; }
+
+  // La agenda va como fichas: el detalle de una reunión no entra en una celda.
+  if (v === 'agenda') {
+    contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
+    try {
+      const { filas } = await api('/citas?rango=proximos&limite=100');
+      contenedor.innerHTML = vistaAgenda(filas);
+    } catch (e) {
+      contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
+    }
+    return;
+  }
 
   // Los cobros se muestran junto al saldo de las cotizaciones aprobadas: una
   // oferta aprobada es una venta cerrada, y lo que falte de ella es cobranza.
@@ -2040,6 +2107,28 @@ $('#contenido').addEventListener('click', async (e) => {
     $('#input-logo').click();
     return;
   }
+  if (accion === 'editar-cita') {
+    estado.citaEditando = estado.citaEditando === Number(id) ? null : Number(id);
+    await pintar();
+    $(`#form-editar input[name="titulo"]`)?.focus();
+    return;
+  }
+  if (accion === 'agrupar-por-categoria') {
+    const boton = e.target.closest('[data-accion]');
+    boton.disabled = true;
+    boton.textContent = 'Agrupando…';
+    try {
+      const { etiquetados } = await api('/productos/tipos', { method: 'POST' });
+      avisar(etiquetados
+        ? `${etiquetados} productos agrupados por el nombre de su pestaña.`
+        : 'No había ninguno para agrupar.');
+      await pintar();
+    } catch (err) {
+      boton.disabled = false;
+      avisar(err.message, true);
+    }
+    return;
+  }
   if (accion === 'filtrar-tipo') {
     const t = e.target.closest('[data-accion]').dataset.tipo;
     estado.tipoProducto = t || null;
@@ -2414,6 +2503,7 @@ $('#contenido').addEventListener('submit', async (e) => {
         }
       }
       estado.editando = false;
+      estado.citaEditando = null;
       avisar('Datos actualizados ✓');
       await refrescarResumen();
       await pintar();

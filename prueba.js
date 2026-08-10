@@ -354,6 +354,25 @@ comprobar('y también a los nuevos de esa hoja',
   db.consultar('productos', { texto: 'NUEVO-1' })[0].tipo, 'Switch EU');
 db.eliminar('productos', db.consultar('productos', { texto: 'NUEVO-1' })[0].id);
 
+// Los que ya estaban cargados de antes se agrupan de una, sin reimportar: al
+// importar la categoría se llenó con el nombre de la pestaña, así que ese
+// nombre ya está guardado y alcanza con copiarlo al tipo.
+db.actualizar('productos', db.consultar('productos', { texto: 'G7-2' })[0].id, { tipo: null });
+const antesDeAgrupar = db.productosSinTipo().conCategoria;
+comprobar('sabe cuántos se pueden agrupar', antesDeAgrupar > 0, true);
+db.etiquetarTipoDesdeCategoria();
+comprobar('agrupar les pone el nombre de su pestaña',
+  db.consultar('productos', { texto: 'G7-2' })[0].tipo, 'Interruptores');
+comprobar('y ya no quedan sin agrupar', db.productosSinTipo().conCategoria, 0);
+
+// Pero no pisa uno puesto a mano
+db.actualizar('productos', db.consultar('productos', { texto: 'CC-CAM' })[0].id, { tipo: 'Cámara IP' });
+db.etiquetarTipoDesdeCategoria();
+comprobar('un tipo puesto a mano no se pisa',
+  db.consultar('productos', { texto: 'CC-CAM' })[0].tipo, 'Cámara IP');
+
+db.actualizar('productos', db.consultar('productos', { texto: 'G7-2' })[0].id, { tipo: 'Switch EU' });
+db.actualizar('productos', db.consultar('productos', { texto: 'CC-CAM' })[0].id, { tipo: 'Cámara' });
 comprobar('filtra por tipo', db.consultar('productos', { tipo: 'Switch EU' }).length, 2);
 comprobar('el filtro no distingue mayúsculas', db.consultar('productos', { tipo: 'switch eu' }).length, 2);
 comprobar('los tipos usados salen con su conteo',

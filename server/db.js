@@ -562,6 +562,30 @@ export const categoriasProductos = () =>
  * tope de 100 de `consultar`: el gestor de fotos necesita verlas todas para
  * poder achicar las que quedaron pesadas.
  */
+/**
+ * Etiqueta con su categoría a los productos que todavía no tienen tipo.
+ *
+ * Los que ya estaban cargados no se etiquetan solos: el tipo se aplica cuando
+ * se vuelve a importar la hoja. Pero al importar, la categoría se llena con el
+ * nombre de la pestaña, así que ese nombre ya está guardado en cada producto y
+ * alcanza con copiarlo. Así el catálogo entero queda agrupado sin tener que
+ * volver a subir nada.
+ *
+ * Sólo toca los que están sin tipo: uno puesto a mano no se pisa.
+ */
+export function etiquetarTipoDesdeCategoria() {
+  const r = run(`UPDATE productos SET tipo = categoria
+                  WHERE (tipo IS NULL OR tipo = '')
+                    AND categoria IS NOT NULL AND categoria <> ''`);
+  return r.changes;
+}
+
+/** Cuántos productos activos siguen sin tipo, y cuántos se podrían etiquetar. */
+export const productosSinTipo = () => one(`
+  SELECT COUNT(*) AS n,
+         COALESCE(SUM(CASE WHEN categoria IS NOT NULL AND categoria <> '' THEN 1 ELSE 0 END), 0) AS conCategoria
+    FROM productos WHERE activo = 1 AND (tipo IS NULL OR tipo = '')`);
+
 /** Los tipos que ya se usaron, para ofrecerlos en vez de reescribirlos. */
 export const tiposProductos = () =>
   all(`SELECT tipo, COUNT(*) AS n FROM productos

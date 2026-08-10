@@ -1165,3 +1165,47 @@ td.vencido { color: var(--alerta); font-weight: 600; }
   border: 1px solid var(--borde); background: var(--panel-alto); display: block;
 }
 .mini-foto.vacia { border-style: dashed; }
+
+/* ─────────── Agenda: cada cita, una ficha ─────────── */
+
+.cita-ficha {
+  display: flex; gap: 18px; align-items: flex-start;
+  background: var(--panel); border: 1px solid var(--borde);
+  border-radius: var(--radio); padding: 16px 18px; margin-bottom: 12px;
+}
+.cita-ficha.es-hoy { border-color: color-mix(in srgb, var(--acento) 45%, var(--borde)); }
+.cita-ficha.editando { display: block; padding: 0; }
+.cita-ficha.editando .tarjeta { border: none; margin: 0 !important; background: none; }
+
+.cita-cuando {
+  width: 86px; flex-shrink: 0; text-align: center;
+  padding: 8px 0; border-radius: 11px; background: var(--panel-alto);
+}
+.cita-cuando strong { display: block; font-size: 13px; }
+.cita-cuando span { display: block; font-size: 18px; font-weight: 700; letter-spacing: -.5px; margin-top: 2px; }
+.cita-ficha.es-hoy .cita-cuando { background: color-mix(in srgb, var(--acento) 16%, transparent); }
+
+.cita-cuerpo { flex: 1; min-width: 0; }
+.cita-cuerpo h3 { margin: 0; font-size: 16px; letter-spacing: -.2px; }
+.cita-quien { margin: 3px 0 0; font-size: 13px; color: var(--texto-2); }
+
+/* El detalle entero, con sus saltos de línea: es lo que hay que hacer. */
+.cita-detalle {
+  margin-top: 10px; padding: 10px 13px; border-radius: 10px;
+  background: var(--panel-alto); border-left: 3px solid var(--acento);
+  font-size: 13.5px; line-height: 1.55; white-space: pre-line; overflow-wrap: anywhere;
+}
+.cita-sin-detalle { margin: 8px 0 0; font-size: 12.5px; color: var(--texto-3); font-style: italic; }
+
+.cita-acciones {
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-end; flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .cita-ficha { flex-wrap: wrap; gap: 12px; }
+  .cita-cuando { width: auto; display: flex; gap: 8px; align-items: baseline; padding: 6px 12px; }
+  .cita-cuerpo { flex-basis: 100%; order: 3; }
+  .cita-acciones { flex-direction: row; flex-wrap: wrap; margin-left: auto; }
+}
+.chip.agrupar { border-style: dashed; color: var(--ambar); border-color: color-mix(in srgb, var(--ambar) 45%, var(--borde)); }
+.chip.agrupar:hover { border-color: var(--ambar); color: var(--ambar); }

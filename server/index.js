@@ -642,7 +642,13 @@ async function api(req, res, url) {
   // GET /api/productos/tipos -> las etiquetas ya usadas, con cuántos hay de
   // cada una, para armar los filtros del catálogo.
   if (recurso === 'productos' && partes[1] === 'tipos' && req.method === 'GET') {
-    return json(res, 200, { tipos: db.tiposProductos() });
+    return json(res, 200, { tipos: db.tiposProductos(), sinTipo: db.productosSinTipo() });
+  }
+
+  // POST /api/productos/tipos -> etiqueta de una vez a los que están sin tipo,
+  // usando su categoría, que al importar se llenó con el nombre de la pestaña.
+  if (recurso === 'productos' && partes[1] === 'tipos' && req.method === 'POST') {
+    return json(res, 200, { etiquetados: db.etiquetarTipoDesdeCategoria() });
   }
 
   // POST|DELETE /api/productos/:id/ficha -> la ficha técnica del fabricante.
