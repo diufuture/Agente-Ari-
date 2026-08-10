@@ -246,6 +246,7 @@ async function sincronizarLista(lista, { simular = false } = {}) {
   }
 
   const informe = db.conciliarProductos(lista.categoria || null, productos, {
+    tipo: lista.tipo || null,
     manejaInventario: Boolean(lista.manejaInventario),
     descontinuarAusentes: Boolean(lista.descontinuarAusentes),
     simular,
@@ -591,11 +592,12 @@ async function api(req, res, url) {
   // `simular: true` sólo informa qué pasaría, sin tocar nada: así el usuario
   // ve qué se va a actualizar antes de aceptarlo.
   if (recurso === 'productos' && partes[1] === 'importar' && req.method === 'POST') {
-    const { categoria, filas, maneja_inventario, descontinuar_ausentes, simular,
+    const { categoria, tipo, filas, maneja_inventario, descontinuar_ausentes, simular,
       archivo_base64, hoja, traer_fotos } = await leerJson(req, 25_000_000);
     if (!Array.isArray(filas)) return json(res, 400, { error: 'Faltan las filas a importar.' });
     try {
       const informe = db.conciliarProductos(categoria || null, filas, {
+        tipo: tipo || null,
         manejaInventario: Boolean(maneja_inventario),
         descontinuarAusentes: Boolean(descontinuar_ausentes),
         simular: Boolean(simular),

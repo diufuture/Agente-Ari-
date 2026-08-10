@@ -1008,6 +1008,7 @@ function tarjetaHojaImportacion(hoja, indice) {
     <div class="tarjeta import-hoja" data-hoja="${indice}">
       <div class="import-hoja-cab">
         <label><span>Categoría</span><input type="text" class="import-categoria" value="${escapar(hoja.nombre)}" /></label>
+        <label><span>Tipo (de la pestaña)</span><input type="text" class="import-tipo" value="${escapar(hoja.nombre)}" /></label>
         <label class="check"><input type="checkbox" class="import-inventario" /> Son productos propios de Clic Control (llevar inventario)</label>
         <label class="check"><input type="checkbox" class="import-descontinuar" /> Descontinuar los que ya no vengan en la lista</label>
         ${hoja.conImagenes ? `<label class="check"><input type="checkbox" class="import-fotos" checked /> Traer las fotos del Excel (${hoja.conImagenes})</label>` : ''}
@@ -1146,6 +1147,8 @@ function vistaListas(listas, prueba) {
           <input name="nombre" type="text" required value="${escapar(prueba.hoja || 'Lista oficial')}" /></label>
         <label><span>Categoría de los productos</span>
           <input name="categoria" type="text" value="${escapar(prueba.hoja || '')}" /></label>
+        <label><span>Tipo (para agrupar y filtrar)</span>
+          <input name="tipo" type="text" value="${escapar(prueba.hoja || '')}" /></label>
         <label class="ancho check"><input name="manejaInventario" type="checkbox" value="1" />
           Son productos propios de Clic Control (llevar inventario)</label>
         <div class="form-acciones">
@@ -1646,7 +1649,7 @@ async function enviar(texto) {
     // poder seguir dictando renglones sin volver a tocar el teléfono.
     hablar(r.respuesta, () => {
       if (manosLibres() && VOZ_DISPONIBLE && !escuchando) {
-        setTimeout(() => { if (manosLibres() && !escuchando) alternarMicrofono(); }, 400);
+        setTimeout(() => { if (manosLibres() && !escuchando && !arrancando) alternarMicrofono(); }, 400);
       }
     });
 
@@ -1735,6 +1738,13 @@ const PISTA_INICIAL = !VOZ_DISPONIBLE
 
 let reconocedor = null;
 let escuchando = false;
+// Entre que se pide el micrófono y el navegador lo abre pasa un rato. Sin
+// marcarlo, dos toques seguidos disparan dos arranques y el segundo aborta al
+// primero.
+let arrancando = false;
+// Si el navegador nunca avisa que arrancó —o que terminó—, el estado queda
+// trabado y el botón deja de responder. Este temporizador lo destraba.
+let vigilante = null;
 
 // Manos libres: cuántos silencios seguidos se toleran antes de apagarlo solo.
 const MAX_SILENCIOS = 3;
@@ -1771,6 +1781,8 @@ function iniciarVoz() {
 
   reconocedor.onstart = () => {
     escuchando = true;
+    arrancando = false;
+    clearTimeout(vigilante);
     acumulado = '';
     marcarGrabando(true);
     $('#pista').textContent = 'Escuchando… hablá con naturalidad.';
@@ -1791,7 +1803,21 @@ function iniciarVoz() {
     // otra—, así que no interrumpe ni abre la hoja: se sigue escuchando.
     if (e.error === 'no-speech' && manosLibres()) return;
 
+    // "aborted" no es un problema del usuario: es lo que dice el navegador
+    // cuando una sesión de dictado se corta para empezar otra. Pasa siempre
+    // que se vuelve a tocar el micrófono enseguida, sobre todo en el celular.
+    // Mostrarlo como error dejaba el aviso pegado y parecía que se había roto.
+    if (e.error === 'aborted') {
+      escuchando = false;
+      arrancando = false;
+      marcarGrabando(false);
+      return;
+    }
+
     ultimoErrorVoz = e.error;
+    escuchando = false;
+    arrancando = false;
+    marcarGrabando(false);
     abrirHoja(); // que el aviso sea visible aunque la hoja estuviera cerrada
     $('#pista').textContent = {
       'not-allowed': 'Necesito permiso para usar el micrófono.',
@@ -1803,6 +1829,8 @@ function iniciarVoz() {
 
   reconocedor.onend = () => {
     escuchando = false;
+    arrancando = false;
+    clearTimeout(vigilante);
     marcarGrabando(false);
     const texto = $('#texto').value.trim();
 
@@ -1820,7 +1848,7 @@ function iniciarVoz() {
       silenciosSeguidos += 1;
       if (silenciosSeguidos <= MAX_SILENCIOS) {
         $('#pista').textContent = 'Escuchando… decime el siguiente ítem.';
-        setTimeout(() => { if (manosLibres() && !escuchando) alternarMicrofono(); }, 300);
+        setTimeout(() => { if (manosLibres() && !escuchando && !arrancando) alternarMicrofono(); }, 300);
         return;
       }
       $('#manos-libres').checked = false;
@@ -1858,11 +1886,81 @@ function alternarMicrofono() {
     return;
   }
   if (!reconocedor) return;
-  if (escuchando) reconocedor.stop();
-  else {
-    speechSynthesis.cancel();
-    try { reconocedor.start(); } catch { /* ya estaba activo */ }
+
+  if (escuchando) {
+    detenerMicrofono();
+    return;
   }
+  if (arrancando) return; // ya se pidió; dos toques seguidos se abortan entre sí
+
+  // Tocar el micrófono es empezar de nuevo: lo que haya fallado antes no
+  // tiene por qué seguir estorbando.
+  ultimoErrorVoz = null;
+  empezarAEscuchar();
+}
+
+/**
+ * Abre el micrófono, con paciencia.
+ *
+ * El navegador no suelta el reconocedor en el instante en que termina una
+ * sesión, y menos en el celular. Pedirle que arranque cuando todavía está
+ * ocupado tira un error; antes ese error se tragaba en silencio y el botón
+ * quedaba muerto —había que seguir a mano—. Ahora se lo aborta y se reintenta
+ * un par de veces, que es todo lo que hacía falta.
+ *
+ * También se le da un respiro a la voz de Ari: cortar el audio de la respuesta
+ * y abrir el micrófono en el mismo suspiro hace que la sesión nazca abortada.
+ */
+function empezarAEscuchar(intento = 0) {
+  if (!reconocedor || escuchando) return;
+
+  arrancando = true;
+  if (intento === 0) speechSynthesis.cancel();
+
+  setTimeout(() => {
+    if (escuchando) { arrancando = false; return; }
+    try {
+      reconocedor.start();
+    } catch {
+      // Sigue ocupado: se lo suelta a la fuerza y se prueba otra vez.
+      if (intento < 2) {
+        try { reconocedor.abort(); } catch { /* ya estaba suelto */ }
+        setTimeout(() => empezarAEscuchar(intento + 1), 220);
+        return;
+      }
+      arrancando = false;
+      marcarGrabando(false);
+      $('#pista').textContent = 'El micrófono quedó ocupado un momento. Tocalo de nuevo.';
+      return;
+    }
+
+    // Si el navegador no avisa que arrancó, se destraba solo: sin esto el
+    // botón queda sin responder hasta recargar la página.
+    clearTimeout(vigilante);
+    vigilante = setTimeout(() => {
+      if (!escuchando) {
+        arrancando = false;
+        marcarGrabando(false);
+        try { reconocedor.abort(); } catch { /* nada que abortar */ }
+      }
+    }, 3000);
+  }, intento === 0 ? 120 : 0);
+}
+
+/** Cierra la sesión de dictado, y se asegura de que cierre de verdad. */
+function detenerMicrofono() {
+  try { reconocedor.stop(); } catch { /* ya estaba detenido */ }
+  // Hay navegadores que no llegan a avisar que terminaron. Si en medio
+  // segundo no avisó, se corta a la fuerza para que el botón vuelva a andar.
+  clearTimeout(vigilante);
+  vigilante = setTimeout(() => {
+    if (escuchando) {
+      escuchando = false;
+      arrancando = false;
+      marcarGrabando(false);
+      try { reconocedor.abort(); } catch { /* ya estaba suelto */ }
+    }
+  }, 600);
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -2091,6 +2189,7 @@ $('#contenido').addEventListener('click', async (e) => {
     const tarjeta = boton.closest('.import-hoja');
     const hoja = estado.importacion.hojas[Number(boton.dataset.hoja)];
     const categoria = tarjeta.querySelector('.import-categoria').value.trim();
+    const tipo = tarjeta.querySelector('.import-tipo').value.trim();
     const manejaInventario = tarjeta.querySelector('.import-inventario').checked;
     const descontinuar = tarjeta.querySelector('.import-descontinuar').checked;
 
@@ -2129,7 +2228,7 @@ $('#contenido').addEventListener('click', async (e) => {
       const inf = await api('/productos/importar', {
         method: 'POST',
         body: {
-          categoria, filas, simular,
+          categoria, tipo, filas, simular,
           maneja_inventario: manejaInventario,
           descontinuar_ausentes: descontinuar,
           // El archivo sólo se reenvía al aplicar, y sólo si hay fotos que traer.
@@ -2496,6 +2595,7 @@ $('#contenido').addEventListener('submit', async (e) => {
         body: {
           nombre: d.nombre,
           categoria: d.categoria,
+          tipo: d.tipo,
           url: estado.pruebaLista.url,
           hoja: 0,
           manejaInventario: d.manejaInventario === '1',

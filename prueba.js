@@ -342,6 +342,18 @@ const idG74 = db.consultar('productos', { texto: 'G7-4' })[0].id;
 db.actualizar('productos', idG74, { tipo: 'Switch EU' });
 db.actualizar('productos', db.consultar('productos', { texto: 'CC-CAM' })[0].id, { tipo: 'Cámara' });
 
+// La pestaña del Excel etiqueta a todos los de la hoja de una sola pasada,
+// incluidos los que ya estaban cargados sin tipo.
+db.conciliarProductos('Interruptores', [
+  { fila: 2, referencia: 'G7-2', descripcion: 'Interruptor 2 canales', precio_cliente: 268000 },
+  { fila: 3, referencia: 'NUEVO-1', descripcion: 'Interruptor recién salido', precio_cliente: 300000 },
+], { tipo: 'Switch EU' });
+comprobar('la pestaña etiqueta a los que ya estaban',
+  db.consultar('productos', { texto: 'G7-2' })[0].tipo, 'Switch EU');
+comprobar('y también a los nuevos de esa hoja',
+  db.consultar('productos', { texto: 'NUEVO-1' })[0].tipo, 'Switch EU');
+db.eliminar('productos', db.consultar('productos', { texto: 'NUEVO-1' })[0].id);
+
 comprobar('filtra por tipo', db.consultar('productos', { tipo: 'Switch EU' }).length, 2);
 comprobar('el filtro no distingue mayúsculas', db.consultar('productos', { tipo: 'switch eu' }).length, 2);
 comprobar('los tipos usados salen con su conteo',
@@ -398,6 +410,16 @@ t('crear_recordatorio', { texto: 'Comprar bombillos', vence_en: '2026-08-11' });
 t('editar', { entidad: 'recordatorios', que: 'bombillos', prioridad: 'alta' });
 comprobar('al recordatorio se le cambia la prioridad',
   db.consultar('recordatorios', { texto: 'bombillos' })[0].prioridad, 'alta');
+
+// Nombrarla como uno habla, aunque el título esté escrito de otra manera:
+// hay dos reuniones, y la frase tiene que dar con la correcta.
+t('agendar_cita', { titulo: 'Reunión obra Hotel Dammai', fecha_hora: '2026-08-12T09:00' });
+t('editar', { entidad: 'citas', que: 'la reunión con el ingeniero Javier', detalle: 'Es en Amazonía' });
+comprobar('encuentra la reunión aunque se la nombre distinto',
+  db.obtenerPorId('citas', laCita.id).notas.includes('Es en Amazonía'), true);
+comprobar('y no tocó la otra reunión',
+  db.consultar('citas', { texto: 'Dammai' })[0].notas, null);
+comprobar('sin crear ninguna de más', db.consultar('citas', { limite: 100 }).length, citasAntes + 2);
 
 // Si lo que nombra no existe, lo dice en vez de crear algo
 let noHay = '';

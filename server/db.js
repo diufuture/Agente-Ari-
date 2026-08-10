@@ -608,6 +608,13 @@ const CAMPOS_DE_LISTA = ['descripcion', 'marca', 'unidad', 'precio_canal', 'prec
  */
 export function conciliarProductos(categoria, filas, opciones = {}) {
   const { manejaInventario = false, descontinuarAusentes = false, simular = false } = opciones;
+  // El tipo sale de la pestaña del Excel: cada pestaña es un grupo de
+  // productos —los displays, los switch EU, los switch US— y ese nombre es
+  // justo la etiqueta con la que después se filtra el catálogo. Se aplica a
+  // todos los de la hoja, existan ya o no, que es lo que hace que una sola
+  // importación deje el catálogo entero etiquetado.
+  const tipo = opciones.tipo != null && String(opciones.tipo).trim()
+    ? String(opciones.tipo).trim() : null;
 
   const existentes = all(
     `${selectConCliente('productos')} WHERE t.categoria IS ? OR (t.categoria = ?)`,
@@ -650,6 +657,7 @@ export function conciliarProductos(categoria, filas, opciones = {}) {
     if (!existente) {
       const nuevo = {
         categoria: categoria ?? null,
+        tipo,
         referencia,
         descripcion,
         marca: entrantes.marca,
@@ -691,6 +699,9 @@ export function conciliarProductos(categoria, filas, opciones = {}) {
     }
     if (referencia && String(existente.referencia ?? '') !== referencia) cambios.referencia = referencia;
     if (manejaInventario && !existente.maneja_inventario) cambios.maneja_inventario = 1;
+    // Etiquetar con el nombre de la pestaña también a los que ya estaban: la
+    // gracia es que una sola importación deje todo el grupo marcado.
+    if (tipo && String(existente.tipo ?? '') !== tipo) cambios.tipo = tipo;
     // Si estaba descontinuado y volvió a aparecer en la lista, revive.
     if (!existente.activo) cambios.activo = 1;
 
@@ -808,6 +819,7 @@ export function agregarLista(datos) {
     nombre: String(datos.nombre || datos.categoria || 'Lista').trim(),
     url: String(datos.url || '').trim(),
     categoria: String(datos.categoria || '').trim() || null,
+    tipo: String(datos.tipo || '').trim() || null,
     hoja: Number(datos.hoja) || 0,
     manejaInventario: Boolean(datos.manejaInventario),
     descontinuarAusentes: Boolean(datos.descontinuarAusentes),
@@ -1089,13 +1101,32 @@ export function resolverRegistro(entidad, texto, clienteId = null) {
 
   let candidatos = consultar(entidad, filtros);
 
-  // Con texto y sin resultados, se prueba palabra por palabra: "la reunión
-  // con Javier" contra "Reunión Ingeniero Javier Forero".
+  // Sin resultados con la frase entera, se busca por palabras y gana el que
+  // más comparta. "Editá la reunión con el ingeniero Javier" contra un título
+  // que dice "Reunión Ingeniero Javier Forero": no coincide la frase, pero
+  // coinciden tres palabras, y ninguna otra cita coincide en tres.
+  //
+  // Antes se probaba palabra por palabra y se paraba en la primera que
+  // devolviera algo, así que "reunión" sola traía todas las reuniones y el
+  // resultado era "hay varias que encajan" en vez de la que era.
   if (q && !candidatos.length) {
-    const palabras = q.split(/\s+/).filter((p) => p.length > 3);
+    const IRRELEVANTES = new Set(['para', 'con', 'del', 'los', 'las', 'que', 'una', 'este', 'esta', 'esa', 'ese']);
+    const palabras = q.toLowerCase().split(/\s+/)
+      .map((p) => p.replace(/[^\wáéíóúñü]/gi, ''))
+      .filter((p) => p.length > 2 && !IRRELEVANTES.has(p));
+
+    const puntos = new Map();
     for (const palabra of palabras) {
-      candidatos = consultar(entidad, { ...filtros, texto: palabra });
-      if (candidatos.length) break;
+      for (const fila of consultar(entidad, { ...filtros, texto: palabra })) {
+        puntos.set(fila.id, { fila, n: (puntos.get(fila.id)?.n ?? 0) + 1 });
+      }
+    }
+    const mejor = Math.max(0, ...[...puntos.values()].map((v) => v.n));
+    // Sólo se acepta si comparte más de una palabra, o si es la única: una
+    // sola palabra en común es demasiado poco para dar algo por sentado.
+    if (mejor > 0) {
+      const empatados = [...puntos.values()].filter((v) => v.n === mejor);
+      if (mejor > 1 || empatados.length === 1) candidatos = empatados.map((v) => v.fila);
     }
   }
 
