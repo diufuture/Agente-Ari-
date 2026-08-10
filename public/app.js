@@ -21,6 +21,7 @@ const estado = {
   nuevoProducto: false,    // el formulario de alta manual de producto está abierto
   subiendoFotoPara: null,  // id del producto al que se le está por asignar una foto
   itemEditando: null,      // id del renglón de cotización abierto para editar
+  nuevoCliente: false,     // el formulario de alta manual de cliente está abierto
   subiendoOferta: false,   // formulario para subir una cotización ya hecha en PDF
   subiendoPdfPara: null,   // id de la cotización a la que se le va a adjuntar el PDF
   viendoListas: false,     // pantalla de listas de precios conectadas en línea
@@ -155,7 +156,11 @@ const ENCABEZADOS = {
   unidad: 'Unidad', precio_cliente: 'Precio', precio_canal: 'P. canal',
   precio_constructor: 'P. constructor', proveedor: 'Proveedor', stock: 'Stock',
   cantidad: 'Cantidad', motivo: 'Motivo', producto: 'Producto',
+  cotizado: 'Cotizado',
 };
+
+/** Columnas de plata: van alineadas a la derecha, con los números en columna. */
+const COLUMNAS_DINERO = new Set(['monto', 'cotizado', 'abonado', 'saldo']);
 
 /** Cómo se pinta cada columna. */
 function celda(columna, fila) {
@@ -169,8 +174,10 @@ function celda(columna, fila) {
       return `<span style="${rojo ? 'color:var(--alerta);font-weight:600' : ''}">${escapar(texto)}</span>`;
     }
     case 'monto':
-    case 'abonado':
       return fmtDinero(v, fila.moneda);
+    case 'abonado':
+      // En un cliente sin cotizaciones no hay "$ 0 abonado": no hay nada.
+      return fila.n_cotizaciones === 0 ? '<span style="color:var(--texto-3)">—</span>' : fmtDinero(v, fila.moneda);
     case 'precio_cliente':
     case 'precio_canal':
     case 'precio_constructor':
@@ -183,7 +190,15 @@ function celda(columna, fila) {
         : '<span style="color:var(--texto-3)">—</span>';
     case 'cantidad':
       return `<span style="color:${Number(v) > 0 ? 'var(--verde)' : 'var(--alerta)'};font-weight:600">${Number(v) > 0 ? '+' : ''}${escapar(v)}</span>`;
+    case 'cotizado':
+      // En la lista de clientes: cuánto se le cotizó en total. Un cliente sin
+      // cotizaciones muestra un guión, no "$ 0", que se lee como una deuda.
+      return Number(v) ? fmtDinero(v) : '<span style="color:var(--texto-3)">—</span>';
     case 'saldo': {
+      // Un cliente al que nunca se le cotizó no está "saldado": no hay nada.
+      if (fila.n_cotizaciones !== undefined && !fila.n_cotizaciones) {
+        return '<span style="color:var(--texto-3)">—</span>';
+      }
       const saldado = Number(v) <= 0;
       return `<span style="color:${saldado ? 'var(--verde)' : 'var(--ambar)'};font-weight:600">${
         saldado ? 'saldada' : fmtDinero(v, fila.moneda)}</span>`;
@@ -217,14 +232,14 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
   }
 
   const accionable = entidad in NUEVO_ESTADO;
-  const cabeceras = columnas.map((c) => {
-    const num = c === 'monto';
-    return `<th${num ? ' class="num"' : ''}>${ENCABEZADOS[c] || c}</th>`;
-  }).join('');
+  const cabeceras = columnas.map((c) =>
+    `<th${COLUMNAS_DINERO.has(c) ? ' class="num"' : ''}>${ENCABEZADOS[c] || c}</th>`).join('');
 
   const cuerpo = filas.map((f) => {
     const celdas = columnas.map((c, i) => {
-      const clases = [c === 'monto' ? 'num' : '', i === 1 || (entidad === 'clientes' && i === 0) ? 'principal-col' : ''].filter(Boolean).join(' ');
+      // En clientes la columna que manda es el nombre; en el resto, la segunda.
+      const destacada = entidad === 'clientes' ? i === 0 : i === 1;
+      const clases = [COLUMNAS_DINERO.has(c) ? 'num' : '', destacada ? 'principal-col' : ''].filter(Boolean).join(' ');
       // data-rotulo alimenta el ::before que muestra el nombre de la columna
       // cuando la tabla se apila como ficha en pantallas angostas.
       return `<td${clases ? ` class="${clases}"` : ''} data-rotulo="${ENCABEZADOS[c] || c}">${celda(c, f)}</td>`;
@@ -1285,7 +1300,7 @@ async function pintar() {
 
   const CONSULTAS = {
     agenda: { entidad: 'citas', filtros: 'rango=proximos', columnas: ['inicio', 'titulo', 'cliente', 'lugar', 'estado'] },
-    clientes: { entidad: 'clientes', filtros: '', columnas: ['nombre', 'empresa', 'telefono', 'email'] },
+    clientes: { entidad: 'clientes', filtros: '', columnas: ['nombre', 'telefono', 'email', 'cotizado', 'abonado', 'saldo'] },
     cotizaciones: { entidad: 'cotizaciones', filtros: '', columnas: ['creado_en', 'titulo', 'cliente', 'monto', 'abonado', 'saldo', 'estado'] },
     cobros: { entidad: 'cobros', filtros: '', columnas: ['vence_en', 'concepto', 'cliente', 'monto', 'estado'] },
     recordatorios: { entidad: 'recordatorios', filtros: '', columnas: ['vence_en', 'texto', 'cliente', 'prioridad', 'estado'] },
@@ -1313,10 +1328,41 @@ async function pintar() {
   try {
     const { filas } = await api(`/${CONSULTAS.entidad}?${CONSULTAS.filtros}`);
     contenedor.innerHTML = (v === 'cotizaciones' ? barraCotizaciones() : '')
+      + (v === 'clientes' ? barraClientes(filas) : '')
       + tabla(CONSULTAS.entidad, CONSULTAS.columnas, filas);
+    if (estado.nuevoCliente) $('#form-nuevo-cliente input[name="nombre"]')?.focus();
   } catch (e) {
     contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
   }
+}
+
+/** Alta manual de un cliente, y el total de lo que mueve la cartera. */
+function barraClientes(filas) {
+  const suma = (campo) => filas.reduce((s, f) => s + (Number(f[campo]) || 0), 0);
+
+  const formulario = estado.nuevoCliente ? bloque('Agregar cliente', `
+    <div class="tarjeta">
+      <form class="form-editar" id="form-nuevo-cliente">
+        ${CAMPOS.clientes.map((c) => {
+          const control = c.area
+            ? `<textarea name="${c.n}" rows="2"></textarea>`
+            : `<input name="${c.n}" type="${c.tipo || 'text'}"${c.req ? ' required' : ''} />`;
+          return `<label class="${c.ancho ? 'ancho' : ''}"><span>${c.e}</span>${control}</label>`;
+        }).join('')}
+        <div class="form-acciones"><button type="submit">Guardar cliente</button></div>
+      </form>
+    </div>`) : '';
+
+  return `<div class="barra-productos">
+      <button class="mini destacado" data-accion="alternar-nuevo-cliente">${
+        estado.nuevoCliente ? 'Cancelar' : '+ Agregar cliente'}</button>
+    </div>
+    ${formulario}
+    ${filas.length ? `<div class="metricas">
+      ${metrica(fmtDinero(suma('cotizado')), 'Total cotizado', 'dinero')}
+      ${metrica(fmtDinero(suma('abonado')), 'Total abonado', 'dinero')}
+      ${metrica(fmtDinero(suma('saldo')), 'Saldo total', 'dinero')}
+    </div>` : ''}`;
 }
 
 /** Lo que está por cobrar, venga de un cobro suelto o de una oferta aprobada. */
@@ -1816,6 +1862,11 @@ $('#contenido').addEventListener('click', async (e) => {
     $('#input-logo').click();
     return;
   }
+  if (accion === 'alternar-nuevo-cliente') {
+    estado.nuevoCliente = !estado.nuevoCliente;
+    await pintar();
+    return;
+  }
   if (accion === 'alternar-subir-oferta') {
     estado.subiendoOferta = !estado.subiendoOferta;
     await pintar();
@@ -2195,6 +2246,23 @@ $('#contenido').addEventListener('submit', async (e) => {
       }
       estado.nuevoProducto = false;
       avisar('Producto agregado ✓');
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+
+  if (e.target.id === 'form-nuevo-cliente') {
+    e.preventDefault();
+    const datos = Object.fromEntries(new FormData(e.target));
+    for (const k of Object.keys(datos)) if (datos[k] === '') delete datos[k];
+    if (!datos.nombre) return avisar('El cliente necesita un nombre.', true);
+    try {
+      await api('/clientes', { method: 'POST', body: datos });
+      estado.nuevoCliente = false;
+      avisar('Cliente agregado ✓');
       await refrescarResumen();
       await pintar();
     } catch (err) {

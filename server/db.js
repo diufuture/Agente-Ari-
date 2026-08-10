@@ -283,7 +283,25 @@ const SUMA_ITEMS =
   "COALESCE((SELECT SUM(i.cantidad * i.precio_unitario) FROM cotizacion_items i WHERE i.cotizacion_id = t.id), 0)";
 
 function selectConCliente(tabla) {
-  if (tabla === 'clientes') return 'SELECT * FROM clientes';
+  // Un cliente se lee con la plata que mueve: cuánto se le cotizó en total,
+  // cuánto abonó y cuánto falta. Es lo que uno quiere ver de un vistazo en la
+  // lista, mucho más que el nombre de su empresa. Las rechazadas no cuentan:
+  // no son plata, son ofertas que no prosperaron.
+  if (tabla === 'clientes') {
+    return `SELECT t.*,
+              COALESCE((SELECT SUM(q.monto) FROM cotizaciones q
+                         WHERE q.cliente_id = t.id AND q.estado <> 'rechazada'), 0) AS cotizado,
+              COALESCE((SELECT SUM(a.monto) FROM abonos a
+                          JOIN cotizaciones q ON q.id = a.cotizacion_id
+                         WHERE q.cliente_id = t.id AND q.estado <> 'rechazada'), 0) AS abonado,
+              COALESCE((SELECT SUM(q.monto) FROM cotizaciones q
+                         WHERE q.cliente_id = t.id AND q.estado <> 'rechazada'), 0)
+              - COALESCE((SELECT SUM(a.monto) FROM abonos a
+                            JOIN cotizaciones q ON q.id = a.cotizacion_id
+                           WHERE q.cliente_id = t.id AND q.estado <> 'rechazada'), 0) AS saldo,
+              (SELECT COUNT(*) FROM cotizaciones q WHERE q.cliente_id = t.id) AS n_cotizaciones
+            FROM clientes t`;
+  }
   if (tabla === 'productos') return `SELECT t.*, ${SUMA_STOCK} AS stock FROM productos t`;
   if (tabla === 'movimientos_stock') {
     return `SELECT t.*, p.descripcion AS producto, p.referencia AS referencia

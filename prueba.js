@@ -334,6 +334,28 @@ comprobar('saldada, sale de la lista',
   db.cobrosDeCotizaciones().some((c) => c.id === laQueAprobamos.id), false);
 comprobar('y el total vuelve a lo de antes', db.resumen().contadores.porCobrar, antes.porCobrar);
 
+/* 7f · La cartera de cada cliente ------------------------------------ */
+// En la lista de clientes, en vez de la empresa va la plata: cuánto se le
+// cotizó, cuánto abonó y cuánto falta, sumando todas sus cotizaciones.
+const nuevo = db.crearCliente({ nombre: 'Hotel Dammai', telefono: '6014445566' });
+const conCotizaciones = (n) => db.consultar('clientes', { texto: n })[0];
+
+comprobar('un cliente recién creado no tiene cartera',
+  [conCotizaciones('Dammai').cotizado, conCotizaciones('Dammai').abonado, conCotizaciones('Dammai').n_cotizaciones],
+  [0, 0, 0]);
+
+db.insertar('cotizaciones', { cliente_id: nuevo.id, titulo: 'CCTV', monto: 3000000, estado: 'aprobada' });
+const wifi = db.insertar('cotizaciones', { cliente_id: nuevo.id, titulo: 'Wi-Fi', monto: 2000000, estado: 'pendiente' });
+db.insertar('cotizaciones', { cliente_id: nuevo.id, titulo: 'La que no fue', monto: 9000000, estado: 'rechazada' });
+db.insertar('abonos', { cotizacion_id: wifi.id, monto: 500000 });
+
+const d = conCotizaciones('Dammai');
+comprobar('suma lo cotizado de todas sus cotizaciones', d.cotizado, 5000000);
+comprobar('la rechazada no cuenta como plata', d.cotizado < 9000000, true);
+comprobar('suma los abonos de todas', d.abonado, 500000);
+comprobar('y el saldo es la resta', d.saldo, 4500000);
+comprobar('cuenta cuántas tiene, rechazadas incluidas', d.n_cotizaciones, 3);
+
 /* 8b · Cómo Excel ancla las fotos ----------------------------------- */
 // Cuatro switches, cuatro maneras de pegar la foto en la misma hoja. Es
 // exactamente lo que pasa cuando alguien arma la lista a mano.
