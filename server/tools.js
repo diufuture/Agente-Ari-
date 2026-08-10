@@ -378,6 +378,46 @@ export const HERRAMIENTAS = [
     },
   },
   {
+    name: 'editar',
+    description:
+      'Cambia algo que YA EXISTE: una cita, un recordatorio, un cobro, una nota, un cliente o una cotización. '
+      + 'Úsala para "agregale a esa reunión que lleve el catálogo", "cambiá la cita de mañana para las 4", '
+      + '"ponele de lugar la obra", "corregile el teléfono a Fulano", "cambiale el título". '
+      + 'MUY IMPORTANTE: nunca uses agendar_cita, crear_recordatorio ni crear_cotizacion para modificar algo '
+      + 'que ya está — quedarían dos registros iguales. Para saber cuál es, pasa "que" con las palabras que usó '
+      + 'el usuario; si no dijo cuál ("esa reunión", "ese recordatorio"), omítelo y se toma la última.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        entidad: {
+          type: 'string',
+          enum: ['citas', 'recordatorios', 'cotizaciones', 'cobros', 'clientes', 'notas'],
+        },
+        que: {
+          type: 'string',
+          description: 'Cómo la nombró el usuario: parte del título, el nombre del cliente, o el número. Omítelo si dijo "esa" o "ese".',
+        },
+        cliente: { ...clienteProp, description: 'Sólo si el usuario nombra un cliente para ubicarla.' },
+        titulo: { type: 'string', description: 'Nuevo asunto o título.' },
+        detalle: {
+          type: 'string',
+          description: 'De qué se trata, qué hay que llevar, qué se acordó. Es lo que se agrega cuando dicen "agregale a esa reunión que…". Se suma a lo que ya había, no lo reemplaza, salvo que el usuario pida cambiarlo.',
+        },
+        fecha_hora: { type: 'string', description: 'Nueva fecha y hora de una cita, YYYY-MM-DDTHH:MM.' },
+        lugar: { type: 'string' },
+        vence_en: { type: 'string', description: 'Nueva fecha de vencimiento, YYYY-MM-DD.' },
+        prioridad: { type: 'string', enum: ['alta', 'normal', 'baja'] },
+        texto: { type: 'string', description: 'Nuevo texto de un recordatorio o una nota.' },
+        telefono: { type: 'string' },
+        email: { type: 'string' },
+        direccion: { type: 'string' },
+        monto: { type: 'number' },
+        estado: { type: 'string' },
+      },
+      required: ['entidad'],
+    },
+  },
+  {
     name: 'eliminar',
     description: 'Borra un registro de forma definitiva. Úsala sólo si el usuario lo pide explícitamente.',
     input_schema: {
@@ -459,6 +499,17 @@ function cotizacionEnCurso({ cliente, cotizacion } = {}) {
   db.activarCotizacion(q.id); // pasa a ser la que se está armando
   return q;
 }
+
+/** Cómo se llama cada cosa cuando se habla de una sola. */
+const SINGULAR = {
+  citas: 'la cita', recordatorios: 'el recordatorio', cotizaciones: 'la cotización',
+  cobros: 'el cobro', clientes: 'el cliente', notas: 'la nota',
+};
+
+const truncar = (v, n) => {
+  const s = String(v ?? '').replace(/\s+/g, ' ').trim();
+  return s.length > n ? `${s.slice(0, n)}…` : s;
+};
 
 const tituloDeItems = (cot, tot) =>
   `«${cot.titulo}» · ${dinero(tot.total, cot.moneda)}`;
@@ -591,6 +642,61 @@ export function ejecutar(nombre, args) {
           `a ${dinero(item.precio_unitario, cot.moneda)}. ` +
           `Subtotal ${dinero(tot.subtotal, cot.moneda)}, total ${dinero(tot.total, cot.moneda)}.`,
         vista: vistaDe('cotizacion_items', tituloDeItems(cot, tot), items),
+        cambio: true,
+      };
+    }
+
+    case 'editar': {
+      const clienteId = args.cliente ? exigirCliente(args.cliente).id : null;
+      const r = db.resolverRegistro(args.entidad, args.que ?? '', clienteId);
+      if (r.error) {
+        const sug = r.sugerencias?.length ? ` Opciones: ${r.sugerencias.join(', ')}.` : '';
+        throw new Error(`${r.error}${sug}`);
+      }
+
+      // "Detalle" es una sola palabra para el usuario, pero cae en un campo
+      // distinto en cada cosa: en una cita son sus notas, en un recordatorio
+      // es su propio texto, en una cotización su descripción.
+      const CAMPO_DETALLE = {
+        citas: 'notas', recordatorios: 'texto', cotizaciones: 'descripcion',
+        cobros: 'concepto', clientes: 'notas', notas: 'texto',
+      };
+
+      const cambios = {};
+      const poner = (campo, valor) => { if (valor !== undefined && valor !== null && valor !== '') cambios[campo] = valor; };
+
+      poner('titulo', args.titulo);
+      poner('lugar', args.lugar);
+      poner('telefono', args.telefono);
+      poner('email', args.email);
+      poner('direccion', args.direccion);
+      poner('prioridad', args.prioridad);
+      poner('estado', args.estado);
+      poner('texto', args.texto);
+      if (args.monto !== undefined) cambios.monto = Number(args.monto);
+      if (args.fecha_hora) cambios.inicio = normalizarFecha(args.fecha_hora) ?? args.fecha_hora;
+      if (args.vence_en) cambios.vence_en = normalizarFecha(args.vence_en) ?? args.vence_en;
+
+      // El detalle se suma a lo que ya había: "agregale que lleve el catálogo"
+      // y después "y unos bombillos" tienen que quedar los dos.
+      if (args.detalle) {
+        const campo = CAMPO_DETALLE[args.entidad];
+        const antes = String(r.fila[campo] ?? '').trim();
+        cambios[campo] = antes && !antes.includes(args.detalle.trim())
+          ? `${antes}\n${args.detalle.trim()}`
+          : args.detalle.trim();
+      }
+
+      if (!Object.keys(cambios).length) throw new Error('No dijiste qué cambiarle.');
+
+      const tabla = db.ENTIDADES[args.entidad].tabla;
+      const fila = db.actualizar(tabla, r.id, cambios);
+      if (args.entidad === 'cotizaciones' && cambios.estado) db.sincronizarInventario(r.id);
+
+      const nombre = fila.titulo ?? fila.texto ?? fila.concepto ?? fila.nombre ?? `#${fila.id}`;
+      return {
+        resumen: `Listo, actualicé ${SINGULAR[args.entidad] ?? args.entidad} «${truncar(nombre, 60)}».`,
+        vista: vistaDe(args.entidad, truncar(nombre, 60), [fila]),
         cambio: true,
       };
     }

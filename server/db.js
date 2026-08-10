@@ -189,6 +189,14 @@ CREATE INDEX IF NOT EXISTS idx_items_cot ON cotizacion_items(cotizacion_id);
   if (!prod.includes('maneja_inventario')) {
     db.exec('ALTER TABLE productos ADD COLUMN maneja_inventario INTEGER NOT NULL DEFAULT 0');
   }
+  // Cómo se llama el producto en la jerga del negocio: "Display", "Switch EU",
+  // "Switch US". Es lo que se usa para filtrar cuando hay que mostrarle algo
+  // puntual a un cliente en el momento. Va aparte de la categoría, que la
+  // manda el proveedor en su lista.
+  if (!prod.includes('tipo')) db.exec('ALTER TABLE productos ADD COLUMN tipo TEXT');
+  // La ficha técnica del fabricante, en PDF.
+  if (!prod.includes('ficha')) db.exec('ALTER TABLE productos ADD COLUMN ficha TEXT');
+  if (!prod.includes('ficha_nombre')) db.exec('ALTER TABLE productos ADD COLUMN ficha_nombre TEXT');
 
   const cot = columnasDe('cotizaciones');
   if (!cot.includes('porcentaje_servicio')) {
@@ -554,6 +562,12 @@ export const categoriasProductos = () =>
  * tope de 100 de `consultar`: el gestor de fotos necesita verlas todas para
  * poder achicar las que quedaron pesadas.
  */
+/** Los tipos que ya se usaron, para ofrecerlos en vez de reescribirlos. */
+export const tiposProductos = () =>
+  all(`SELECT tipo, COUNT(*) AS n FROM productos
+        WHERE tipo IS NOT NULL AND tipo <> '' AND activo = 1
+        GROUP BY tipo ORDER BY n DESC, tipo COLLATE NOCASE`);
+
 export const productosConFoto = () =>
   all("SELECT id, descripcion, foto FROM productos WHERE foto IS NOT NULL AND foto <> '' ORDER BY id");
 
@@ -1044,6 +1058,66 @@ export function resolverItemDeCotizacion(cotizacionId, texto) {
   return { id: candidatos[0].id, item: candidatos[0] };
 }
 
+/**
+ * Encuentra un registro que ya existe, por cómo lo nombra el usuario.
+ *
+ * "Agregale a esa reunión que lleve el catálogo" tiene que dar con la reunión
+ * que se acaba de crear, no con una nueva. Se prueba en este orden:
+ *
+ *   1. Un número: es el id.
+ *   2. Un texto: se busca entre los campos de esa entidad.
+ *   3. Sin texto: la última que se creó (que es a la que uno se refiere
+ *      cuando dice "esa"), o la próxima pendiente del cliente que se nombró.
+ *
+ * Si hay más de una que encaja, se devuelven las opciones. Elegir por
+ * adivinanza es peor que preguntar.
+ */
+export function resolverRegistro(entidad, texto, clienteId = null) {
+  const meta = ENTIDADES[entidad];
+  if (!meta) return { error: `No sé qué es "${entidad}".` };
+
+  const q = String(texto ?? '').trim();
+
+  if (/^\d+$/.test(q)) {
+    const fila = obtenerPorId(meta.tabla, Number(q));
+    if (fila) return { id: fila.id, fila };
+  }
+
+  const filtros = { limite: 50 };
+  if (clienteId) filtros.cliente_id = clienteId;
+  if (q) filtros.texto = q;
+
+  let candidatos = consultar(entidad, filtros);
+
+  // Con texto y sin resultados, se prueba palabra por palabra: "la reunión
+  // con Javier" contra "Reunión Ingeniero Javier Forero".
+  if (q && !candidatos.length) {
+    const palabras = q.split(/\s+/).filter((p) => p.length > 3);
+    for (const palabra of palabras) {
+      candidatos = consultar(entidad, { ...filtros, texto: palabra });
+      if (candidatos.length) break;
+    }
+  }
+
+  if (!candidatos.length) {
+    return { error: q ? `No encontré nada que diga "${texto}".` : 'No hay ninguna todavía.', sugerencias: [] };
+  }
+  if (candidatos.length === 1) return { id: candidatos[0].id, fila: candidatos[0] };
+
+  // Varias: si no dijo texto, se queda con la última creada, que es a la que
+  // uno se refiere cuando dice "esa" justo después de haberla hecho.
+  if (!q) {
+    const ultima = [...candidatos].sort((a, b) => b.id - a.id)[0];
+    return { id: ultima.id, fila: ultima };
+  }
+
+  const nombrar = (f) => f.titulo ?? f.texto ?? f.concepto ?? f.nombre ?? `#${f.id}`;
+  return {
+    error: `Hay ${candidatos.length} que encajan con "${texto}".`,
+    sugerencias: candidatos.slice(0, 6).map((f) => `#${f.id} ${nombrar(f)}`),
+  };
+}
+
 export function actualizarItem(itemId, datos = {}) {
   const item = obtenerPorId('cotizacion_items', itemId);
   if (!item) return null;
@@ -1153,6 +1227,11 @@ export function consultar(entidad, filtros = {}) {
   if (entidad === 'productos' && !filtros.incluir_inactivos) {
     where.push('t.activo = 1');
   }
+  // Filtrar por tipo: "mostrame los displays", "los switch EU"
+  if (entidad === 'productos' && filtros.tipo) {
+    where.push('t.tipo = ? COLLATE NOCASE');
+    params.push(filtros.tipo);
+  }
 
   const SIN_ESTADO = new Set(['clientes', 'notas', 'productos', 'movimientos_stock', 'cotizacion_items']);
   if (filtros.estado && !SIN_ESTADO.has(entidad)) {
@@ -1169,7 +1248,7 @@ export function consultar(entidad, filtros = {}) {
       cobros: ['concepto'],
       notas: ['texto'],
       abonos: ['nota'],
-      productos: ['categoria', 'referencia', 'descripcion', 'marca', 'proveedor'],
+      productos: ['categoria', 'referencia', 'descripcion', 'marca', 'proveedor', 'tipo'],
       movimientos_stock: ['motivo'],
       cotizacion_items: ['descripcion', 'referencia', 'marca', 'seccion'],
     }[entidad];

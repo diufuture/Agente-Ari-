@@ -1138,3 +1138,30 @@ a.mini { text-decoration: none; display: inline-flex; align-items: center; }
   color: var(--texto-3); margin-top: 3px;
 }
 td.vencido { color: var(--alerta); font-weight: 600; }
+
+/* ─────────── Tipo de producto y su uña ─────────── */
+
+.filtros-tipo { display: flex; flex-wrap: wrap; gap: 7px; margin: -8px 0 18px; }
+.chip {
+  font-size: 12px; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--borde); color: var(--texto-2); background: none;
+  transition: .13s; white-space: nowrap;
+}
+.chip:hover { border-color: var(--acento); color: var(--texto); }
+.chip.activo {
+  background: color-mix(in srgb, var(--acento) 16%, transparent);
+  border-color: var(--acento); color: var(--texto); font-weight: 600;
+}
+.chip em { font-style: normal; opacity: .55; margin-left: 3px; font-size: 11px; }
+
+.etiqueta-tipo {
+  display: inline-block; font-size: 11px; font-weight: 600; white-space: nowrap;
+  padding: 2px 8px; border-radius: 999px;
+  color: var(--acento-2); background: color-mix(in srgb, var(--acento-2) 14%, transparent);
+}
+
+.mini-foto {
+  width: 38px; height: 38px; object-fit: contain; border-radius: 7px;
+  border: 1px solid var(--borde); background: var(--panel-alto); display: block;
+}
+.mini-foto.vacia { border-style: dashed; }

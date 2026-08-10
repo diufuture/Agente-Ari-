@@ -22,6 +22,9 @@ const estado = {
   subiendoFotoPara: null,  // id del producto al que se le está por asignar una foto
   itemEditando: null,      // id del renglón de cotización abierto para editar
   nuevoCliente: false,     // el formulario de alta manual de cliente está abierto
+  tipoProducto: null,      // filtro del catálogo por tipo (Display, Switch EU…)
+  tiposConocidos: [],      // los tipos ya usados, para sugerirlos al editar
+  subiendoFichaPara: null, // id del producto al que se le va a adjuntar la ficha
   subiendoOferta: false,   // formulario para subir una cotización ya hecha en PDF
   subiendoPdfPara: null,   // id de la cotización a la que se le va a adjuntar el PDF
   viendoListas: false,     // pantalla de listas de precios conectadas en línea
@@ -156,7 +159,7 @@ const ENCABEZADOS = {
   unidad: 'Unidad', precio_cliente: 'Precio', precio_canal: 'P. canal',
   precio_constructor: 'P. constructor', proveedor: 'Proveedor', stock: 'Stock',
   cantidad: 'Cantidad', motivo: 'Motivo', producto: 'Producto',
-  cotizado: 'Cotizado',
+  cotizado: 'Cotizado', notas: 'Detalle', foto: '', tipo: 'Tipo',
 };
 
 /** Columnas de plata: van alineadas a la derecha, con los números en columna. */
@@ -184,6 +187,21 @@ function celda(columna, fila) {
       return v === null || v === undefined ? '—' : fmtDinero(v);
     case 'descripcion':
       return `<span title="${escapar(v ?? '')}">${escapar(truncar(v, 70))}</span>`;
+    case 'notas':
+      // El detalle de una cita se va agregando por voz y puede tener varias
+      // líneas; en la lista se muestra el principio y el resto al pasar encima.
+      return v
+        ? `<span title="${escapar(v)}" style="color:var(--texto-2)">${escapar(truncar(v, 48))}</span>`
+        : '<span style="color:var(--texto-3)">—</span>';
+    case 'foto':
+      // La uña del producto, para reconocerlo de un vistazo sin abrirlo.
+      return v
+        ? `<img class="mini-foto" src="${escapar(v)}" alt="" width="38" height="38" loading="lazy" />`
+        : '<span class="mini-foto vacia"></span>';
+    case 'tipo':
+      return v
+        ? `<span class="etiqueta-tipo">${escapar(v)}</span>`
+        : '<span style="color:var(--texto-3)">—</span>';
     case 'stock':
       return fila.maneja_inventario
         ? `<span style="${Number(v) <= 0 ? 'color:var(--alerta);font-weight:600' : ''}">${escapar(v)}</span>`
@@ -233,7 +251,7 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
 
   const accionable = entidad in NUEVO_ESTADO;
   const cabeceras = columnas.map((c) =>
-    `<th${COLUMNAS_DINERO.has(c) ? ' class="num"' : ''}>${ENCABEZADOS[c] || c}</th>`).join('');
+    `<th${COLUMNAS_DINERO.has(c) ? ' class="num"' : ''}>${ENCABEZADOS[c] ?? c}</th>`).join('');
 
   const cuerpo = filas.map((f) => {
     const celdas = columnas.map((c, i) => {
@@ -242,7 +260,7 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
       const clases = [COLUMNAS_DINERO.has(c) ? 'num' : '', destacada ? 'principal-col' : ''].filter(Boolean).join(' ');
       // data-rotulo alimenta el ::before que muestra el nombre de la columna
       // cuando la tabla se apila como ficha en pantallas angostas.
-      return `<td${clases ? ` class="${clases}"` : ''} data-rotulo="${ENCABEZADOS[c] || c}">${celda(c, f)}</td>`;
+      return `<td${clases ? ` class="${clases}"` : ''} data-rotulo="${ENCABEZADOS[c] ?? c}">${celda(c, f)}</td>`;
     }).join('');
 
     const listo = accionable && f.estado !== 'pendiente' && f.estado !== 'enviada';
@@ -575,6 +593,21 @@ function detalleCotizacion(cot, abonos, items = [], totales = null) {
 /* ─────────── Edición manual ─────────── */
 
 const CAMPOS = {
+  citas: [
+    { n: 'titulo', e: 'Asunto', req: true, ancho: true },
+    { n: 'inicio', e: 'Cuándo', tipo: 'datetime-local' },
+    { n: 'duracion_min', e: 'Duración (minutos)', tipo: 'number' },
+    { n: 'lugar', e: 'Lugar' },
+    { n: 'estado', e: 'Estado', opciones: ['pendiente', 'completada', 'cancelada'] },
+    // De qué se trata y qué hay que llevar. Es lo que se va agregando por voz.
+    { n: 'notas', e: 'Detalle — de qué se trata, qué hay que llevar', area: true, ancho: true },
+  ],
+  recordatorios: [
+    { n: 'texto', e: 'Qué hay que hacer', req: true, area: true, ancho: true },
+    { n: 'vence_en', e: 'Para cuándo', tipo: 'date' },
+    { n: 'prioridad', e: 'Prioridad', opciones: ['alta', 'media', 'baja'] },
+    { n: 'estado', e: 'Estado', opciones: ['pendiente', 'completada', 'cancelada'] },
+  ],
   clientes: [
     { n: 'nombre', e: 'Nombre', req: true },
     { n: 'empresa', e: 'Empresa' },
@@ -599,6 +632,9 @@ const CAMPOS = {
   ],
   productos: [
     { n: 'descripcion', e: 'Descripción', req: true, area: true, ancho: true },
+    // Cómo se llama en la jerga del negocio: Display, Switch EU, Switch US.
+    // Es por lo que se filtra el catálogo cuando hay que mostrar algo puntual.
+    { n: 'tipo', e: 'Tipo (Display, Switch EU, Switch US…)', lista: 'lista-tipos' },
     { n: 'categoria', e: 'Categoría' },
     { n: 'referencia', e: 'Referencia' },
     { n: 'marca', e: 'Marca' },
@@ -634,7 +670,8 @@ function formularioEdicion(entidad, fila) {
           .map((o) => `<option value="${o}"${o === valor ? ' selected' : ''}>${o}</option>`).join('')}</select>`
       : c.area
         ? `<textarea name="${c.n}" rows="2">${escapar(valor)}</textarea>`
-        : `<input name="${c.n}" type="${c.tipo || 'text'}" value="${escapar(valor)}"${c.req ? ' required' : ''} />`;
+        : `<input name="${c.n}" type="${c.tipo || 'text'}" value="${escapar(valor)}"${
+            c.lista ? ` list="${c.lista}"` : ''}${c.req ? ' required' : ''} />`;
     return `<label class="${c.ancho ? 'ancho' : ''}"><span>${c.e}</span>${control}</label>`;
   }).join('');
 
@@ -642,6 +679,8 @@ function formularioEdicion(entidad, fila) {
     <div class="tarjeta" style="margin-bottom:26px">
       <form class="form-editar" id="form-editar" data-entidad="${entidad}" data-id="${fila.id}">
         ${campos}
+        ${entidad === 'productos' ? `<datalist id="lista-tipos">${
+          (estado.tiposConocidos || []).map((t) => `<option value="${escapar(t)}"></option>`).join('')}</datalist>` : ''}
         <div class="form-acciones">
           <button type="submit">Guardar cambios</button>
           <button type="button" class="secundario" data-accion="cancelar-edicion">Cancelar</button>
@@ -750,7 +789,8 @@ function detalleProducto(p, movimientos = []) {
           </div>
           <div>
             <h2>${escapar(p.descripcion)}</h2>
-            <p>${[p.categoria, p.referencia, p.marca].filter(Boolean).map(escapar).join(' · ') || 'Sin categoría'}
+            <p>${p.tipo ? `<span class="etiqueta-tipo">${escapar(p.tipo)}</span> ` : ''}${
+              [p.categoria, p.referencia, p.marca].filter(Boolean).map(escapar).join(' · ') || 'Sin categoría'}
               ${p.maneja_inventario ? '<span class="pastilla propio">propio</span>' : '<span class="pastilla">catálogo proveedor</span>'}</p>
           </div>
         </div>
@@ -782,6 +822,31 @@ function detalleProducto(p, movimientos = []) {
             <input name="url" type="url" placeholder="https://…/foto-del-producto.jpg" /></label>
           <button type="submit">Traer</button>
         </form>
+      </div>`)}
+
+    ${bloque('Ficha técnica', `
+      <div class="tarjeta">
+        <div class="adjunto">
+          ${p.ficha ? `
+            <div class="adjunto-icono">PDF</div>
+            <div class="adjunto-texto">
+              <strong>${escapar(p.ficha_nombre || 'ficha.pdf')}</strong>
+              <span>La hoja de datos del fabricante, para consultarla o mandársela al cliente.</span>
+            </div>
+            <div class="acciones-fila">
+              <a class="mini destacado" href="${escapar(p.ficha)}" target="_blank" rel="noopener">Ver</a>
+              <button class="mini" data-accion="subir-ficha" data-id="${p.id}">Reemplazar</button>
+              <button class="mini peligro" data-accion="quitar-ficha" data-id="${p.id}">Quitar</button>
+            </div>`
+          : `
+            <div class="adjunto-texto">
+              <strong>Sin ficha técnica</strong>
+              <span>Subí el PDF del fabricante y queda pegado a este producto.</span>
+            </div>
+            <div class="acciones-fila">
+              <button class="mini destacado" data-accion="subir-ficha" data-id="${p.id}">Subir la ficha</button>
+            </div>`}
+        </div>
       </div>`)}
 
     ${p.maneja_inventario ? `
@@ -1257,14 +1322,20 @@ async function pintar() {
       const filtros = new URLSearchParams();
       if (estado.buscarProductos) filtros.set('texto', estado.buscarProductos);
       if (estado.verDescontinuados) filtros.set('incluir_inactivos', '1');
-      const { filas } = await api(`/productos?${filtros}`);
+      if (estado.tipoProducto) filtros.set('tipo', estado.tipoProducto);
+      filtros.set('limite', '300');
+      const [{ filas }, { filas: todos }, { tipos }] = await Promise.all([
+        api(`/productos?${filtros}`),
+        api('/productos?incluir_inactivos=1&limite=300'),
+        api('/productos/tipos'),
+      ]);
 
       // Cuántos hay descontinuados, para no ofrecer un filtro que no sirve.
-      const { filas: todos } = await api('/productos?incluir_inactivos=1&limite=300');
       const descontinuados = todos.filter((p) => !p.activo).length;
+      estado.tiposConocidos = tipos.map((t) => t.tipo);
 
       const barra = `<div class="barra-productos">
-        <input type="search" id="buscar-productos" placeholder="Buscar por referencia, descripción, categoría…" value="${escapar(estado.buscarProductos)}" />
+        <input type="search" id="buscar-productos" placeholder="Buscar por referencia, descripción, tipo…" value="${escapar(estado.buscarProductos)}" />
         <button class="mini" data-accion="importar-lista">Importar lista de precios</button>
         <button class="mini" data-accion="ver-listas">Listas en línea</button>
         <button class="mini" data-accion="alternar-nuevo-producto">${estado.nuevoProducto ? 'Cancelar' : '+ Agregar producto'}</button>
@@ -1273,12 +1344,21 @@ async function pintar() {
         <span class="gestor-fotos"></span>
       </div>`;
 
+      // Los tipos que ya se usaron, como filtros de un toque: es lo que sirve
+      // cuando hay que mostrarle algo puntual a un cliente en el momento.
+      const filtrosTipo = tipos.length ? `<div class="filtros-tipo">
+        <button class="chip${estado.tipoProducto ? '' : ' activo'}" data-accion="filtrar-tipo" data-tipo="">Todos</button>
+        ${tipos.map((t) => `<button class="chip${estado.tipoProducto === t.tipo ? ' activo' : ''}"
+          data-accion="filtrar-tipo" data-tipo="${escapar(t.tipo)}">${escapar(t.tipo)} <em>${t.n}</em></button>`).join('')}
+      </div>` : '';
+
       contenedor.innerHTML = barra
+        + filtrosTipo
         + (estado.nuevoProducto ? formularioNuevoProducto() : '')
         + (estado.verDescontinuados
           ? '<p class="ayuda">Los descontinuados son los que dejaron de venir en la lista del proveedor. Siguen guardados con su historial; para volver a usarlos, abrilos y marcá «Disponible en el catálogo».</p>'
           : '')
-        + tabla('productos', ['categoria', 'referencia', 'descripcion', 'stock', 'precio_cliente'], filas,
+        + tabla('productos', ['foto', 'tipo', 'referencia', 'descripcion', 'stock', 'precio_cliente'], filas,
           { vacio: 'Todavía no hay productos en el catálogo. Importá una lista de precios o agregá uno a mano.' });
       $('#buscar-productos')?.focus();
 
@@ -1299,7 +1379,7 @@ async function pintar() {
   }
 
   const CONSULTAS = {
-    agenda: { entidad: 'citas', filtros: 'rango=proximos', columnas: ['inicio', 'titulo', 'cliente', 'lugar', 'estado'] },
+    agenda: { entidad: 'citas', filtros: 'rango=proximos', columnas: ['inicio', 'titulo', 'cliente', 'lugar', 'notas', 'estado'] },
     clientes: { entidad: 'clientes', filtros: '', columnas: ['nombre', 'telefono', 'email', 'cotizado', 'abonado', 'saldo'] },
     cotizaciones: { entidad: 'cotizaciones', filtros: '', columnas: ['creado_en', 'titulo', 'cliente', 'monto', 'abonado', 'saldo', 'estado'] },
     cobros: { entidad: 'cobros', filtros: '', columnas: ['vence_en', 'concepto', 'cliente', 'monto', 'estado'] },
@@ -1860,6 +1940,28 @@ $('#contenido').addEventListener('click', async (e) => {
   }
   if (accion === 'subir-logo') {
     $('#input-logo').click();
+    return;
+  }
+  if (accion === 'filtrar-tipo') {
+    const t = e.target.closest('[data-accion]').dataset.tipo;
+    estado.tipoProducto = t || null;
+    await pintar();
+    return;
+  }
+  if (accion === 'subir-ficha') {
+    estado.subiendoFichaPara = Number(id);
+    $('#input-ficha').click();
+    return;
+  }
+  if (accion === 'quitar-ficha') {
+    if (!confirm('¿Quitar la ficha técnica de este producto?')) return;
+    try {
+      await api(`/productos/${id}/ficha`, { method: 'DELETE' });
+      avisar('Ficha quitada ✓');
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
     return;
   }
   if (accion === 'alternar-nuevo-cliente') {
@@ -2638,6 +2740,23 @@ $('#input-foto').addEventListener('change', async (e) => {
     avisar(bytesAntes > bytes * 1.5
       ? `Foto actualizada ✓ (achicada de ${pesoLegible(bytesAntes)} a ${pesoLegible(bytes)})`
       : 'Foto actualizada ✓');
+    await pintar();
+  } catch (err) {
+    avisar(err.message, true);
+  }
+});
+
+// La ficha técnica del fabricante, pegada al producto.
+$('#input-ficha').addEventListener('change', async (e) => {
+  const archivo = e.target.files[0];
+  e.target.value = '';
+  if (!archivo || !estado.subiendoFichaPara) return;
+  try {
+    await api(`/productos/${estado.subiendoFichaPara}/ficha`, {
+      method: 'POST',
+      body: { archivo_base64: await aDataUrl(archivo), nombre: archivo.name },
+    });
+    avisar('Ficha técnica cargada ✓');
     await pintar();
   } catch (err) {
     avisar(err.message, true);

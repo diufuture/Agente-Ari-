@@ -334,6 +334,76 @@ comprobar('saldada, sale de la lista',
   db.cobrosDeCotizaciones().some((c) => c.id === laQueAprobamos.id), false);
 comprobar('y el total vuelve a lo de antes', db.resumen().contadores.porCobrar, antes.porCobrar);
 
+/* 7d2 · Etiquetar los productos para poder filtrarlos ---------------- */
+// "Mostrame los displays" tiene que traer sólo los displays. El tipo va aparte
+// de la categoría, que la manda el proveedor en su lista.
+db.actualizar('productos', db.consultar('productos', { texto: 'G7-2' })[0].id, { tipo: 'Switch EU' });
+const idG74 = db.consultar('productos', { texto: 'G7-4' })[0].id;
+db.actualizar('productos', idG74, { tipo: 'Switch EU' });
+db.actualizar('productos', db.consultar('productos', { texto: 'CC-CAM' })[0].id, { tipo: 'Cámara' });
+
+comprobar('filtra por tipo', db.consultar('productos', { tipo: 'Switch EU' }).length, 2);
+comprobar('el filtro no distingue mayúsculas', db.consultar('productos', { tipo: 'switch eu' }).length, 2);
+comprobar('los tipos usados salen con su conteo',
+  db.tiposProductos().map((t) => [t.tipo, t.n]), [['Switch EU', 2], ['Cámara', 1]]);
+comprobar('y también se llega buscando por texto',
+  db.consultar('productos', { texto: 'Switch EU' }).length, 2);
+
+// La ficha técnica se guarda como cualquier otro dato del producto
+db.actualizar('productos', idG74, { ficha: '/uploads/fichas/9.pdf', ficha_nombre: 'G7-4.pdf' });
+comprobar('la ficha técnica queda pegada al producto',
+  db.obtenerPorId('productos', idG74).ficha_nombre, 'G7-4.pdf');
+
+// Y una lista nueva del proveedor no puede borrar lo que se puso a mano
+db.conciliarProductos('Interruptores', [
+  { fila: 4, referencia: 'G7-4', descripcion: 'Interruptor 4 canales', precio_cliente: 310000 },
+], {});
+const tras = db.obtenerPorId('productos', idG74);
+comprobar('actualizar la lista conserva el tipo', tras.tipo, 'Switch EU');
+comprobar('y conserva la ficha técnica', tras.ficha_nombre, 'G7-4.pdf');
+comprobar('pero sí actualiza el precio', tras.precio_cliente, 310000);
+
+/* 7e2 · Agregarle algo a una reunión que ya está --------------------- */
+// "Agendame mañana reunión con el ingeniero Javier" y enseguida "agregale que
+// tengo que llevar el catálogo". Lo segundo no puede crear otra reunión.
+const citasAntes = db.consultar('citas', { limite: 100 }).length;
+t('agendar_cita', {
+  titulo: 'Reunión Ingeniero Javier', cliente: 'Ingeniero Javier Forero',
+  fecha_hora: '2026-08-11T15:00', lugar: 'Oficina',
+});
+comprobar('la reunión queda agendada', db.consultar('citas', { limite: 100 }).length, citasAntes + 1);
+
+t('editar', { entidad: 'citas', detalle: 'Llevar el catálogo' });
+comprobar('agregarle detalle no crea otra reunión', db.consultar('citas', { limite: 100 }).length, citasAntes + 1);
+
+const laCita = db.consultar('citas', { texto: 'Ingeniero Javier', limite: 5 })[0];
+comprobar('el detalle quedó guardado', laCita.notas, 'Llevar el catálogo');
+
+// Y se le puede seguir agregando: se suma, no se pisa
+t('editar', { entidad: 'citas', que: 'Ingeniero Javier', detalle: 'Y unos bombillos' });
+comprobar('lo que se agrega después se suma',
+  db.obtenerPorId('citas', laCita.id).notas, 'Llevar el catálogo\nY unos bombillos');
+comprobar('sigue habiendo una sola reunión', db.consultar('citas', { limite: 100 }).length, citasAntes + 1);
+
+// Cambiarle la hora y el lugar tampoco duplica
+t('editar', { entidad: 'citas', que: 'Ingeniero Javier', fecha_hora: '2026-08-11T16:00', lugar: 'La obra' });
+const movida = db.obtenerPorId('citas', laCita.id);
+comprobar('se le cambia la hora', movida.inicio, '2026-08-11T16:00');
+comprobar('y el lugar', movida.lugar, 'La obra');
+comprobar('y el detalle no se perdió', movida.notas, 'Llevar el catálogo\nY unos bombillos');
+comprobar('y sigue siendo una sola', db.consultar('citas', { limite: 100 }).length, citasAntes + 1);
+
+// Un recordatorio es otra cosa: se edita su propio texto
+t('crear_recordatorio', { texto: 'Comprar bombillos', vence_en: '2026-08-11' });
+t('editar', { entidad: 'recordatorios', que: 'bombillos', prioridad: 'alta' });
+comprobar('al recordatorio se le cambia la prioridad',
+  db.consultar('recordatorios', { texto: 'bombillos' })[0].prioridad, 'alta');
+
+// Si lo que nombra no existe, lo dice en vez de crear algo
+let noHay = '';
+try { t('editar', { entidad: 'citas', que: 'almuerzo con el alcalde', lugar: 'X' }); } catch (e) { noHay = e.message; }
+comprobar('editar algo que no existe avisa', noHay.includes('No encontré'), true);
+
 /* 7f · La cartera de cada cliente ------------------------------------ */
 // En la lista de clientes, en vez de la empresa va la plata: cuánto se le
 // cotizó, cuánto abonó y cuánto falta, sumando todas sus cotizaciones.

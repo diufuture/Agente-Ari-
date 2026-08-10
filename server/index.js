@@ -48,6 +48,9 @@ mkdirSync(CARPETA_MARCA, { recursive: true });
 const CARPETA_OFERTAS = join(PUBLICO, 'uploads', 'cotizaciones');
 mkdirSync(CARPETA_OFERTAS, { recursive: true });
 
+const CARPETA_FICHAS = join(PUBLICO, 'uploads', 'fichas');
+mkdirSync(CARPETA_FICHAS, { recursive: true });
+
 /**
  * Versión de la interfaz: cambia sola cuando cambia alguno de sus archivos.
  *
@@ -632,6 +635,44 @@ async function api(req, res, url) {
   // GET /api/productos/categorias -> para sugerir nombres al importar
   if (recurso === 'productos' && partes[1] === 'categorias' && req.method === 'GET') {
     return json(res, 200, { categorias: db.categoriasProductos() });
+  }
+
+  // GET /api/productos/tipos -> las etiquetas ya usadas, con cuántos hay de
+  // cada una, para armar los filtros del catálogo.
+  if (recurso === 'productos' && partes[1] === 'tipos' && req.method === 'GET') {
+    return json(res, 200, { tipos: db.tiposProductos() });
+  }
+
+  // POST|DELETE /api/productos/:id/ficha -> la ficha técnica del fabricante.
+  if (recurso === 'productos' && id && partes[2] === 'ficha') {
+    const productoId = Number(id);
+    if (!db.obtenerPorId('productos', productoId)) return json(res, 404, { error: 'No encontrado' });
+
+    if (req.method === 'POST') {
+      let cuerpo;
+      try {
+        cuerpo = await leerJson(req, 17_000_000);
+      } catch {
+        return json(res, 413, { error: 'Esa ficha pesa demasiado (máximo 12MB).' });
+      }
+      const buffer = decodificarBase64(cuerpo.archivo_base64);
+      if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') {
+        return json(res, 400, { error: 'La ficha técnica tiene que ser un PDF.' });
+      }
+      if (buffer.length > PESO_MAXIMO_PDF) {
+        return json(res, 400, { error: 'Esa ficha pesa demasiado (máximo 12MB).' });
+      }
+      writeFileSync(join(CARPETA_FICHAS, `${productoId}.pdf`), buffer);
+      return json(res, 200, db.actualizar('productos', productoId, {
+        ficha: `/uploads/fichas/${productoId}.pdf?v=${Date.now()}`,
+        ficha_nombre: String(cuerpo.nombre || '').slice(0, 120) || 'ficha.pdf',
+      }));
+    }
+
+    if (req.method === 'DELETE') {
+      rmSync(join(CARPETA_FICHAS, `${productoId}.pdf`), { force: true });
+      return json(res, 200, db.actualizar('productos', productoId, { ficha: '', ficha_nombre: '' }));
+    }
   }
 
   // POST /api/productos/:id/foto -> pone la foto de un producto. Acepta la
