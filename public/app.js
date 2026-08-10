@@ -21,6 +21,8 @@ const estado = {
   nuevoProducto: false,    // el formulario de alta manual de producto está abierto
   subiendoFotoPara: null,  // id del producto al que se le está por asignar una foto
   itemEditando: null,      // id del renglón de cotización abierto para editar
+  subiendoOferta: false,   // formulario para subir una cotización ya hecha en PDF
+  subiendoPdfPara: null,   // id de la cotización a la que se le va a adjuntar el PDF
   viendoListas: false,     // pantalla de listas de precios conectadas en línea
   pruebaLista: null,       // resultado de probar una dirección, antes de conectarla
   buscarCatalogo: '',      // texto del buscador de productos dentro de una cotización
@@ -467,7 +469,11 @@ function detalleCotizacion(cot, abonos, items = [], totales = null) {
         </div>
         <div class="ficha-acciones">
           <span class="pastilla ${escapar(cot.estado)}">${escapar(cot.estado)}</span>
-          <a class="mini destacado" href="/imprimir/cotizacion/${cot.id}" target="_blank" rel="noopener">Imprimir / PDF</a>
+          ${cot.archivo
+            ? `<a class="mini destacado" href="${escapar(cot.archivo)}" target="_blank" rel="noopener">Ver el PDF</a>`
+            : ''}
+          <a class="mini${cot.archivo ? '' : ' destacado'}" href="/imprimir/cotizacion/${cot.id}" target="_blank" rel="noopener">${
+            cot.archivo ? 'Armar una acá' : 'Imprimir / PDF'}</a>
           <button class="mini destacado" data-accion="editar">Editar</button>
         </div>
       </div>
@@ -487,6 +493,31 @@ function detalleCotizacion(cot, abonos, items = [], totales = null) {
     </div>
 
     ${estado.editando ? formularioEdicion('cotizaciones', cot) : ''}
+
+    ${bloque('Oferta en PDF', `
+      <div class="tarjeta">
+        <div class="adjunto">
+          ${cot.archivo ? `
+            <div class="adjunto-icono">PDF</div>
+            <div class="adjunto-texto">
+              <strong>${escapar(cot.archivo_nombre || 'cotizacion.pdf')}</strong>
+              <span>Es la oferta que ve el cliente. El botón «Ver el PDF» de arriba abre ésta.</span>
+            </div>
+            <div class="acciones-fila">
+              <button class="mini" data-accion="subir-pdf" data-id="${cot.id}">Reemplazar</button>
+              <button class="mini peligro" data-accion="quitar-pdf" data-id="${cot.id}">Quitar</button>
+            </div>`
+          : `
+            <div class="adjunto-texto">
+              <strong>Sin PDF adjunto</strong>
+              <span>Si la cotización la armaste por fuera, subí el PDF acá y seguila desde el sistema:
+              cliente, valor, abonos y saldo funcionan igual, con renglones o sin ellos.</span>
+            </div>
+            <div class="acciones-fila">
+              <button class="mini destacado" data-accion="subir-pdf" data-id="${cot.id}">Subir el PDF</button>
+            </div>`}
+        </div>
+      </div>`)}
 
     ${bloque(`Renglones · ${items.length}`, tablaItems(cot, items))}
 
@@ -1265,10 +1296,47 @@ async function pintar() {
   contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
   try {
     const { filas } = await api(`/${CONSULTAS.entidad}?${CONSULTAS.filtros}`);
-    contenedor.innerHTML = tabla(CONSULTAS.entidad, CONSULTAS.columnas, filas);
+    contenedor.innerHTML = (v === 'cotizaciones' ? barraCotizaciones() : '')
+      + tabla(CONSULTAS.entidad, CONSULTAS.columnas, filas);
   } catch (e) {
     contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
   }
+}
+
+/**
+ * El atajo para las ofertas que se arman por fuera: se sube el PDF ya hecho y
+ * queda registrada, sin pasar por el armado renglón por renglón.
+ */
+function barraCotizaciones() {
+  if (!estado.subiendoOferta) {
+    return `<div class="barra-productos">
+      <button class="mini destacado" data-accion="alternar-subir-oferta">Subir una cotización en PDF</button>
+    </div>`;
+  }
+
+  return `<div class="barra-productos">
+      <button class="mini" data-accion="alternar-subir-oferta">Cancelar</button>
+    </div>
+    ${bloque('Subir una cotización ya hecha', `
+      <div class="tarjeta">
+        <p class="ayuda" style="padding:16px 18px 0;margin:0">
+          Para las ofertas que armás por fuera. Se guarda el PDF tal cual y la cotización
+          queda con su cliente y su valor, así le podés seguir los abonos y el saldo como
+          a cualquier otra. No hace falta cargar los renglones.
+        </p>
+        <form class="form-editar" id="form-subir-oferta">
+          <label class="ancho"><span>Asunto</span>
+            <input name="titulo" type="text" required placeholder="Automatización casa Sr. Jimmy" /></label>
+          <label><span>Cliente</span>
+            <input name="cliente" type="text" placeholder="Se crea si no existe" /></label>
+          <label><span>Valor total</span>
+            <input name="monto" type="number" min="0" step="1" required placeholder="6113158" /></label>
+          <label><span>Vence</span><input name="vence_en" type="date" /></label>
+          <label class="ancho"><span>Archivo PDF</span>
+            <input name="archivo" type="file" accept="application/pdf,.pdf" required /></label>
+          <div class="form-acciones"><button type="submit">Guardar la cotización</button></div>
+        </form>
+      </div>`)}`;
 }
 
 const metrica = (valor, rotulo, clase = '') => `
@@ -1684,6 +1752,27 @@ $('#contenido').addEventListener('click', async (e) => {
   }
   if (accion === 'subir-logo') {
     $('#input-logo').click();
+    return;
+  }
+  if (accion === 'alternar-subir-oferta') {
+    estado.subiendoOferta = !estado.subiendoOferta;
+    await pintar();
+    return;
+  }
+  if (accion === 'subir-pdf') {
+    estado.subiendoPdfPara = Number(id);
+    $('#input-pdf').click();
+    return;
+  }
+  if (accion === 'quitar-pdf') {
+    if (!confirm('¿Quitar el PDF adjunto? La cotización se queda; sólo se borra el archivo.')) return;
+    try {
+      await api(`/cotizaciones/${id}/archivo`, { method: 'DELETE' });
+      avisar('PDF quitado ✓');
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
     return;
   }
   if (accion === 'ver-listas' || accion === 'cerrar-listas') {
@@ -2106,6 +2195,47 @@ $('#contenido').addEventListener('submit', async (e) => {
     return;
   }
 
+  if (e.target.id === 'form-subir-oferta') {
+    e.preventDefault();
+    const datos = new FormData(e.target);
+    const archivo = datos.get('archivo');
+    if (!archivo || !archivo.size) return avisar('Elegí el archivo PDF.', true);
+
+    const boton = e.target.querySelector('button[type="submit"]');
+    boton.disabled = true;
+    boton.textContent = 'Subiendo…';
+    try {
+      // Primero la cotización, para tener el número al que pertenece el
+      // archivo; después el PDF. Si el PDF falla, la cotización ya quedó
+      // creada y se le puede adjuntar desde su ficha sin volver a cargar todo.
+      const cot = await api('/cotizaciones', {
+        method: 'POST',
+        body: {
+          titulo: datos.get('titulo'),
+          cliente: datos.get('cliente') || undefined,
+          monto: Number(datos.get('monto')) || 0,
+          vence_en: datos.get('vence_en') || undefined,
+          estado: 'enviada',
+        },
+      });
+      await api(`/cotizaciones/${cot.id}/archivo`, {
+        method: 'POST',
+        body: { archivo_base64: await aDataUrl(archivo), nombre: archivo.name },
+      });
+
+      estado.subiendoOferta = false;
+      estado.cotizacionAbierta = cot.id;
+      avisar('Cotización subida ✓');
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      boton.disabled = false;
+      boton.textContent = 'Guardar la cotización';
+      avisar(err.message, true);
+    }
+    return;
+  }
+
   if (e.target.id === 'form-probar-lista') {
     e.preventDefault();
     const boton = e.target.querySelector('button[type="submit"]');
@@ -2376,6 +2506,23 @@ $('#input-foto').addEventListener('change', async (e) => {
     avisar(bytesAntes > bytes * 1.5
       ? `Foto actualizada ✓ (achicada de ${pesoLegible(bytesAntes)} a ${pesoLegible(bytes)})`
       : 'Foto actualizada ✓');
+    await pintar();
+  } catch (err) {
+    avisar(err.message, true);
+  }
+});
+
+// Adjuntar (o reemplazar) el PDF de una cotización desde su ficha.
+$('#input-pdf').addEventListener('change', async (e) => {
+  const archivo = e.target.files[0];
+  e.target.value = '';
+  if (!archivo || !estado.subiendoPdfPara) return;
+  try {
+    await api(`/cotizaciones/${estado.subiendoPdfPara}/archivo`, {
+      method: 'POST',
+      body: { archivo_base64: await aDataUrl(archivo), nombre: archivo.name },
+    });
+    avisar('PDF adjuntado ✓');
     await pintar();
   } catch (err) {
     avisar(err.message, true);

@@ -44,6 +44,9 @@ mkdirSync(CARPETA_FOTOS, { recursive: true });
 const CARPETA_MARCA = join(PUBLICO, 'uploads', 'marca');
 mkdirSync(CARPETA_MARCA, { recursive: true });
 
+const CARPETA_OFERTAS = join(PUBLICO, 'uploads', 'cotizaciones');
+mkdirSync(CARPETA_OFERTAS, { recursive: true });
+
 // Cuántas filas de ejemplo se muestran al revisar una hoja antes de importarla.
 // Tiene que coincidir con lo que pinta la interfaz.
 const FILAS_DE_MUESTRA = 4;
@@ -73,6 +76,7 @@ const MIME = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
+  '.pdf': 'application/pdf',
 };
 
 const json = (res, codigo, cuerpo) => {
@@ -104,6 +108,7 @@ function decodificarBase64(texto) {
 
 const TIPOS_IMAGEN = { png: 'png', jpeg: 'jpg', jpg: 'jpg', webp: 'webp', gif: 'gif' };
 const PESO_MAXIMO_IMAGEN = 5_000_000;
+const PESO_MAXIMO_PDF = 12_000_000;
 
 /** Una imagen que llega como data URL (archivo elegido o pegada). */
 function leerImagenBase64(dato) {
@@ -419,6 +424,50 @@ async function api(req, res, url) {
     }
   }
 
+  // POST|DELETE /api/cotizaciones/:id/archivo -> la oferta ya hecha, en PDF.
+  //
+  // Muchas cotizaciones se arman por fuera y llegan listas. En vez de
+  // retipearlas para poder seguirlas, se sube el PDF y la cotización queda
+  // igual que cualquier otra: con su cliente, su valor, sus abonos y su saldo.
+  if (recurso === 'cotizaciones' && id && partes[2] === 'archivo') {
+    const cotizacionId = Number(id);
+    if (!db.obtenerPorId('cotizaciones', cotizacionId)) {
+      return json(res, 404, { error: 'Esa cotización no existe.' });
+    }
+
+    if (req.method === 'POST') {
+      let cuerpo;
+      try {
+        cuerpo = await leerJson(req, 17_000_000);
+      } catch {
+        return json(res, 413, { error: 'Ese PDF pesa demasiado (máximo 12MB).' });
+      }
+      const buffer = decodificarBase64(cuerpo.archivo_base64);
+
+      // Se mira el contenido, no el nombre ni lo que diga el navegador: un
+      // archivo que se sirve desde el mismo dominio no puede ser cualquier
+      // cosa con la extensión cambiada.
+      if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') {
+        return json(res, 400, { error: 'Eso no es un PDF. Subí el archivo tal como lo generaste.' });
+      }
+      if (buffer.length > PESO_MAXIMO_PDF) {
+        return json(res, 400, { error: 'Ese PDF pesa demasiado (máximo 12MB).' });
+      }
+
+      writeFileSync(join(CARPETA_OFERTAS, `${cotizacionId}.pdf`), buffer);
+      const fila = db.actualizar('cotizaciones', cotizacionId, {
+        archivo: `/uploads/cotizaciones/${cotizacionId}.pdf?v=${Date.now()}`,
+        archivo_nombre: String(cuerpo.nombre || '').slice(0, 120) || 'cotizacion.pdf',
+      });
+      return json(res, 200, fila);
+    }
+
+    if (req.method === 'DELETE') {
+      rmSync(join(CARPETA_OFERTAS, `${cotizacionId}.pdf`), { force: true });
+      return json(res, 200, db.actualizar('cotizaciones', cotizacionId, { archivo: '', archivo_nombre: '' }));
+    }
+  }
+
   // GET|POST /api/cotizaciones/:id/items -> renglones de una cotización
   if (recurso === 'cotizaciones' && id && partes[2] === 'items') {
     const cotizacionId = Number(id);
@@ -674,10 +723,18 @@ async function estatico(req, res, url) {
 
   try {
     const contenido = await readFile(destino);
-    res.writeHead(200, {
+    const cabeceras = {
       'Content-Type': MIME[extname(destino)] || 'application/octet-stream',
       'Cache-Control': 'no-cache',
-    });
+    };
+    // Lo que subió el usuario se sirve con el tipo que le corresponde y nada
+    // más: sin dejar que el navegador adivine otro, y sin permitir que se
+    // muestre embebido desde otra página.
+    if (ruta.startsWith('/uploads/')) {
+      cabeceras['X-Content-Type-Options'] = 'nosniff';
+      cabeceras['Content-Security-Policy'] = "default-src 'none'; frame-ancestors 'self'";
+    }
+    res.writeHead(200, cabeceras);
     res.end(contenido);
   } catch {
     // Un archivo con extensión que no existe es un 404 de verdad; así el

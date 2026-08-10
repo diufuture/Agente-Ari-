@@ -203,6 +203,11 @@ CREATE INDEX IF NOT EXISTS idx_items_cot ON cotizacion_items(cotizacion_id);
   // Lo que va impreso y puede cambiar de una oferta a otra.
   if (!cot.includes('validez')) db.exec('ALTER TABLE cotizaciones ADD COLUMN validez TEXT');
   if (!cot.includes('condiciones')) db.exec('ALTER TABLE cotizaciones ADD COLUMN condiciones TEXT');
+  // Una cotización armada por fuera y subida ya lista en PDF: la oferta es el
+  // archivo, y acá vive el seguimiento (cliente, saldo, abonos, estado).
+  if (!cot.includes('archivo')) db.exec('ALTER TABLE cotizaciones ADD COLUMN archivo TEXT');
+  if (!cot.includes('archivo_nombre')) db.exec('ALTER TABLE cotizaciones ADD COLUMN archivo_nombre TEXT');
+
   // Quién firma esta oferta. Si queda vacío se imprime el de los ajustes.
   if (!cot.includes('representante')) db.exec('ALTER TABLE cotizaciones ADD COLUMN representante TEXT');
   if (!cot.includes('representante_telefono')) db.exec('ALTER TABLE cotizaciones ADD COLUMN representante_telefono TEXT');

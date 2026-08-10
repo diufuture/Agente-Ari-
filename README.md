@@ -253,6 +253,27 @@ condiciones comerciales y el representante salen de ahí, pero cada cotización
 puede llevar los suyos si esa oferta va con otra forma de pago, otro plazo o
 la atendió otra persona: lo que tenga la cotización manda sobre lo general.
 
+### Subir una cotización ya hecha
+
+No todas las ofertas se arman acá. Muchas salen de otro lado y llegan listas en
+PDF, y retipearlas sólo para poder seguirlas no tiene sentido. En
+**Cotizaciones → Subir una cotización en PDF** se carga el archivo con el
+asunto, el cliente y el valor, y queda registrada como cualquier otra: con su
+estado, sus abonos, su saldo y su lugar en el dashboard. Los renglones no hacen
+falta.
+
+El cliente se crea solo si no existía. En la ficha, el botón **Ver el PDF** abre
+el archivo que subiste —que es el que vio el cliente— y queda igual la opción de
+armar una acá, por si después la querés rehacer con renglones.
+
+A una cotización armada acá también se le puede adjuntar un PDF, desde su ficha:
+sirve para guardar la versión firmada junto a la que generó el sistema.
+
+Se comprueba que el archivo sea realmente un PDF mirando su contenido, no la
+extensión ni lo que diga el navegador, y se sirve con su tipo declarado y
+`nosniff`: algo que se descarga desde el mismo dominio de la aplicación no puede
+ser cualquier cosa con el nombre cambiado. El tope es 12MB.
+
 ### Retocar la oferta durante la negociación
 
 Una cotización terminada se sigue editando: se abre desde **Cotizaciones →

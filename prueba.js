@@ -226,6 +226,38 @@ t('finalizar_cotizacion', {});
 comprobar('sin áreas cargadas, la columna no aparece',
   imprimir.paginaCotizacion(cotSimple).includes('>Área</th>'), false);
 
+/* 7c · Una cotización armada por fuera, subida en PDF ---------------- */
+// No tiene renglones y no los va a tener: la oferta es el archivo. Lo que se
+// le pide al sistema es el seguimiento, y para eso el valor que se escribió a
+// mano tiene que quedarse quieto.
+const subida = db.insertar('cotizaciones', {
+  titulo: 'Oferta armada por fuera',
+  cliente_id: db.resolverCliente('Sr. Jimmy Forero').id,
+  monto: 6113158,
+  estado: 'enviada',
+  archivo: '/uploads/cotizaciones/99.pdf?v=1',
+  archivo_nombre: 'Oferta_Sr_Jimmy.pdf',
+});
+
+db.recalcularCotizacion(subida.id);
+comprobar('sin renglones, el valor escrito a mano no se toca',
+  db.obtenerPorId('cotizaciones', subida.id).monto, 6113158);
+
+// Hay otra cotización abierta del mismo cliente, así que se nombra cuál
+t('registrar_abono', { cliente: 'Jimmy', cotizacion: 'armada por fuera', monto: 2000000, nota: 'Anticipo' });
+const subidaConAbono = db.obtenerPorId('cotizaciones', subida.id);
+comprobar('los abonos le funcionan igual que a cualquier otra', subidaConAbono.abonado, 2000000);
+comprobar('y el saldo también', subidaConAbono.saldo, 6113158 - 2000000);
+
+// Aprobarla no puede romper nada aunque no tenga renglones que descontar
+t('actualizar_estado', { entidad: 'cotizaciones', id: subida.id, estado: 'aprobada' });
+comprobar('se puede aprobar sin renglones', db.obtenerPorId('cotizaciones', subida.id).estado, 'aprobada');
+comprobar('y conserva el PDF adjunto', db.obtenerPorId('cotizaciones', subida.id).archivo_nombre, 'Oferta_Sr_Jimmy.pdf');
+
+// La página imprimible sigue existiendo, por si se quiere armar una acá
+comprobar('la vista imprimible no se rompe sin renglones',
+  imprimir.paginaCotizacion(subida.id).includes('todavía no tiene renglones'), true);
+
 /* 8b · Cómo Excel ancla las fotos ----------------------------------- */
 // Cuatro switches, cuatro maneras de pegar la foto en la misma hoja. Es
 // exactamente lo que pasa cuando alguien arma la lista a mano.
