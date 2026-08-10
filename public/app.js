@@ -2277,7 +2277,9 @@ $('#contenido').addEventListener('submit', async (e) => {
           cliente: datos.get('cliente') || undefined,
           monto: Number(datos.get('monto')) || 0,
           vence_en: datos.get('vence_en') || undefined,
-          estado: 'enviada',
+          // Subir el archivo no significa habérsela mandado al cliente: nace
+          // pendiente, y se marca como enviada cuando de verdad salga.
+          estado: 'pendiente',
         },
       });
       await api(`/cotizaciones/${cot.id}/archivo`, {
@@ -2676,9 +2678,25 @@ $('#btn-refrescar').addEventListener('click', () => {
   avisar('Actualizado');
 });
 
+/**
+ * ¿El cursor está adentro de algo donde se escribe?
+ *
+ * Hace falta para no robarle la barra espaciadora a un formulario. Antes sólo
+ * se perdonaba el cuadro del chat, así que en cualquier otro campo —el nombre
+ * de un cliente, el asunto de una cotización, una descripción— el espacio se
+ * lo comía el micrófono y las palabras quedaban pegadas.
+ *
+ * Van todos los campos, no sólo los de texto: en una casilla o un desplegable
+ * la barra espaciadora ya tiene su trabajo, que es marcarla o abrirlo.
+ */
+const escribiendo = () => {
+  const el = document.activeElement;
+  return Boolean(el) && (el.isContentEditable || /^(input|textarea|select)$/i.test(el.tagName));
+};
+
 document.addEventListener('keydown', (e) => {
   // Barra espaciadora = hablar (si no estás escribiendo)
-  if (e.code === 'Space' && document.activeElement !== $('#texto') && !e.repeat) {
+  if (e.code === 'Space' && !escribiendo() && !e.repeat) {
     e.preventDefault();
     alternarMicrofono();
   }
@@ -2696,7 +2714,10 @@ window.addEventListener('resize', () => { if (!esCelular()) cerrarHoja(); });
 
   try {
     const s = await api('/estado');
-    $('#estado-modelo').textContent = `modelo · ${s.modelo}`;
+    // La versión de la interfaz al lado del modelo: si después de actualizar
+    // el servidor este número no cambió, la pantalla se quedó con la anterior.
+    $('#estado-modelo').textContent = `modelo · ${s.modelo}${s.version ? `\nversión · ${s.version}` : ''}`;
+    $('#estado-modelo').style.whiteSpace = 'pre-line';
     if (s.conAcceso) $('#salir').hidden = false;
     if (!s.vozLista) {
       burbuja('ari error', 'Falta configurar <b>ANTHROPIC_API_KEY</b> en el archivo <code>.env</code> del servidor.');
@@ -2706,3 +2727,4 @@ window.addEventListener('resize', () => { if (!esCelular()) cerrarHoja(); });
   await refrescarTodo();
   setInterval(refrescarResumen, 60_000);
 })();
+

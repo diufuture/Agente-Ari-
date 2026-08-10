@@ -4,6 +4,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { mkdirSync, writeFileSync, rmSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -46,6 +47,27 @@ mkdirSync(CARPETA_MARCA, { recursive: true });
 
 const CARPETA_OFERTAS = join(PUBLICO, 'uploads', 'cotizaciones');
 mkdirSync(CARPETA_OFERTAS, { recursive: true });
+
+/**
+ * Versión de la interfaz: cambia sola cuando cambia alguno de sus archivos.
+ *
+ * Va pegada a la dirección de app.js y styles.css. Sin esto, después de
+ * actualizar el servidor había que entrar con Ctrl+Shift+R para ver los
+ * cambios, y en la aplicación instalada en el Dock —que no tiene botón de
+ * recargar— no había manera de forzarlo: se quedaba con la versión vieja para
+ * siempre. Una dirección que el navegador nunca vio no la puede tener
+ * guardada, así que se actualiza sola.
+ */
+const VERSION = (() => {
+  const h = createHash('sha1');
+  for (const f of ['app.js', 'foto.js', 'styles.css', 'index.html']) {
+    try {
+      const s = statSync(join(PUBLICO, f));
+      h.update(`${f}:${s.size}:${Math.round(s.mtimeMs)}`);
+    } catch { /* si falta alguno, la versión igual sale distinta */ }
+  }
+  return h.digest('hex').slice(0, 10);
+})();
 
 // Cuántas filas de ejemplo se muestran al revisar una hoja antes de importarla.
 // Tiene que coincidir con lo que pinta la interfaz.
@@ -290,6 +312,9 @@ async function api(req, res, url) {
       modelo: asistente.modeloEnUso(),
       vozLista: claveConfigurada(),
       conAcceso: auth.authActiva(),
+      // Para poder ver de un vistazo si la pantalla quedó al día después de
+      // actualizar el servidor, sin tener que adivinar.
+      version: VERSION,
     });
   }
 
@@ -736,11 +761,43 @@ async function estatico(req, res, url) {
   }
 
   try {
-    const contenido = await readFile(destino);
+    let contenido = await readFile(destino);
+    const esHtml = extname(destino) === '.html';
+
+    // La página se reescribe al vuelo para que app.js y styles.css lleven la
+    // versión pegada a la dirección. Una versión nueva es una dirección nueva,
+    // y una dirección que el navegador nunca vio no la puede tener guardada.
+    if (esHtml) {
+      contenido = Buffer.from(
+        contenido.toString('utf8').replace(/(["'])\/(app|foto)\.js\1/g, `$1/$2.js?v=${VERSION}$1`)
+          .replace(/(["'])\/styles\.css\1/g, `$1/styles.css?v=${VERSION}$1`),
+      );
+    }
+    // app.js importa ./foto.js, y esa dirección se resuelve sin la parte de
+    // la versión. Se le pega acá, o el módulo quedaría cacheado aparte.
+    if (ruta === '/app.js') {
+      contenido = Buffer.from(contenido.toString('utf8').replace("'./foto.js'", `'./foto.js?v=${VERSION}'`));
+    }
+
     const cabeceras = {
       'Content-Type': MIME[extname(destino)] || 'application/octet-stream',
-      'Cache-Control': 'no-cache',
+      // La página nunca se guarda: es la que trae las direcciones nuevas.
+      // Lo demás se revalida, y con ETag eso cuesta una respuesta vacía.
+      'Cache-Control': esHtml ? 'no-store, must-revalidate' : 'no-cache',
     };
+
+    if (!esHtml) {
+      const etag = `W/"${createHash('sha1').update(contenido).digest('hex').slice(0, 16)}"`;
+      cabeceras.ETag = etag;
+      // Sin validador, "no-cache" le pide al navegador que revalide contra
+      // nada, y algunos se quedan con la copia vieja para siempre. Con ETag la
+      // pregunta tiene respuesta: 304 si no cambió, 200 con lo nuevo si sí.
+      if (req.headers['if-none-match'] === etag) {
+        res.writeHead(304, cabeceras).end();
+        return;
+      }
+    }
+
     // Lo que subió el usuario se sirve con el tipo que le corresponde y nada
     // más: sin dejar que el navegador adivine otro, y sin permitir que se
     // muestre embebido desde otra página.
@@ -763,8 +820,10 @@ async function estatico(req, res, url) {
     // SPA: cualquier otra ruta desconocida devuelve el index (o el acceso)
     try {
       const respaldo = auth.sesionValida(req) ? 'index.html' : 'login.html';
-      const html = await readFile(join(PUBLICO, respaldo));
-      res.writeHead(200, { 'Content-Type': MIME['.html'] });
+      const html = (await readFile(join(PUBLICO, respaldo))).toString('utf8')
+        .replace(/(["'])\/(app|foto)\.js\1/g, `$1/$2.js?v=${VERSION}$1`)
+        .replace(/(["'])\/styles\.css\1/g, `$1/styles.css?v=${VERSION}$1`);
+      res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store, must-revalidate' });
       res.end(html);
     } catch {
       res.writeHead(404).end('No encontrado');
