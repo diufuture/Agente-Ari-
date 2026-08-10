@@ -1812,6 +1812,9 @@ let arrancando = false;
 // Si el navegador nunca avisa que arrancó —o que terminó—, el estado queda
 // trabado y el botón deja de responder. Este temporizador lo destraba.
 let vigilante = null;
+// Detecta la sesión que abre pero no oye: dice "Escuchando" y no llega audio.
+let centinelaAudio = null;
+let reintentoSordo = 0;
 
 // Manos libres: cuántos silencios seguidos se toleran antes de apagarlo solo.
 const MAX_SILENCIOS = 3;
@@ -1838,24 +1841,73 @@ function iniciarVoz() {
     return;
   }
 
-  reconocedor = new Reconocimiento();
-  reconocedor.lang = 'es-CO';
-  reconocedor.continuous = false;
-  reconocedor.interimResults = true;
-  reconocedor.maxAlternatives = 1;
+  // La instancia se crea recién al empezar cada dictado, no acá: ver
+  // crearReconocedor().
+}
+
+/**
+ * Arma una sesión de dictado nueva.
+ *
+ * Antes había UNA sola instancia, creada al abrir la aplicación y reusada para
+ * siempre. En el celular eso rompía el segundo dictado: la sesión anterior
+ * seguía reteniendo el micrófono, y la nueva abría —decía "Escuchando"— pero
+ * no le llegaba audio, ni transcribía, ni terminaba nunca. Al rato el sistema
+ * soltaba el micrófono por su cuenta y volvía a andar solo, que es justo lo
+ * que se veía.
+ *
+ * Con una instancia por sesión, la anterior se aborta y se tira, y el
+ * micrófono queda libre para la siguiente.
+ */
+function crearReconocedor() {
+  const r = new Reconocimiento();
+  r.lang = 'es-CO';
+  r.continuous = false;
+  r.interimResults = true;
+  r.maxAlternatives = 1;
 
   let acumulado = '';
+  const hayAudio = () => {
+    clearTimeout(centinelaAudio);
+    reintentoSordo = 0;
+  };
 
-  reconocedor.onstart = () => {
+  r.onstart = () => {
     escuchando = true;
     arrancando = false;
     clearTimeout(vigilante);
     acumulado = '';
     marcarGrabando(true);
     $('#pista').textContent = 'Escuchando… hablá con naturalidad.';
+
+    // Si el navegador dice que arrancó pero no abre el audio, la sesión nació
+    // sorda: se queda ahí para siempre, sin transcribir y sin cerrarse. Se le
+    // da un margen corto y se rehace con una instancia limpia.
+    clearTimeout(centinelaAudio);
+    centinelaAudio = setTimeout(() => {
+      if (!escuchando) return;
+      escuchando = false;
+      marcarGrabando(false);
+      soltarMicrofono();
+
+      if (reintentoSordo < 1) {
+        reintentoSordo += 1;
+        $('#pista').textContent = 'Reintentando abrir el micrófono…';
+        setTimeout(() => empezarAEscuchar(), 400);
+      } else {
+        reintentoSordo = 0;
+        abrirHoja();
+        $('#pista').textContent = 'El micrófono no está entregando audio. '
+          + 'Cerrá y volvé a abrir la aplicación, o escribime acá abajo.';
+      }
+    }, 4500);
   };
 
-  reconocedor.onresult = (e) => {
+  // Cualquiera de estas tres es señal de que el audio está entrando de verdad.
+  r.onaudiostart = hayAudio;
+  r.onspeechstart = hayAudio;
+
+  r.onresult = (e) => {
+    hayAudio();
     let parcial = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const t = e.results[i][0].transcript;
@@ -1865,7 +1917,8 @@ function iniciarVoz() {
     $('#texto').value = (acumulado + parcial).trim();
   };
 
-  reconocedor.onerror = (e) => {
+  r.onerror = (e) => {
+    clearTimeout(centinelaAudio);
     // Un silencio en manos libres es normal —se está caminando de una pieza a
     // otra—, así que no interrumpe ni abre la hoja: se sigue escuchando.
     if (e.error === 'no-speech' && manosLibres()) return;
@@ -1894,10 +1947,11 @@ function iniciarVoz() {
     }[e.error] || `Error de micrófono: ${e.error}`;
   };
 
-  reconocedor.onend = () => {
+  r.onend = () => {
     escuchando = false;
     arrancando = false;
     clearTimeout(vigilante);
+    clearTimeout(centinelaAudio);
     marcarGrabando(false);
     const texto = $('#texto').value.trim();
 
@@ -1929,6 +1983,28 @@ function iniciarVoz() {
       $('#pista').textContent = PISTA_INICIAL;
     }
   };
+
+  return r;
+}
+
+/**
+ * Suelta el micrófono de la sesión anterior y la tira.
+ *
+ * `abort()` corta ya; `stop()` se queda esperando resultados y en el celular
+ * puede no soltar nunca. Además se le quitan los manejadores: una instancia
+ * vieja que todavía dispare eventos pisaría el estado de la nueva.
+ */
+function soltarMicrofono() {
+  if (!reconocedor) return;
+  const viejo = reconocedor;
+  reconocedor = null;
+  viejo.onstart = null;
+  viejo.onaudiostart = null;
+  viejo.onspeechstart = null;
+  viejo.onresult = null;
+  viejo.onerror = null;
+  viejo.onend = null;
+  try { viejo.abort(); } catch { /* ya estaba suelto */ }
 }
 
 let avisoVozMostrado = false;
@@ -1952,8 +2028,6 @@ function alternarMicrofono() {
     }
     return;
   }
-  if (!reconocedor) return;
-
   if (escuchando) {
     detenerMicrofono();
     return;
@@ -1963,59 +2037,68 @@ function alternarMicrofono() {
   // Tocar el micrófono es empezar de nuevo: lo que haya fallado antes no
   // tiene por qué seguir estorbando.
   ultimoErrorVoz = null;
+  reintentoSordo = 0;
   empezarAEscuchar();
 }
 
 /**
- * Abre el micrófono, con paciencia.
+ * Abre el micrófono.
  *
- * El navegador no suelta el reconocedor en el instante en que termina una
- * sesión, y menos en el celular. Pedirle que arranque cuando todavía está
- * ocupado tira un error; antes ese error se tragaba en silencio y el botón
- * quedaba muerto —había que seguir a mano—. Ahora se lo aborta y se reintenta
- * un par de veces, que es todo lo que hacía falta.
+ * Dos cosas importan acá, y las dos son por el celular:
  *
- * También se le da un respiro a la voz de Ari: cortar el audio de la respuesta
- * y abrir el micrófono en el mismo suspiro hace que la sesión nazca abortada.
+ * 1. `start()` se llama YA, dentro del mismo toque que lo pidió. En el iPhone
+ *    el micrófono sólo se entrega si el pedido sale del gesto del usuario;
+ *    aplazarlo aunque sea una décima con un temporizador rompe esa cadena y la
+ *    sesión abre sorda —dice "Escuchando" y no le llega audio—.
+ *
+ * 2. Cada sesión estrena instancia, y la anterior se suelta antes. Reusar la
+ *    misma dejaba el micrófono tomado por la sesión vieja: el segundo dictado
+ *    no transcribía ni terminaba nunca, y volvía a andar solo recién cuando el
+ *    sistema soltaba el micrófono por su cuenta, un rato después.
  */
 function empezarAEscuchar(intento = 0) {
-  if (!reconocedor || escuchando) return;
+  if (escuchando) return;
 
+  // La voz de Ari y el micrófono se pelean el audio del teléfono: primero se
+  // calla, después se graba.
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+
+  soltarMicrofono();          // suelta y tira la sesión anterior
+  reconocedor = crearReconocedor();
   arrancando = true;
-  if (intento === 0) speechSynthesis.cancel();
 
-  setTimeout(() => {
-    if (escuchando) { arrancando = false; return; }
-    try {
-      reconocedor.start();
-    } catch {
-      // Sigue ocupado: se lo suelta a la fuerza y se prueba otra vez.
-      if (intento < 2) {
-        try { reconocedor.abort(); } catch { /* ya estaba suelto */ }
-        setTimeout(() => empezarAEscuchar(intento + 1), 220);
-        return;
-      }
-      arrancando = false;
-      marcarGrabando(false);
-      $('#pista').textContent = 'El micrófono quedó ocupado un momento. Tocalo de nuevo.';
+  try {
+    reconocedor.start();
+  } catch {
+    // Todavía ocupado. Con instancia nueva casi no pasa, pero si pasa se
+    // espera un momento y se prueba otra vez en vez de quedar mudo.
+    arrancando = false;
+    if (intento < 2) {
+      soltarMicrofono();
+      setTimeout(() => empezarAEscuchar(intento + 1), 250);
       return;
     }
+    marcarGrabando(false);
+    $('#pista').textContent = 'El micrófono quedó ocupado un momento. Tocalo de nuevo.';
+    return;
+  }
 
-    // Si el navegador no avisa que arrancó, se destraba solo: sin esto el
-    // botón queda sin responder hasta recargar la página.
-    clearTimeout(vigilante);
-    vigilante = setTimeout(() => {
-      if (!escuchando) {
-        arrancando = false;
-        marcarGrabando(false);
-        try { reconocedor.abort(); } catch { /* nada que abortar */ }
-      }
-    }, 3000);
-  }, intento === 0 ? 120 : 0);
+  // Si el navegador no avisa que arrancó, se destraba solo: sin esto el botón
+  // queda sin responder hasta recargar la página.
+  clearTimeout(vigilante);
+  vigilante = setTimeout(() => {
+    if (!escuchando) {
+      arrancando = false;
+      marcarGrabando(false);
+      soltarMicrofono();
+    }
+  }, 3000);
 }
 
 /** Cierra la sesión de dictado, y se asegura de que cierre de verdad. */
 function detenerMicrofono() {
+  if (!reconocedor) return;
+  clearTimeout(centinelaAudio);
   try { reconocedor.stop(); } catch { /* ya estaba detenido */ }
   // Hay navegadores que no llegan a avisar que terminaron. Si en medio
   // segundo no avisó, se corta a la fuerza para que el botón vuelva a andar.
@@ -2025,7 +2108,7 @@ function detenerMicrofono() {
       escuchando = false;
       arrancando = false;
       marcarGrabando(false);
-      try { reconocedor.abort(); } catch { /* ya estaba suelto */ }
+      soltarMicrofono();
     }
   }, 600);
 }
