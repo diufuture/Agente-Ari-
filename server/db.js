@@ -1,5 +1,21 @@
 // Capa de datos. SQLite viene incluido en Node 22 (node:sqlite), así que no
 // hace falta ninguna dependencia nativa.
+
+/**
+ * La zona horaria del negocio, fijada antes de tocar una sola fecha.
+ *
+ * El hosting corre en UTC. Con eso, a partir de las 7 de la tarde en Colombia
+ * el servidor ya cree que es el día siguiente, y todo lo que dependa de "hoy"
+ * se corre un día: agendar "para mañana" caía pasado mañana, y una cita de
+ * mañana aparecía contada en "citas hoy". Un error de fecha silencioso, que
+ * sólo se nota de noche.
+ *
+ * Afecta a Date, a Intl y al 'localtime' de SQLite, que es todo lo que usa
+ * este archivo. No se hereda la zona del hosting a propósito: esa es justo la
+ * que está mal. Si el negocio estuviera en otra parte, se cambia con ARI_ZONA.
+ */
+process.env.TZ = process.env.ARI_ZONA || 'America/Bogota';
+
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -277,6 +293,7 @@ export const ENTIDADES = {
 };
 
 const all = (sql, params = []) => db.prepare(sql).all(...params);
+
 const one = (sql, params = []) => db.prepare(sql).get(...params);
 const run = (sql, params = []) => db.prepare(sql).run(...params);
 

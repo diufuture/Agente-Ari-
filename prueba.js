@@ -334,6 +334,31 @@ comprobar('saldada, sale de la lista',
   db.cobrosDeCotizaciones().some((c) => c.id === laQueAprobamos.id), false);
 comprobar('y el total vuelve a lo de antes', db.resumen().contadores.porCobrar, antes.porCobrar);
 
+/* 7c2 · Las fechas son las del negocio, no las del servidor ---------- */
+// El hosting corre en UTC. De 7 de la tarde en adelante eso hace creer al
+// servidor que ya es el día siguiente, y "mañana" cae pasado mañana. Se
+// compara contra la fecha de Colombia calculada aparte, sin depender de la
+// zona del proceso, para que la prueba valga corra donde corra.
+const enBogota = (dias = 0) => new Date(Date.now() + dias * 864e5)
+  .toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+
+comprobar('el día de hoy es el de Colombia', db.hoy(), enBogota(0));
+comprobar('«mañana» es mañana en Colombia', tools.normalizarFecha('mañana'), enBogota(1));
+comprobar('«hoy» es hoy en Colombia', tools.normalizarFecha('hoy'), enBogota(0));
+
+// Y lo que se ve en el tablero: una cita de mañana no cuenta como de hoy
+const paraManana = db.insertar('citas', {
+  titulo: 'Visita de mañana', inicio: `${enBogota(1)}T15:00`,
+});
+const soloHoy = db.consultar('citas', { rango: 'hoy', estado: 'pendiente' });
+comprobar('una cita de mañana no sale en las de hoy',
+  soloHoy.some((c) => c.id === paraManana.id), false);
+comprobar('pero sí en las próximas',
+  db.consultar('citas', { rango: 'proximos', estado: 'pendiente' }).some((c) => c.id === paraManana.id), true);
+comprobar('y el contador del tablero tampoco la cuenta',
+  db.resumen().contadores.citasHoy, soloHoy.length);
+db.eliminar('citas', paraManana.id);
+
 /* 7d2 · Etiquetar los productos para poder filtrarlos ---------------- */
 // "Mostrame los displays" tiene que traer sólo los displays. El tipo va aparte
 // de la categoría, que la manda el proveedor en su lista.

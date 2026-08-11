@@ -121,7 +121,11 @@ export const HERRAMIENTAS = [
       properties: {
         texto: { type: 'string', description: 'Qué hay que recordar.' },
         fecha_hora: { type: 'string', description: 'Cuándo, en formato YYYY-MM-DD o YYYY-MM-DDTHH:MM.' },
-        prioridad: { type: 'string', enum: ['alta', 'media', 'baja'] },
+        prioridad: {
+          type: 'string',
+          enum: ['alta', 'media', 'baja'],
+          description: 'Alta sólo si el usuario marca urgencia ("urgente", "no se me puede pasar", "primero que todo") o si es para hoy o mañana. Baja si dice "cuando pueda", "sin apuro". En cualquier otro caso omitila y queda en media.',
+        },
         cliente: clienteProp,
       },
       required: ['texto'],
@@ -406,7 +410,7 @@ export const HERRAMIENTAS = [
         fecha_hora: { type: 'string', description: 'Nueva fecha y hora de una cita, YYYY-MM-DDTHH:MM.' },
         lugar: { type: 'string' },
         vence_en: { type: 'string', description: 'Nueva fecha de vencimiento, YYYY-MM-DD.' },
-        prioridad: { type: 'string', enum: ['alta', 'normal', 'baja'] },
+        prioridad: { type: 'string', enum: ['alta', 'media', 'baja'] },
         texto: { type: 'string', description: 'Nuevo texto de un recordatorio o una nota.' },
         telefono: { type: 'string' },
         email: { type: 'string' },

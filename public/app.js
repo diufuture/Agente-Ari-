@@ -24,6 +24,8 @@ const estado = {
   itemEditando: null,      // id del renglón de cotización abierto para editar
   nuevoCliente: false,     // el formulario de alta manual de cliente está abierto
   citaEditando: null,      // id de la cita abierta para editar en la agenda
+  verHechos: false,        // en Pendientes, ver los que ya se marcaron como hechos
+  recordatorioEditando: null, // id del pendiente abierto para corregir
   tipoProducto: null,      // filtro del catálogo por tipo (Display, Switch EU…)
   tiposConocidos: [],      // los tipos ya usados, para sugerirlos al editar
   subiendoFichaPara: null, // id del producto al que se le va a adjuntar la ficha
@@ -342,7 +344,15 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
         ? `<button class="mini" data-accion="estado" data-entidad="${entidad}" data-id="${f.id}" data-estado="${NUEVO_ESTADO[entidad]}">${
             entidad === 'cobros' ? 'Pagado' : 'Listo'}</button>`
         : ''}
-      <button class="mini peligro" data-accion="borrar" data-entidad="${entidad}" data-id="${f.id}">Borrar</button>`}
+      ${entidad === 'recordatorios'
+        // En un pendiente, lo que falta es poder corregirlo; "Listo" ya lo saca
+        // de la lista, así que el botón de borrar sólo tiene sentido entre los
+        // que ya se hicieron.
+        ? `<button class="mini destacado" data-accion="editar-recordatorio" data-id="${f.id}">Editar</button>
+           ${f.estado !== 'pendiente'
+             ? `<button class="mini peligro" data-accion="borrar" data-entidad="recordatorios" data-id="${f.id}">Borrar</button>`
+             : ''}`
+        : `<button class="mini peligro" data-accion="borrar" data-entidad="${entidad}" data-id="${f.id}">Borrar</button>`}`}
     </div></td>`;
 
     return `<tr>${celdas}${acciones}</tr>`;
@@ -1548,6 +1558,37 @@ async function pintar() {
     return;
   }
 
+  // Los pendientes: marcar uno como listo lo saca de la lista, que es de lo
+  // que sirve una lista de pendientes. Los hechos quedan guardados y se pueden
+  // ver con el botón, pero no estorban.
+  if (v === 'recordatorios') {
+    contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
+    try {
+      const [{ filas: pendientes }, { filas: todos }] = await Promise.all([
+        api('/recordatorios?estado=pendiente&limite=200'),
+        api('/recordatorios?limite=200'),
+      ]);
+      const hechos = todos.filter((r) => r.estado !== 'pendiente');
+      const lista = estado.verHechos ? hechos : pendientes;
+      const editando = estado.recordatorioEditando
+        ? todos.find((r) => r.id === estado.recordatorioEditando)
+        : null;
+
+      contenedor.innerHTML = `<div class="barra-productos">
+          <button class="mini${estado.verHechos ? '' : ' destacado'}" data-accion="ver-pendientes">Pendientes (${pendientes.length})</button>
+          ${hechos.length
+            ? `<button class="mini${estado.verHechos ? ' destacado' : ''}" data-accion="ver-hechos">Ya hechos (${hechos.length})</button>`
+            : ''}
+        </div>`
+        + (editando ? formularioEdicion('recordatorios', editando) : '')
+        + tabla('recordatorios', ['vence_en', 'texto', 'cliente', 'prioridad'], lista,
+          { vacio: estado.verHechos ? 'Todavía no marcaste ninguno como hecho.' : '¡Nada pendiente! Pedíselo a Ari: «recordame llamar a Ruth el jueves».' });
+    } catch (e) {
+      contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
+    }
+    return;
+  }
+
   // Las cotizaciones, en renglones cortos y con buscador: con muchas ofertas
   // una tabla ancha se vuelve imposible de recorrer.
   if (v === 'cotizaciones') {
@@ -2374,6 +2415,18 @@ $('#contenido').addEventListener('click', async (e) => {
     }
     return;
   }
+  if (accion === 'ver-pendientes' || accion === 'ver-hechos') {
+    estado.verHechos = accion === 'ver-hechos';
+    estado.recordatorioEditando = null;
+    await pintar();
+    return;
+  }
+  if (accion === 'editar-recordatorio') {
+    estado.recordatorioEditando = estado.recordatorioEditando === Number(id) ? null : Number(id);
+    await pintar();
+    $('#form-editar textarea, #form-editar input')?.focus();
+    return;
+  }
   if (accion === 'filtrar-tipo') {
     const t = e.target.closest('[data-accion]').dataset.tipo;
     estado.tipoProducto = t || null;
@@ -2749,6 +2802,7 @@ $('#contenido').addEventListener('submit', async (e) => {
       }
       estado.editando = false;
       estado.citaEditando = null;
+      estado.recordatorioEditando = null;
       avisar('Datos actualizados ✓');
       await refrescarResumen();
       await pintar();
