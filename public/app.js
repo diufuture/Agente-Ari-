@@ -1770,12 +1770,17 @@ function listaCotizaciones(filas) {
         <span>total</span>
       </div>
       <div class="cot-cifra">
+        <b class="${Number(q.abonado) > 0 ? 'ok' : 'nada'}">${
+          Number(q.abonado) > 0 ? fmtDinero(q.abonado, q.moneda) : '—'}</b>
+        <span>abonado</span>
+      </div>
+      <div class="cot-cifra">
         <b class="${saldado ? 'ok' : ''}">${saldado ? '—' : fmtDinero(q.saldo, q.moneda)}</b>
         <span>${saldado ? 'saldada' : 'por cobrar'}</span>
       </div>
       <div class="cot-botones">
         <button class="pastilla ${escapar(q.estado)} cambia" data-accion="alternar-estado-cot" data-id="${q.id}"
-                title="Tocá para ${aprobada ? 'volverla a pendiente' : 'marcarla aprobada'}">${escapar(q.estado)}</button>
+                title="Tocá para ${aprobada ? 'volverla a pendiente' : 'marcarla aprobada'}">${escapar(q.estado)} ⇄</button>
         ${q.archivo
           ? `<a class="mini pdf" href="${escapar(q.archivo)}" target="_blank" rel="noopener"
                 data-titulo="${escapar(q.titulo)}">📄</a>`
