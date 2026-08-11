@@ -72,6 +72,33 @@ const VERSION = (() => {
   return h.digest('hex').slice(0, 10);
 })();
 
+/**
+ * ¿El proceso está corriendo código más viejo que el que hay en disco?
+ *
+ * Al actualizar en cPanel se extrae el ZIP y listo, pero Node sigue con el
+ * código anterior cargado en memoria hasta que se lo reinicia. Los archivos
+ * de la interfaz sí se leen de disco en cada pedido, así que se ve la pantalla
+ * nueva contra un servidor viejo: aparecen botones que el servidor no sabe
+ * atender, y el error que da no le dice a nadie qué está pasando.
+ *
+ * Comparar la fecha de los archivos del servidor contra el arranque del
+ * proceso lo detecta solo.
+ */
+const ARRANQUE = Date.now();
+const ARCHIVOS_SERVIDOR = ['index.js', 'db.js', 'tools.js', 'assistant.js', 'imprimir.js', 'remoto.js', 'xlsx.js', 'auth.js'];
+
+function servidorDesactualizado() {
+  const carpeta = join(RAIZ, 'server');
+  for (const f of ARCHIVOS_SERVIDOR) {
+    try {
+      // Un margen de 5 segundos: los archivos que se extraen justo antes de
+      // arrancar no cuentan como "más nuevos que el proceso".
+      if (statSync(join(carpeta, f)).mtimeMs > ARRANQUE + 5000) return true;
+    } catch { /* si falta alguno, no es este el problema */ }
+  }
+  return false;
+}
+
 // Cuántas filas de ejemplo se muestran al revisar una hoja antes de importarla.
 // Tiene que coincidir con lo que pinta la interfaz.
 const FILAS_DE_MUESTRA = 4;
@@ -319,6 +346,8 @@ async function api(req, res, url) {
       // Para poder ver de un vistazo si la pantalla quedó al día después de
       // actualizar el servidor, sin tener que adivinar.
       version: VERSION,
+      // Si se extrajo una versión nueva pero no se reinició Node.
+      servidorViejo: servidorDesactualizado(),
     });
   }
 
@@ -733,6 +762,17 @@ async function api(req, res, url) {
   // CRUD manual sobre las entidades (para editar a mano en la interfaz)
   if (ENTIDADES_VALIDAS.has(recurso)) {
     const tabla = db.ENTIDADES[recurso].tabla;
+
+    // /api/cotizaciones/3/loquesea no es "crear una cotización": es una ruta
+    // que este servidor no conoce. Sin esto caía en el alta genérica y
+    // respondía "no recibí ningún dato para guardar", que no le dice a nadie
+    // que lo que pasa es que el servidor está viejo.
+    if (partes[2]) {
+      return json(res, 404, {
+        error: `Esta versión del servidor no conoce /${recurso}/${id}/${partes[2]}. `
+          + 'Si acabás de actualizar, reiniciá la aplicación en cPanel.',
+      });
+    }
 
     if (req.method === 'GET' && id) {
       const fila = db.obtenerPorId(tabla, Number(id));

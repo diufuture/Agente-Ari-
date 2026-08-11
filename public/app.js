@@ -3527,6 +3527,15 @@ window.addEventListener('resize', () => { if (!esCelular()) cerrarHoja(); });
     // el servidor este número no cambió, la pantalla se quedó con la anterior.
     $('#estado-modelo').textContent = `modelo · ${s.modelo}${s.version ? `\nversión · ${s.version}` : ''}`;
     $('#estado-modelo').style.whiteSpace = 'pre-line';
+
+    // Archivos nuevos en disco pero Node corriendo los viejos: la pantalla
+    // muestra botones que el servidor todavía no sabe atender.
+    if (s.servidorViejo) {
+      burbuja('ari error', `<p><b>El servidor quedó con la versión anterior.</b></p>
+        <p>Los archivos nuevos ya están subidos, pero Node sigue corriendo el código de antes.
+        Entrá a <b>cPanel → Setup Node.js App</b> y tocá <b>Restart</b>.</p>
+        <p>Mientras tanto puede que algún botón nuevo dé error.</p>`);
+    }
     if (s.conAcceso) $('#salir').hidden = false;
     if (!s.vozLista) {
       burbuja('ari error', 'Falta configurar <b>ANTHROPIC_API_KEY</b> en el archivo <code>.env</code> del servidor.');
