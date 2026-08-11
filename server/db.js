@@ -34,6 +34,10 @@ export const db = new DatabaseSync(DB_PATH);
 db.exec(`
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
+-- Si otro proceso tiene la base tomada, se espera en vez de fallar en el acto.
+-- Sin esto, cualquier escritura que coincidiera con otra —incluidas las de
+-- arranque— tiraba "database is locked" y la aplicación no levantaba.
+PRAGMA busy_timeout = 8000;
 
 CREATE TABLE IF NOT EXISTS clientes (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -198,7 +202,13 @@ CREATE INDEX IF NOT EXISTS idx_items_cot ON cotizacion_items(cotizacion_id);
 // Migraciones suaves: CREATE TABLE IF NOT EXISTS no agrega columnas nuevas a
 // una tabla que ya existía, así que las bases creadas con versiones
 // anteriores se completan acá sin perder datos.
-{
+//
+// Ninguna de éstas puede impedir que la aplicación arranque. Si una falla
+// —porque otro proceso tiene la base tomada, por ejemplo— se anota y se sigue:
+// lo peor que pasa es que una función nueva no ande hasta el próximo arranque,
+// que es muchísimo mejor que quedarse sin sistema. Una vez esto tumbó el
+// servidor entero por un UPDATE que no tenía nada que actualizar.
+try {
   const columnasDe = (tabla) => db.prepare(`PRAGMA table_info(${tabla})`).all().map((c) => c.name);
 
   const prod = columnasDe('productos');
@@ -240,7 +250,13 @@ CREATE INDEX IF NOT EXISTS idx_items_cot ON cotizacion_items(cotizacion_id);
   // "Enviada" era un estado de más: mandarle la oferta al cliente no cambia
   // nada del negocio, sigue estando pendiente de que la apruebe. Las que
   // quedaron así pasan a pendiente.
-  db.exec("UPDATE cotizaciones SET estado = 'pendiente' WHERE estado = 'enviada'");
+  //
+  // Se pregunta antes de escribir: sin eso, cada arranque hacía un UPDATE
+  // aunque no hubiera nada que cambiar, y bastaba con que otro proceso tuviera
+  // la base tomada para que la aplicación no levantara.
+  if (db.prepare("SELECT 1 FROM cotizaciones WHERE estado = 'enviada' LIMIT 1").get()) {
+    db.exec("UPDATE cotizaciones SET estado = 'pendiente' WHERE estado = 'enviada'");
+  }
 
   // Una cotización cerrada sale de la lista de trabajo y queda en el historial
   // del cliente. Es una decisión del usuario, no algo que pase solo: se cierra
@@ -258,6 +274,10 @@ CREATE INDEX IF NOT EXISTS idx_items_cot ON cotizacion_items(cotizacion_id);
   if (!mov.includes('cotizacion_id')) {
     db.exec('ALTER TABLE movimientos_stock ADD COLUMN cotizacion_id INTEGER REFERENCES cotizaciones(id) ON DELETE SET NULL');
   }
+} catch (err) {
+  console.error('[base de datos] no pude aplicar una migración:', err.message);
+  console.error('  La aplicación arranca igual. Si algo nuevo no funciona, reiniciala cuando');
+  console.error('  no haya otro proceso usando la base.');
 }
 
 /**
@@ -1338,11 +1358,16 @@ export function consultar(entidad, filtros = {}) {
   }
   // Las cerradas no estorban en la lista de trabajo; se piden aparte para ver
   // el historial de un cliente.
-  if (entidad === 'cotizaciones' && !filtros.incluir_archivadas) {
+  //
+  // Se comprueba que la columna exista: si su migración no se pudo aplicar
+  // —la base estaba tomada por otro proceso—, la aplicación tiene que seguir
+  // funcionando sin esa función, no romperse al listar cotizaciones.
+  if (entidad === 'cotizaciones' && !filtros.incluir_archivadas
+      && columnasReales('cotizaciones').has('archivada')) {
     where.push(filtros.solo_archivadas ? 't.archivada = 1' : 't.archivada = 0');
   }
   // Filtrar por tipo: "mostrame los displays", "los switch EU"
-  if (entidad === 'productos' && filtros.tipo) {
+  if (entidad === 'productos' && filtros.tipo && columnasReales('productos').has('tipo')) {
     where.push('t.tipo = ? COLLATE NOCASE');
     params.push(filtros.tipo);
   }
@@ -1354,7 +1379,7 @@ export function consultar(entidad, filtros = {}) {
   }
 
   if (filtros.texto) {
-    const campos = {
+    const camposDe = {
       clientes: ['nombre', 'empresa', 'telefono', 'email', 'notas'],
       citas: ['titulo', 'lugar', 'notas'],
       recordatorios: ['texto'],
@@ -1370,6 +1395,10 @@ export function consultar(entidad, filtros = {}) {
     // cliente: es como uno las busca de verdad ("las de la señora Ruth"), no
     // por el asunto que se le puso.
     const porCliente = ['cotizaciones', 'cobros', 'citas', 'recordatorios'].includes(entidad);
+    // Igual que arriba: si una columna nueva no llegó a crearse, se busca sin
+    // ella en vez de que reviente el buscador entero.
+    const reales = columnasReales(meta.tabla);
+    const campos = camposDe.filter((c) => reales.has(c));
     const trozos = campos.map((c) => `${t}${c} LIKE ? COLLATE NOCASE`);
     if (porCliente) trozos.push('c.nombre LIKE ? COLLATE NOCASE');
 
