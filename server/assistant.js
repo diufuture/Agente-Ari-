@@ -15,7 +15,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { HERRAMIENTAS, ejecutar } from './tools.js';
 import { indiceClientes, cotizacionActiva, totalesCotizacion } from './db.js';
 
-const MODELO = process.env.ARI_MODEL || 'claude-opus-5';
+const MODELO = process.env.ARI_MODEL || 'claude-sonnet-5';
 const MAX_VUELTAS = 6;
 const TURNOS_HISTORIAL = 6;
 

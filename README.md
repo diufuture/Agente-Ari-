@@ -110,15 +110,17 @@ mayoría cacheados) y **50–100 de salida**.
 
 ### Cambiar de modelo
 
-Por defecto usa `claude-opus-5`. Si querés bajar el costo por consulta, en `.env`:
+Por defecto usa `claude-sonnet-5`: el punto óptimo para esta tarea (entender
+la orden y encadenar herramientas), a una fracción del costo de Opus. Si
+querés bajar el costo todavía más, en `.env`:
 
 ```bash
 ARI_MODEL=claude-haiku-4-5    # el más económico y rápido: $1 / $5 por millón
 ```
 
-También sirve `claude-sonnet-5` como punto intermedio. El código detecta el
-modelo y ajusta los parámetros que cada uno soporta, así que no hay que tocar
-nada más.
+`claude-opus-5` sigue disponible si en algún caso hace falta más
+razonamiento. El código detecta el modelo y ajusta los parámetros que cada
+uno soporta, así que no hay que tocar nada más.
 
 ---
 
