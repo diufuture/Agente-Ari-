@@ -1209,3 +1209,10 @@ td.vencido { color: var(--alerta); font-weight: 600; }
 }
 .chip.agrupar { border-style: dashed; color: var(--ambar); border-color: color-mix(in srgb, var(--ambar) 45%, var(--borde)); }
 .chip.agrupar:hover { border-color: var(--ambar); color: var(--ambar); }
+
+/* La oferta en PDF, accesible desde la lista sin entrar a la ficha */
+.mini.pdf {
+  text-decoration: none; display: inline-flex; align-items: center; gap: 3px;
+  color: var(--acento); border-color: color-mix(in srgb, var(--acento) 40%, var(--borde));
+}
+.mini.pdf:hover { background: color-mix(in srgb, var(--acento) 14%, transparent); color: var(--acento); }

@@ -265,8 +265,17 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
     }).join('');
 
     const listo = accionable && f.estado !== 'pendiente' && f.estado !== 'enviada';
+    // La oferta en PDF, a un toque desde la lista: estando con el cliente
+    // enfrente no se puede andar entrando a la ficha para llegar al archivo.
+    // Sólo aparece si esa cotización tiene uno cargado.
+    const verPdf = entidad === 'cotizaciones' && f.archivo
+      ? `<a class="mini pdf" href="${escapar(f.archivo)}" target="_blank" rel="noopener"
+            title="Abrir la oferta en PDF">📄 PDF</a>`
+      : '';
+
     const acciones = `<td class="num acciones"><div class="acciones-fila">
-      ${compacta ? '' : `
+      ${compacta ? verPdf : `
+      ${verPdf}
       ${entidad === 'cotizaciones'
         ? `<button class="mini destacado" data-accion="abrir-cotizacion" data-id="${f.id}">Abrir y editar</button>`
         : ''}
@@ -1534,6 +1543,9 @@ function vistaCobros(pendientes, total, cerrados) {
       <td data-rotulo="Cliente">${escapar(c.cliente || '—')}</td>
       <td data-rotulo="Falta" class="num">${fmtDinero(c.monto, c.moneda)}</td>
       <td class="num acciones"><div class="acciones-fila">
+        ${c.origen === 'cotizacion' && c.archivo
+          ? `<a class="mini pdf" href="${escapar(c.archivo)}" target="_blank" rel="noopener" title="Abrir la oferta en PDF">📄 PDF</a>`
+          : ''}
         ${c.origen === 'cotizacion'
           ? `<button class="mini destacado" data-accion="abrir-cotizacion" data-id="${c.id}">Abrir y abonar</button>`
           : `<button class="mini" data-accion="estado" data-entidad="cobros" data-id="${c.id}" data-estado="pagado">Pagado</button>
