@@ -26,6 +26,7 @@ const estado = {
   citaEditando: null,      // id de la cita abierta para editar en la agenda
   verHechos: false,        // en Pendientes, ver los que ya se marcaron como hechos
   verHistorialCot: false,  // en Cotizaciones, ver las cerradas en vez de las abiertas
+  filtroEstadoCot: null,   // 'pendiente' | 'aprobada' | null (todas)
   clienteCotizaciones: null, // {id, nombre} cuando se miran las de un cliente puntual
   recordatorioEditando: null, // id del pendiente abierto para corregir
   tipoProducto: null,      // filtro del catálogo por tipo (Display, Switch EU…)
@@ -1610,6 +1611,7 @@ async function pintar() {
       } else if (estado.verHistorialCot) {
         f.set('solo_archivadas', '1');
       }
+      if (estado.filtroEstadoCot) f.set('estado', estado.filtroEstadoCot);
       const [{ filas }, { filas: cerradas }] = await Promise.all([
         api(`/cotizaciones?${f}`),
         api('/cotizaciones?solo_archivadas=1&limite=300'),
@@ -1806,29 +1808,40 @@ function barraCotizaciones(cerradas = 0) {
   }
 
   const historial = cerradas
-    ? `<button class="mini${estado.verHistorialCot ? ' destacado' : ''}" data-accion="alternar-historial-cot">${
-        estado.verHistorialCot ? 'Volver a las abiertas' : `Historial (${cerradas})`}</button>`
+    ? `<button class="chip${estado.verHistorialCot ? ' activo' : ''}" data-accion="alternar-historial-cot">${
+        estado.verHistorialCot ? '← Volver a las abiertas' : `Cerradas (${cerradas})`}</button>`
     : '';
+
+  // Filtros por estado: es como se mira la lista de verdad —"qué tengo sin
+  // aprobar", "qué me aprobaron"—, no leyendo renglón por renglón.
+  const filtro = (valor, rotulo) =>
+    `<button class="chip${estado.filtroEstadoCot === valor ? ' activo' : ''}"
+             data-accion="filtrar-estado-cot" data-estado="${valor}">${rotulo}</button>`;
+
+  const filtros = estado.verHistorialCot ? '' : `
+    ${filtro('', 'Todas')}
+    ${filtro('pendiente', 'Pendientes')}
+    ${filtro('aprobada', 'Aprobadas')}`;
 
   if (!estado.subiendoOferta) {
     return `<div class="barra-productos">
-      ${buscador}
-      ${historial}
-      <button class="mini destacado" data-accion="alternar-subir-oferta">Subir una cotización en PDF</button>
-    </div>`;
+        ${buscador}
+        <button class="mini" data-accion="alternar-subir-oferta">+ Cotización</button>
+      </div>
+      <div class="filtros-tipo">${filtros}${historial}</div>`;
   }
 
   return `<div class="barra-productos">
       ${buscador}
-      ${historial}
       <button class="mini" data-accion="alternar-subir-oferta">Cancelar</button>
     </div>
-    ${bloque('Subir una cotización ya hecha', `
+    <div class="filtros-tipo">${filtros}${historial}</div>
+    ${bloque('Cotización nueva', `
       <div class="tarjeta">
         <p class="ayuda" style="padding:16px 18px 0;margin:0">
-          Para las ofertas que armás por fuera. Se guarda el PDF tal cual y la cotización
-          queda con su cliente y su valor, así le podés seguir los abonos y el saldo como
-          a cualquier otra. No hace falta cargar los renglones.
+          Queda registrada con su cliente y su valor, para seguirle los abonos y el saldo.
+          El PDF es opcional: si la armaste por fuera, subilo acá y se guarda tal cual;
+          si no, después le agregás los renglones desde su ficha.
         </p>
         <form class="form-editar" id="form-subir-oferta">
           <label class="ancho"><span>Asunto</span>
@@ -1838,9 +1851,9 @@ function barraCotizaciones(cerradas = 0) {
           <label><span>Valor total</span>
             <input name="monto" type="number" min="0" step="1" required placeholder="6113158" /></label>
           <label><span>Vence</span><input name="vence_en" type="date" /></label>
-          <label class="ancho"><span>Archivo PDF</span>
-            <input name="archivo" type="file" accept="application/pdf,.pdf" required /></label>
-          <div class="form-acciones"><button type="submit">Guardar la cotización</button></div>
+          <label class="ancho"><span>Archivo PDF (opcional)</span>
+            <input name="archivo" type="file" accept="application/pdf,.pdf" /></label>
+          <div class="form-acciones"><button type="submit">Crear la cotización</button></div>
         </form>
       </div>`)}`;
 }
@@ -2482,6 +2495,11 @@ $('#contenido').addEventListener('click', async (e) => {
     await pintar();
     return;
   }
+  if (accion === 'filtrar-estado-cot') {
+    estado.filtroEstadoCot = e.target.closest('[data-accion]').dataset.estado || null;
+    await pintar();
+    return;
+  }
   if (accion === 'alternar-historial-cot') {
     estado.verHistorialCot = !estado.verHistorialCot;
     await pintar();
@@ -3016,8 +3034,6 @@ $('#contenido').addEventListener('submit', async (e) => {
     e.preventDefault();
     const datos = new FormData(e.target);
     const archivo = datos.get('archivo');
-    if (!archivo || !archivo.size) return avisar('Elegí el archivo PDF.', true);
-
     const boton = e.target.querySelector('button[type="submit"]');
     boton.disabled = true;
     boton.textContent = 'Subiendo…';
@@ -3037,19 +3053,21 @@ $('#contenido').addEventListener('submit', async (e) => {
           estado: 'pendiente',
         },
       });
-      await api(`/cotizaciones/${cot.id}/archivo`, {
-        method: 'POST',
-        body: { archivo_base64: await aDataUrl(archivo), nombre: archivo.name },
-      });
+      if (archivo && archivo.size) {
+        await api(`/cotizaciones/${cot.id}/archivo`, {
+          method: 'POST',
+          body: { archivo_base64: await aDataUrl(archivo), nombre: archivo.name },
+        });
+      }
 
       estado.subiendoOferta = false;
       estado.cotizacionAbierta = cot.id;
-      avisar('Cotización subida ✓');
+      avisar('Cotización creada ✓');
       await refrescarResumen();
       await pintar();
     } catch (err) {
       boton.disabled = false;
-      boton.textContent = 'Guardar la cotización';
+      boton.textContent = 'Crear la cotización';
       avisar(err.message, true);
     }
     return;
