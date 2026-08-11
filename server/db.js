@@ -1173,6 +1173,31 @@ export function resolverRegistro(entidad, texto, clienteId = null) {
   };
 }
 
+/**
+ * Lo que hay que hacer después de registrar un abono.
+ *
+ * Si el cliente ya puso plata, la oferta está aprobada: no hay que acordarse
+ * de marcarla aparte para que aparezca en los cobros pendientes. Antes, una
+ * cotización con abonos pero sin marcar quedaba fuera de "por cobrar", que es
+ * justo donde uno la va a buscar.
+ *
+ * No toca las rechazadas: un abono sobre algo que se rechazó es una
+ * contradicción que conviene mirar a mano, no arreglar por lo bajo.
+ */
+export function trasAbono(cotizacionId) {
+  const cot = obtenerPorId('cotizaciones', cotizacionId);
+  if (!cot || cot.estado === 'aprobada' || cot.estado === 'rechazada') return cot;
+
+  const conAbonos = one(
+    'SELECT COUNT(*) n FROM abonos WHERE cotizacion_id = ?', [cotizacionId],
+  ).n > 0;
+  if (!conAbonos) return cot;
+
+  const actualizada = actualizar('cotizaciones', cotizacionId, { estado: 'aprobada' });
+  sincronizarInventario(cotizacionId);   // aprobada = sale de bodega
+  return actualizada;
+}
+
 export function actualizarItem(itemId, datos = {}) {
   const item = obtenerPorId('cotizacion_items', itemId);
   if (!item) return null;
@@ -1307,8 +1332,16 @@ export function consultar(entidad, filtros = {}) {
       movimientos_stock: ['motivo'],
       cotizacion_items: ['descripcion', 'referencia', 'marca', 'seccion'],
     }[entidad];
-    where.push(`(${campos.map((c) => `${t}${c} LIKE ? COLLATE NOCASE`).join(' OR ')})`);
+    // En cotizaciones, cobros y citas se busca también por el nombre del
+    // cliente: es como uno las busca de verdad ("las de la señora Ruth"), no
+    // por el asunto que se le puso.
+    const porCliente = ['cotizaciones', 'cobros', 'citas', 'recordatorios'].includes(entidad);
+    const trozos = campos.map((c) => `${t}${c} LIKE ? COLLATE NOCASE`);
+    if (porCliente) trozos.push('c.nombre LIKE ? COLLATE NOCASE');
+
+    where.push(`(${trozos.join(' OR ')})`);
     campos.forEach(() => params.push(`%${filtros.texto}%`));
+    if (porCliente) params.push(`%${filtros.texto}%`);
   }
 
   // Campo de fecha relevante por entidad
@@ -1396,7 +1429,10 @@ export function resumen() {
     // Para el aviso de "cotización en curso" mientras se dicta.
     enCurso: activa ? { ...activa, totales: totalesCotizacion(activa.id) } : null,
     citasHoy: consultar('citas', { rango: 'hoy', estado: 'pendiente' }),
-    pendientesHoy: consultar('recordatorios', { rango: 'hoy', estado: 'pendiente' }),
+    // Todo lo que está pendiente y todavía no venció, no sólo lo de hoy: un
+    // recordatorio para el jueves también hay que tenerlo a la vista. Los
+    // vencidos van en su propio bloque, arriba.
+    pendientesHoy: consultar('recordatorios', { rango: 'proximos', estado: 'pendiente', limite: 10 }),
     vencidos: consultar('recordatorios', { rango: 'vencidos', estado: 'pendiente' }),
     cobrosVencidos: [
       ...consultar('cobros', { rango: 'vencidos', estado: 'pendiente' }),

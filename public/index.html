@@ -161,6 +161,18 @@
     </button>
   </div>
 
+  <!-- Visor de PDF propio. Abrirlos con target="_blank" en la aplicación
+       instalada los muestra a pantalla completa sin barra ni botón de volver:
+       no había cómo cerrarlos salvo cerrando la aplicación entera. -->
+  <div class="visor-pdf" id="visor-pdf" hidden>
+    <div class="visor-barra">
+      <button class="visor-cerrar" id="visor-cerrar" aria-label="Cerrar el PDF">✕</button>
+      <span class="visor-titulo" id="visor-titulo"></span>
+      <a class="visor-aparte" id="visor-aparte" href="#" target="_blank" rel="noopener">Abrir aparte</a>
+    </div>
+    <iframe class="visor-marco" id="visor-marco" title="Documento" src="about:blank"></iframe>
+  </div>
+
   <div class="telon" id="telon"></div>
   <div class="aviso" id="aviso"></div>
   <input type="file" id="input-excel" accept=".xlsx" hidden />

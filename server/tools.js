@@ -802,6 +802,10 @@ export function ejecutar(nombre, args) {
         nota: args.nota ?? null,
       });
 
+      // Un abono significa que el cliente aceptó: la oferta pasa a aprobada
+      // sola, para que aparezca en los cobros sin tener que marcarla aparte.
+      db.trasAbono(r.id);
+
       // Se relee la cotización para informar el saldo ya actualizado.
       const cot = db.obtenerPorId('cotizaciones', r.id);
       const abonos = db.consultar('abonos', { cotizacion_id: r.id });

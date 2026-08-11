@@ -749,7 +749,11 @@ async function api(req, res, url) {
         if (datos[campo]) datos[campo] = tools.normalizarFecha(datos[campo]) ?? datos[campo];
       }
       try {
-        return json(res, 201, db.insertar(tabla, datos));
+        const fila = db.insertar(tabla, datos);
+        // Un abono significa que el cliente aceptó la oferta: pasa a aprobada
+        // sola, así aparece en los cobros sin tener que marcarla aparte.
+        if (recurso === 'abonos' && fila.cotizacion_id) db.trasAbono(fila.cotizacion_id);
+        return json(res, 201, fila);
       } catch (err) {
         return json(res, 400, { error: err.message });
       }

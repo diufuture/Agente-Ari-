@@ -18,6 +18,7 @@ const estado = {
   editando: false,         // la ficha abierta está mostrando su formulario
   importacion: null,       // hojas de un Excel ya analizadas, listas para revisar e importar
   buscarProductos: '',     // texto del buscador del catálogo
+  buscarCotizaciones: '',  // texto del buscador de cotizaciones
   nuevoProducto: false,    // el formulario de alta manual de producto está abierto
   subiendoFotoPara: null,  // id del producto al que se le está por asignar una foto
   itemEditando: null,      // id del renglón de cotización abierto para editar
@@ -81,6 +82,54 @@ async function api(ruta, opciones = {}) {
   const datos = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(datos.error || `Error ${r.status}`);
   return datos;
+}
+
+/* ─────────── Visor de PDF ─────────── */
+
+/**
+ * Muestra un PDF adentro de la aplicación, con su botón de cerrar.
+ *
+ * Abrirlos con target="_blank" funciona en el navegador, pero en la
+ * aplicación instalada en el teléfono el PDF se toma la pantalla entera sin
+ * barra de direcciones ni botón de volver: no quedaba forma de salir salvo
+ * cerrar la aplicación y volver a entrar.
+ *
+ * Se apila un estado en el historial para que el gesto de "atrás" del
+ * teléfono también lo cierre, que es lo que uno intenta primero.
+ */
+// Si el visor apiló su entrada en el historial. Se lleva acá y no leyendo
+// history.state, porque history.back() tarda en aplicarse: al abrir y cerrar
+// rápido, el estado leído todavía era el viejo y el gesto de atrás dejaba de
+// funcionar.
+let visorEnHistorial = false;
+
+function abrirVisorPdf(url, titulo = 'Documento') {
+  const visor = $('#visor-pdf');
+  $('#visor-titulo').textContent = titulo;
+  $('#visor-aparte').href = url;
+  $('#visor-marco').src = url;
+  visor.hidden = false;
+  document.body.classList.add('con-visor');
+  if (!visorEnHistorial) {
+    history.pushState({ visorPdf: true }, '');
+    visorEnHistorial = true;
+  }
+}
+
+function cerrarVisorPdf({ desdeHistorial = false } = {}) {
+  const visor = $('#visor-pdf');
+  if (visor.hidden) return;
+  visor.hidden = true;
+  // Se descarga el documento: dejarlo cargado gasta memoria y en el teléfono
+  // puede seguir sonando si el PDF trae algo incrustado.
+  $('#visor-marco').src = 'about:blank';
+  document.body.classList.remove('con-visor');
+  if (desdeHistorial) {
+    visorEnHistorial = false;
+  } else if (visorEnHistorial) {
+    visorEnHistorial = false;
+    history.back();
+  }
 }
 
 /* ─────────── Gestor de fotos ─────────── */
@@ -209,6 +258,10 @@ function celda(columna, fila) {
         : '<span style="color:var(--texto-3)">—</span>';
     case 'cantidad':
       return `<span style="color:${Number(v) > 0 ? 'var(--verde)' : 'var(--alerta)'};font-weight:600">${Number(v) > 0 ? '+' : ''}${escapar(v)}</span>`;
+    case 'cliente':
+      // El cliente es por lo que uno busca todo: va resaltado en todas las
+      // pantallas, para encontrarlo de un vistazo sin leer renglón por renglón.
+      return v ? `<span class="es-cliente">${escapar(v)}</span>` : '<span style="color:var(--texto-3)">—</span>';
     case 'cotizado':
       // En la lista de clientes: cuánto se le cotizó en total. Un cliente sin
       // cotizaciones muestra un guión, no "$ 0", que se lee como una deuda.
@@ -270,7 +323,7 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
     // Sólo aparece si esa cotización tiene uno cargado.
     const verPdf = entidad === 'cotizaciones' && f.archivo
       ? `<a class="mini pdf" href="${escapar(f.archivo)}" target="_blank" rel="noopener"
-            title="Abrir la oferta en PDF">📄 PDF</a>`
+            data-titulo="${escapar(f.titulo || 'Cotización')}" title="Abrir la oferta en PDF">📄 PDF</a>`
       : '';
 
     const acciones = `<td class="num acciones"><div class="acciones-fila">
@@ -301,11 +354,30 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
   </table></div></div>`;
 }
 
-function bloque(titulo, contenido) {
-  return `<section class="bloque">
-    <h2 class="bloque-titulo">${escapar(titulo)}</h2>
+/**
+ * Un bloque con su título.
+ *
+ * Con `clave` se vuelve plegable: el título pasa a ser un botón que abre y
+ * cierra, y queda recordado en ese teléfono. Sirve para el tablero, donde no
+ * siempre se quieren ver las tres listas a la vez.
+ */
+function bloque(titulo, contenido, { clave = null, cuantos = null } = {}) {
+  if (!clave) {
+    return `<section class="bloque">
+      <h2 class="bloque-titulo">${escapar(titulo)}</h2>
+      ${contenido}
+    </section>`;
+  }
+
+  const abierto = localStorage.getItem(`plegado:${clave}`) !== '1';
+  return `<details class="bloque plegable" data-clave="${escapar(clave)}"${abierto ? ' open' : ''}>
+    <summary class="bloque-titulo">
+      <span class="flecha" aria-hidden="true">▸</span>
+      ${escapar(titulo)}
+      ${cuantos !== null ? `<em class="cuantos">${cuantos}</em>` : ''}
+    </summary>
     ${contenido}
-  </section>`;
+  </details>`;
 }
 
 function lineaTiempo(citas) {
@@ -360,7 +432,9 @@ function vistaAgenda(citas) {
       </div>
       <div class="cita-cuerpo">
         <h3>${escapar(c.titulo)}</h3>
-        <p class="cita-quien">${escapar([c.cliente, c.lugar].filter(Boolean).join(' · ') || 'Sin cliente ni lugar')}</p>
+        <p class="cita-quien">${c.cliente ? `<span class="es-cliente">${escapar(c.cliente)}</span>` : ''}${
+          c.cliente && c.lugar ? ' · ' : ''}${escapar(c.lugar || '')}${
+          !c.cliente && !c.lugar ? 'Sin cliente ni lugar' : ''}</p>
         ${c.notas
           ? `<div class="cita-detalle">${escapar(c.notas)}</div>`
           : '<p class="cita-sin-detalle">Sin detalle. Decile a Ari «agregale a esta reunión que…» o tocá Editar.</p>'}
@@ -563,7 +637,8 @@ function detalleCotizacion(cot, abonos, items = [], totales = null) {
         <div class="ficha-acciones">
           <span class="pastilla ${escapar(cot.estado)}">${escapar(cot.estado)}</span>
           ${cot.archivo
-            ? `<a class="mini destacado" href="${escapar(cot.archivo)}" target="_blank" rel="noopener">Ver el PDF</a>`
+            ? `<a class="mini destacado" href="${escapar(cot.archivo)}" target="_blank" rel="noopener"
+                  data-titulo="${escapar(cot.archivo_nombre || cot.titulo)}">Ver el PDF</a>`
             : ''}
           <a class="mini${cot.archivo ? '' : ' destacado'}" href="/imprimir/cotizacion/${cot.id}" target="_blank" rel="noopener">${
             cot.archivo ? 'Armar una acá' : 'Imprimir / PDF'}</a>
@@ -894,7 +969,8 @@ function detalleProducto(p, movimientos = []) {
               <span>La hoja de datos del fabricante, para consultarla o mandársela al cliente.</span>
             </div>
             <div class="acciones-fila">
-              <a class="mini destacado" href="${escapar(p.ficha)}" target="_blank" rel="noopener">Ver</a>
+              <a class="mini destacado" href="${escapar(p.ficha)}" target="_blank" rel="noopener"
+                 data-titulo="${escapar(p.ficha_nombre || p.descripcion)}">Ver</a>
               <button class="mini" data-accion="subir-ficha" data-id="${p.id}">Reemplazar</button>
               <button class="mini peligro" data-accion="quitar-ficha" data-id="${p.id}">Quitar</button>
             </div>`
@@ -1355,16 +1431,21 @@ async function pintar() {
     </div>`;
 
     contenedor.innerHTML = metricas
-      + bloque('Agenda de hoy', lineaTiempo(r.citasHoy))
+      + bloque('Agenda de hoy', lineaTiempo(r.citasHoy),
+        { clave: 'hoy', cuantos: r.citasHoy.length })
       + (r.vencidos.length
-        ? bloque('⚠ Vencidos', tabla('recordatorios', ['vence_en', 'texto', 'cliente', 'prioridad'], r.vencidos))
+        ? bloque('⚠ Vencidos', tabla('recordatorios', ['vence_en', 'texto', 'cliente', 'prioridad'], r.vencidos),
+          { clave: 'vencidos', cuantos: r.vencidos.length })
         : '')
       + (r.cobrosVencidos.length
-        ? bloque('⚠ Cobros vencidos', tabla('cobros', ['vence_en', 'concepto', 'cliente', 'monto'], r.cobrosVencidos))
+        ? bloque('⚠ Cobros vencidos', tabla('cobros', ['vence_en', 'concepto', 'cliente', 'monto'], r.cobrosVencidos),
+          { clave: 'cobros-vencidos', cuantos: r.cobrosVencidos.length })
         : '')
-      + bloque('Tareas pendientes', tabla('recordatorios', ['vence_en', 'texto', 'cliente', 'prioridad'],
-        r.pendientesHoy, { vacio: 'Sin tareas para hoy.' }))
-      + bloque('Próximas citas', tabla('citas', ['inicio', 'titulo', 'cliente', 'lugar'], r.proximasCitas));
+      + bloque('Pendientes por hacer', tabla('recordatorios', ['vence_en', 'texto', 'cliente', 'prioridad'],
+        r.pendientesHoy, { vacio: 'Nada pendiente. Pedíselo a Ari: «recordame llamar a Ruth el jueves».' }),
+      { clave: 'pendientes', cuantos: r.pendientesHoy.length })
+      + bloque('Próximas citas', tabla('citas', ['inicio', 'titulo', 'cliente', 'lugar'], r.proximasCitas),
+        { clave: 'proximas', cuantos: r.proximasCitas.length });
     return;
   }
 
@@ -1467,6 +1548,26 @@ async function pintar() {
     return;
   }
 
+  // Las cotizaciones, en renglones cortos y con buscador: con muchas ofertas
+  // una tabla ancha se vuelve imposible de recorrer.
+  if (v === 'cotizaciones') {
+    contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
+    try {
+      const f = new URLSearchParams({ limite: '200' });
+      if (estado.buscarCotizaciones) f.set('texto', estado.buscarCotizaciones);
+      const { filas } = await api(`/cotizaciones?${f}`);
+      contenedor.innerHTML = barraCotizaciones() + listaCotizaciones(filas);
+      const buscador = $('#buscar-cotizaciones');
+      if (buscador) {
+        buscador.focus();
+        buscador.setSelectionRange(buscador.value.length, buscador.value.length);
+      }
+    } catch (e) {
+      contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
+    }
+    return;
+  }
+
   // Los cobros se muestran junto al saldo de las cotizaciones aprobadas: una
   // oferta aprobada es una venta cerrada, y lo que falte de ella es cobranza.
   if (v === 'cobros') {
@@ -1540,11 +1641,12 @@ function vistaCobros(pendientes, total, cerrados) {
               c.abonado ? ` · abonado ${fmtDinero(c.abonado, c.moneda)} de ${fmtDinero(c.total, c.moneda)}` : ''}</em>`
           : ''}
       </td>
-      <td data-rotulo="Cliente">${escapar(c.cliente || '—')}</td>
+      <td data-rotulo="Cliente">${c.cliente ? `<span class="es-cliente">${escapar(c.cliente)}</span>` : '—'}</td>
       <td data-rotulo="Falta" class="num">${fmtDinero(c.monto, c.moneda)}</td>
       <td class="num acciones"><div class="acciones-fila">
         ${c.origen === 'cotizacion' && c.archivo
-          ? `<a class="mini pdf" href="${escapar(c.archivo)}" target="_blank" rel="noopener" title="Abrir la oferta en PDF">📄 PDF</a>`
+          ? `<a class="mini pdf" href="${escapar(c.archivo)}" target="_blank" rel="noopener"
+                data-titulo="${escapar(c.concepto || 'Cotización')}" title="Abrir la oferta en PDF">📄 PDF</a>`
           : ''}
         ${c.origen === 'cotizacion'
           ? `<button class="mini destacado" data-accion="abrir-cotizacion" data-id="${c.id}">Abrir y abonar</button>`
@@ -1577,14 +1679,56 @@ function vistaCobros(pendientes, total, cerrados) {
  * El atajo para las ofertas que se arman por fuera: se sube el PDF ya hecho y
  * queda registrada, sin pasar por el armado renglón por renglón.
  */
+/**
+ * Las cotizaciones, una por renglón corto.
+ *
+ * Con muchas ofertas la tabla ancha se vuelve imposible de recorrer, así que
+ * a la vista quedan el asunto y el cliente, que es por lo que uno las busca;
+ * el saldo y el estado van al costado, y el PDF a un toque.
+ */
+function listaCotizaciones(filas) {
+  if (!filas.length) {
+    return `<div class="tarjeta"><div class="vacio">
+      <strong>${estado.buscarCotizaciones ? 'Ninguna coincide' : 'Todavía no hay cotizaciones'}</strong>${
+        estado.buscarCotizaciones
+          ? 'Probá con otra parte del nombre del cliente o del asunto.'
+          : 'Pedísela a Ari, o subí una que ya tengas hecha en PDF.'}
+    </div></div>`;
+  }
+
+  return `<div class="lista-cot">${filas.map((q) => {
+    const saldado = Number(q.saldo) <= 0;
+    return `<div class="cot-fila" data-accion="abrir-cotizacion" data-id="${q.id}" role="button" tabindex="0">
+      <div class="cot-texto">
+        <strong class="es-cliente">${escapar(q.cliente || 'Sin cliente')}</strong>
+        <span>${escapar(q.titulo)}</span>
+      </div>
+      <div class="cot-cifra">
+        <b class="${saldado ? 'ok' : ''}">${saldado ? fmtDinero(q.monto, q.moneda) : fmtDinero(q.saldo, q.moneda)}</b>
+        <span>${saldado ? 'saldada' : 'por cobrar'}</span>
+      </div>
+      <span class="pastilla ${escapar(q.estado)}">${escapar(q.estado)}</span>
+      ${q.archivo
+        ? `<a class="mini pdf" href="${escapar(q.archivo)}" target="_blank" rel="noopener"
+              data-titulo="${escapar(q.titulo)}">📄</a>`
+        : '<span class="sin-pdf"></span>'}
+    </div>`;
+  }).join('')}</div>`;
+}
+
 function barraCotizaciones() {
+  const buscador = `<input type="search" id="buscar-cotizaciones"
+    placeholder="Buscar por cliente o por asunto…" value="${escapar(estado.buscarCotizaciones)}" />`;
+
   if (!estado.subiendoOferta) {
     return `<div class="barra-productos">
+      ${buscador}
       <button class="mini destacado" data-accion="alternar-subir-oferta">Subir una cotización en PDF</button>
     </div>`;
   }
 
   return `<div class="barra-productos">
+      ${buscador}
       <button class="mini" data-accion="alternar-subir-oferta">Cancelar</button>
     </div>
     ${bloque('Subir una cotización ya hecha', `
@@ -2148,6 +2292,12 @@ $('#nav').addEventListener('click', (e) => {
 });
 
 $('#contenido').addEventListener('click', async (e) => {
+  // Un enlace adentro de un renglón que también es botón —el PDF dentro de la
+  // cotización— hace lo suyo y no abre el renglón. Se mira acá y no con
+  // stopPropagation en el enlace, porque eso también le cortaría el paso al
+  // visor de PDF, que escucha en el documento.
+  if (e.target.closest('a[href]')) return;
+
   const boton = e.target.closest('[data-accion]');
   if (!boton) return;
   const { accion, entidad, id } = boton.dataset;
@@ -2886,7 +3036,17 @@ $('#contenido').addEventListener('scroll', () => {
 // Buscadores (con una pequeña espera para no disparar una consulta por tecla).
 let buscarProductosTimer;
 let buscarCatalogoTimer;
+let buscarCotizacionesTimer;
 $('#contenido').addEventListener('input', (e) => {
+  if (e.target.id === 'buscar-cotizaciones') {
+    estado.buscarCotizaciones = e.target.value;
+    clearTimeout(buscarCotizacionesTimer);
+    buscarCotizacionesTimer = setTimeout(() => {
+      if (estado.vista === 'cotizaciones' && !estado.cotizacionAbierta) pintar();
+    }, 300);
+    return;
+  }
+
   if (e.target.id === 'buscar-productos') {
     estado.buscarProductos = e.target.value;
     clearTimeout(buscarProductosTimer);
@@ -3172,7 +3332,38 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     alternarMicrofono();
   }
-  if (e.key === 'Escape') cerrarHoja();
+  if (e.key === 'Escape') {
+    if (!$('#visor-pdf').hidden) cerrarVisorPdf();
+    else cerrarHoja();
+  }
+});
+
+// Los PDF propios se abren adentro, con su botón de cerrar. Los de afuera —o
+// si alguien abre en pestaña nueva a propósito— siguen su curso normal.
+document.addEventListener('click', (e) => {
+  const enlace = e.target.closest('a[href]');
+  if (!enlace || e.metaKey || e.ctrlKey || e.shiftKey) return;
+  if (enlace.id === 'visor-aparte') return;
+
+  const href = enlace.getAttribute('href') || '';
+  if (!href.startsWith('/uploads/') || !href.split('?')[0].endsWith('.pdf')) return;
+
+  e.preventDefault();
+  abrirVisorPdf(href, enlace.dataset.titulo || 'Documento');
+});
+
+$('#visor-cerrar').addEventListener('click', () => cerrarVisorPdf());
+
+// Que un bloque plegado siga plegado la próxima vez que se entre.
+$('#contenido').addEventListener('toggle', (e) => {
+  const det = e.target.closest('details.plegable');
+  if (!det) return;
+  localStorage.setItem(`plegado:${det.dataset.clave}`, det.open ? '0' : '1');
+}, true);
+
+// El gesto de "atrás" del teléfono cierra el visor en vez de salir de la app.
+window.addEventListener('popstate', () => {
+  if (!$('#visor-pdf').hidden) cerrarVisorPdf({ desdeHistorial: true });
 });
 
 // Al girar el teléfono o pasar a escritorio, la hoja vuelve a su sitio.
