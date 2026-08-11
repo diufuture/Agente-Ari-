@@ -25,6 +25,8 @@ const estado = {
   nuevoCliente: false,     // el formulario de alta manual de cliente está abierto
   citaEditando: null,      // id de la cita abierta para editar en la agenda
   verHechos: false,        // en Pendientes, ver los que ya se marcaron como hechos
+  verHistorialCot: false,  // en Cotizaciones, ver las cerradas en vez de las abiertas
+  clienteCotizaciones: null, // {id, nombre} cuando se miran las de un cliente puntual
   recordatorioEditando: null, // id del pendiente abierto para corregir
   tipoProducto: null,      // filtro del catálogo por tipo (Display, Switch EU…)
   tiposConocidos: [],      // los tipos ya usados, para sugerirlos al editar
@@ -319,7 +321,7 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
       return `<td${clases ? ` class="${clases}"` : ''} data-rotulo="${ENCABEZADOS[c] ?? c}">${celda(c, f)}</td>`;
     }).join('');
 
-    const listo = accionable && f.estado !== 'pendiente' && f.estado !== 'enviada';
+    const listo = accionable && f.estado !== 'pendiente';
     // La oferta en PDF, a un toque desde la lista: estando con el cliente
     // enfrente no se puede andar entrando a la ficha para llegar al archivo.
     // Sólo aparece si esa cotización tiene uno cargado.
@@ -335,7 +337,11 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
         ? `<button class="mini destacado" data-accion="abrir-cotizacion" data-id="${f.id}">Abrir y editar</button>`
         : ''}
       ${entidad === 'clientes'
-        ? `<button class="mini destacado" data-accion="abrir-cliente" data-id="${f.id}">Ver ficha</button>`
+        ? `<button class="mini destacado" data-accion="abrir-cliente" data-id="${f.id}">Ver ficha</button>
+           ${f.n_cotizaciones
+             ? `<button class="mini" data-accion="cotizaciones-de" data-id="${f.id}"
+                        data-nombre="${escapar(f.nombre)}">Cotizaciones (${f.n_cotizaciones})</button>`
+             : ''}`
         : ''}
       ${entidad === 'productos'
         ? `<button class="mini destacado" data-accion="abrir-producto" data-id="${f.id}">Ver</button>`
@@ -765,7 +771,7 @@ const CAMPOS = {
     { n: 'titulo', e: 'Asunto', req: true, ancho: true },
     { n: 'monto', e: 'Valor', tipo: 'number' },
     { n: 'vence_en', e: 'Vence', tipo: 'date' },
-    { n: 'estado', e: 'Estado', opciones: ['pendiente', 'enviada', 'aprobada', 'rechazada'] },
+    { n: 'estado', e: 'Estado', opciones: ['pendiente', 'aprobada', 'rechazada'] },
     { n: 'moneda', e: 'Moneda' },
     { n: 'validez', e: 'Validez de la oferta' },
     // Si quedan vacíos se imprime el representante de los datos de la empresa.
@@ -1596,8 +1602,22 @@ async function pintar() {
     try {
       const f = new URLSearchParams({ limite: '200' });
       if (estado.buscarCotizaciones) f.set('texto', estado.buscarCotizaciones);
-      const { filas } = await api(`/cotizaciones?${f}`);
-      contenedor.innerHTML = barraCotizaciones() + listaCotizaciones(filas);
+      // Mirando un cliente puntual se ven todas, abiertas y cerradas: para
+      // hacerle seguimiento hace falta el historial completo, no la mitad.
+      if (estado.clienteCotizaciones) {
+        f.set('cliente_id', estado.clienteCotizaciones.id);
+        f.set('incluir_archivadas', '1');
+      } else if (estado.verHistorialCot) {
+        f.set('solo_archivadas', '1');
+      }
+      const [{ filas }, { filas: cerradas }] = await Promise.all([
+        api(`/cotizaciones?${f}`),
+        api('/cotizaciones?solo_archivadas=1&limite=300'),
+      ]);
+      contenedor.innerHTML = barraCotizaciones(cerradas.length) + listaCotizaciones(filas);
+      $('#titulo-vista').textContent = estado.clienteCotizaciones
+        ? `Cotizaciones · ${estado.clienteCotizaciones.nombre}`
+        : 'Cotizaciones';
       const buscador = $('#buscar-cotizaciones');
       if (buscador) {
         buscador.focus();
@@ -1739,37 +1759,63 @@ function listaCotizaciones(filas) {
 
   return `<div class="lista-cot">${filas.map((q) => {
     const saldado = Number(q.saldo) <= 0;
+    const aprobada = q.estado === 'aprobada';
     return `<div class="cot-fila" data-accion="abrir-cotizacion" data-id="${q.id}" role="button" tabindex="0">
       <div class="cot-texto">
         <strong class="es-cliente">${escapar(q.cliente || 'Sin cliente')}</strong>
         <span>${escapar(q.titulo)}</span>
       </div>
       <div class="cot-cifra">
-        <b class="${saldado ? 'ok' : ''}">${saldado ? fmtDinero(q.monto, q.moneda) : fmtDinero(q.saldo, q.moneda)}</b>
+        <b class="total">${fmtDinero(q.monto, q.moneda)}</b>
+        <span>total</span>
+      </div>
+      <div class="cot-cifra">
+        <b class="${saldado ? 'ok' : ''}">${saldado ? '—' : fmtDinero(q.saldo, q.moneda)}</b>
         <span>${saldado ? 'saldada' : 'por cobrar'}</span>
       </div>
-      <span class="pastilla ${escapar(q.estado)}">${escapar(q.estado)}</span>
-      ${q.archivo
-        ? `<a class="mini pdf" href="${escapar(q.archivo)}" target="_blank" rel="noopener"
-              data-titulo="${escapar(q.titulo)}">📄</a>`
-        : '<span class="sin-pdf"></span>'}
+      <div class="cot-botones">
+        <button class="pastilla ${escapar(q.estado)} cambia" data-accion="alternar-estado-cot" data-id="${q.id}"
+                title="Tocá para ${aprobada ? 'volverla a pendiente' : 'marcarla aprobada'}">${escapar(q.estado)}</button>
+        ${q.archivo
+          ? `<a class="mini pdf" href="${escapar(q.archivo)}" target="_blank" rel="noopener"
+                data-titulo="${escapar(q.titulo)}">📄</a>`
+          : ''}
+        ${q.archivada
+          ? `<button class="mini" data-accion="reabrir-cot" data-id="${q.id}">Reabrir</button>`
+          : `<button class="mini${saldado && aprobada ? ' destacado' : ''}" data-accion="cerrar-cot" data-id="${q.id}"
+                     title="${saldado ? 'Sacarla de la lista y dejarla en el historial' : 'Todavía falta cobrarla'}">Cerrar</button>`}
+      </div>
     </div>`;
   }).join('')}</div>`;
 }
 
-function barraCotizaciones() {
+function barraCotizaciones(cerradas = 0) {
   const buscador = `<input type="search" id="buscar-cotizaciones"
     placeholder="Buscar por cliente o por asunto…" value="${escapar(estado.buscarCotizaciones)}" />`;
+  if (estado.clienteCotizaciones) {
+    return `<div class="barra-productos">
+      <button class="mini destacado" data-accion="quitar-filtro-cliente">← Todas las cotizaciones</button>
+      <span class="filtro-cliente">Mostrando las de <b class="es-cliente">${
+        escapar(estado.clienteCotizaciones.nombre)}</b>, abiertas y cerradas</span>
+    </div>`;
+  }
+
+  const historial = cerradas
+    ? `<button class="mini${estado.verHistorialCot ? ' destacado' : ''}" data-accion="alternar-historial-cot">${
+        estado.verHistorialCot ? 'Volver a las abiertas' : `Historial (${cerradas})`}</button>`
+    : '';
 
   if (!estado.subiendoOferta) {
     return `<div class="barra-productos">
       ${buscador}
+      ${historial}
       <button class="mini destacado" data-accion="alternar-subir-oferta">Subir una cotización en PDF</button>
     </div>`;
   }
 
   return `<div class="barra-productos">
       ${buscador}
+      ${historial}
       <button class="mini" data-accion="alternar-subir-oferta">Cancelar</button>
     </div>
     ${bloque('Subir una cotización ya hecha', `
@@ -2322,6 +2368,7 @@ $('#nav').addEventListener('click', (e) => {
   estado.vista = boton.dataset.vista;
   estado.vistaAsistente = null;
   estado.cotizacionAbierta = null;
+  estado.clienteCotizaciones = null;
   estado.clienteAbierto = null;
   estado.productoAbierto = null;
   estado.importacion = null;
@@ -2411,6 +2458,51 @@ $('#contenido').addEventListener('click', async (e) => {
       await pintar();
     } catch (err) {
       boton.disabled = false;
+      avisar(err.message, true);
+    }
+    return;
+  }
+  if (accion === 'cotizaciones-de') {
+    const b = e.target.closest('[data-accion]');
+    estado.clienteCotizaciones = { id: Number(id), nombre: b.dataset.nombre };
+    estado.clienteAbierto = null;
+    estado.buscarCotizaciones = '';
+    estado.vista = 'cotizaciones';
+    $$('.nav-item').forEach((n) => n.classList.toggle('activo', n.dataset.vista === 'cotizaciones'));
+    await pintar();
+    return;
+  }
+  if (accion === 'quitar-filtro-cliente') {
+    estado.clienteCotizaciones = null;
+    await pintar();
+    return;
+  }
+  if (accion === 'alternar-historial-cot') {
+    estado.verHistorialCot = !estado.verHistorialCot;
+    await pintar();
+    return;
+  }
+  if (accion === 'alternar-estado-cot') {
+    const actual = await api(`/cotizaciones/${id}`);
+    const nuevo = actual.estado === 'aprobada' ? 'pendiente' : 'aprobada';
+    try {
+      await api(`/cotizaciones/${id}`, { method: 'PATCH', body: { estado: nuevo } });
+      avisar(nuevo === 'aprobada' ? 'Marcada como aprobada ✓' : 'Vuelve a estar pendiente');
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+  if (accion === 'cerrar-cot' || accion === 'reabrir-cot') {
+    const cerrando = accion === 'cerrar-cot';
+    try {
+      await api(`/cotizaciones/${id}/cerrar`, { method: cerrando ? 'POST' : 'DELETE' });
+      avisar(cerrando ? 'Cotización cerrada ✓ Queda en el historial.' : 'Vuelve a la lista.');
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
       avisar(err.message, true);
     }
     return;

@@ -511,6 +511,17 @@ async function api(req, res, url) {
     }
   }
 
+  // POST|DELETE /api/cotizaciones/:id/cerrar -> la saca de la lista de trabajo
+  // y la deja en el historial del cliente. Sólo si no falta plata.
+  if (recurso === 'cotizaciones' && id && partes[2] === 'cerrar') {
+    try {
+      if (req.method === 'POST') return json(res, 200, db.cerrarCotizacion(Number(id)));
+      if (req.method === 'DELETE') return json(res, 200, db.reabrirCotizacion(Number(id)));
+    } catch (err) {
+      return json(res, 400, { error: err.message });
+    }
+  }
+
   // GET|POST /api/cotizaciones/:id/items -> renglones de una cotización
   if (recurso === 'cotizaciones' && id && partes[2] === 'items') {
     const cotizacionId = Number(id);

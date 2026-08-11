@@ -144,7 +144,7 @@ export const HERRAMIENTAS = [
         moneda: { type: 'string', description: 'Por defecto COP.' },
         descripcion: { type: 'string' },
         vence_en: { type: 'string', description: 'Fecha de vencimiento YYYY-MM-DD.' },
-        estado: { type: 'string', enum: ['pendiente', 'enviada', 'aprobada', 'rechazada'] },
+        estado: { type: 'string', enum: ['pendiente', 'aprobada', 'rechazada'] },
         porcentaje_servicio: { type: 'number', description: 'Porcentaje de servicio/instalación sobre los productos.' },
         porcentaje_iva: { type: 'number', description: 'Porcentaje de IVA. En Colombia suele ser 19.' },
         nivel_precio: {
@@ -353,7 +353,7 @@ export const HERRAMIENTAS = [
         producto: { type: 'string', description: 'Nombre, referencia o descripción de un producto. Útil junto con entidad "movimientos_stock" para ver el historial de inventario de uno puntual.' },
         estado: {
           type: 'string',
-          description: 'pendiente | completada | cancelada | enviada | aprobada | rechazada | pagado',
+          description: 'pendiente | completada | cancelada | aprobada | rechazada | pagado',
         },
         rango: {
           type: 'string',
@@ -1007,7 +1007,7 @@ function resumirFila(entidad, f) {
 
 const PLURAL_ESTADO = {
   pendiente: 'pendientes', completada: 'completadas', cancelada: 'canceladas',
-  enviada: 'enviadas', aprobada: 'aprobadas', rechazada: 'rechazadas',
+  aprobada: 'aprobadas', rechazada: 'rechazadas',
   pagado: 'pagados', vencido: 'vencidos',
 };
 

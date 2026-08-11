@@ -234,7 +234,7 @@ const subida = db.insertar('cotizaciones', {
   titulo: 'Oferta armada por fuera',
   cliente_id: db.resolverCliente('Sr. Jimmy Forero').id,
   monto: 6113158,
-  estado: 'enviada',
+  estado: 'pendiente',
   archivo: '/uploads/cotizaciones/99.pdf?v=1',
   archivo_nombre: 'Oferta_Sr_Jimmy.pdf',
 });
@@ -262,7 +262,7 @@ comprobar('la vista imprimible no se rompe sin renglones',
 // "Agregale dos cámaras a la cotización de Jimmy" no puede abrir una nueva.
 // La de El Tornillo quedó rechazada al probar el inventario; se reabre, que
 // es como estaría en la vida real cuando el cliente sigue negociando.
-db.actualizar('cotizaciones', cotStock, { estado: 'enviada' });
+db.actualizar('cotizaciones', cotStock, { estado: 'pendiente' });
 const cuantasAntes = db.consultar('cotizaciones', { limite: 300 }).length;
 db.cerrarCotizacionActiva();   // nadie está dictando: se llega por el cliente
 
@@ -306,7 +306,7 @@ comprobar('un renglón que no existe se avisa con las opciones',
 const antes = db.resumen().contadores;
 const laQueAprobamos = db.insertar('cotizaciones', {
   titulo: 'Obra aprobada', cliente_id: db.resolverCliente('Sr. Jimmy Forero').id,
-  monto: 5000000, estado: 'enviada',
+  monto: 5000000, estado: 'pendiente',
 });
 comprobar('recién enviada, cuenta como cotizado',
   db.resumen().contadores.saldoCotizado, antes.saldoCotizado + 5000000);
@@ -333,6 +333,38 @@ t('registrar_abono', { cliente: 'Jimmy', cotizacion: 'Obra aprobada', monto: 350
 comprobar('saldada, sale de la lista',
   db.cobrosDeCotizaciones().some((c) => c.id === laQueAprobamos.id), false);
 comprobar('y el total vuelve a lo de antes', db.resumen().contadores.porCobrar, antes.porCobrar);
+
+/* 7b2 · Cerrar una cotización la saca de la lista de trabajo --------- */
+// Sólo se cierra lo que ya no debe plata: perderla de vista justo cuando
+// todavía hay que cobrarla es lo contrario de lo que uno quiere.
+const paraCerrar = db.insertar('cotizaciones', {
+  titulo: 'Obra terminada', cliente_id: db.resolverCliente('Sr. Jimmy Forero').id,
+  monto: 1000000, estado: 'aprobada',
+});
+
+let noSePudo = '';
+try { db.cerrarCotizacion(paraCerrar.id); } catch (e) { noSePudo = e.message; }
+comprobar('con saldo no deja cerrarla', noSePudo.includes('por cobrar'), true);
+comprobar('y sigue en la lista',
+  db.consultar('cotizaciones', { limite: 300 }).some((q) => q.id === paraCerrar.id), true);
+
+db.insertar('abonos', { cotizacion_id: paraCerrar.id, monto: 1000000 });
+db.cerrarCotizacion(paraCerrar.id);
+comprobar('saldada, se cierra y sale de la lista',
+  db.consultar('cotizaciones', { limite: 300 }).some((q) => q.id === paraCerrar.id), false);
+comprobar('pero queda en el historial',
+  db.consultar('cotizaciones', { solo_archivadas: true, limite: 300 }).some((q) => q.id === paraCerrar.id), true);
+comprobar('y no se borró nada', Boolean(db.obtenerPorId('cotizaciones', paraCerrar.id)), true);
+
+db.reabrirCotizacion(paraCerrar.id);
+comprobar('reabrirla la devuelve a la lista',
+  db.consultar('cotizaciones', { limite: 300 }).some((q) => q.id === paraCerrar.id), true);
+db.cerrarCotizacion(paraCerrar.id);
+
+// Y "enviada" ya no existe: lo que había quedó en pendiente
+comprobar('no quedan cotizaciones en «enviada»',
+  db.consultar('cotizaciones', { incluir_archivadas: true, limite: 300 })
+    .some((q) => q.estado === 'enviada'), false);
 
 /* 7c2 · Las fechas son las del negocio, no las del servidor ---------- */
 // El hosting corre en UTC. De 7 de la tarde en adelante eso hace creer al

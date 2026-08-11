@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS cotizaciones (
   descripcion TEXT,
   monto       REAL NOT NULL DEFAULT 0,
   moneda      TEXT NOT NULL DEFAULT 'COP',
-  estado      TEXT NOT NULL DEFAULT 'pendiente', -- pendiente | enviada | aprobada | rechazada
+  estado      TEXT NOT NULL DEFAULT 'pendiente', -- pendiente | aprobada | rechazada
   vence_en    TEXT,
   -- Porcentajes que se aplican sobre la suma de los renglones. Arrancan en
   -- cero: se ponen por cotización, según lo que se esté ofertando.
@@ -236,6 +236,18 @@ CREATE INDEX IF NOT EXISTS idx_items_cot ON cotizacion_items(cotizacion_id);
   if (!cot.includes('representante')) db.exec('ALTER TABLE cotizaciones ADD COLUMN representante TEXT');
   if (!cot.includes('representante_telefono')) db.exec('ALTER TABLE cotizaciones ADD COLUMN representante_telefono TEXT');
   if (!cot.includes('representante_email')) db.exec('ALTER TABLE cotizaciones ADD COLUMN representante_email TEXT');
+
+  // "Enviada" era un estado de más: mandarle la oferta al cliente no cambia
+  // nada del negocio, sigue estando pendiente de que la apruebe. Las que
+  // quedaron así pasan a pendiente.
+  db.exec("UPDATE cotizaciones SET estado = 'pendiente' WHERE estado = 'enviada'");
+
+  // Una cotización cerrada sale de la lista de trabajo y queda en el historial
+  // del cliente. Es una decisión del usuario, no algo que pase solo: se cierra
+  // cuando el negocio terminó, y para eso el saldo tiene que estar en cero.
+  if (!cot.includes('archivada')) {
+    db.exec('ALTER TABLE cotizaciones ADD COLUMN archivada INTEGER NOT NULL DEFAULT 0');
+  }
 
   // En qué parte de la casa va cada renglón (Sala, Cocina, Habitación...).
   // Es opcional: si nadie la usa, la columna no aparece impresa.
@@ -455,7 +467,7 @@ export function resolverCotizacion(texto, clienteId = null, { soloConSaldo = tru
   if (!q && clienteId) {
     const filtro = soloConSaldo
       ? `t.monto > ${SUMA_ABONOS}`
-      : "t.estado IN ('pendiente', 'enviada')";
+      : "t.estado = 'pendiente'";
     const abiertas = all(
       `${selectConCliente('cotizaciones')} WHERE t.cliente_id = ? AND ${filtro}
        ORDER BY t.id DESC`,
@@ -1324,6 +1336,11 @@ export function consultar(entidad, filtros = {}) {
   if (entidad === 'productos' && !filtros.incluir_inactivos) {
     where.push('t.activo = 1');
   }
+  // Las cerradas no estorban en la lista de trabajo; se piden aparte para ver
+  // el historial de un cliente.
+  if (entidad === 'cotizaciones' && !filtros.incluir_archivadas) {
+    where.push(filtros.solo_archivadas ? 't.archivada = 1' : 't.archivada = 0');
+  }
   // Filtrar por tipo: "mostrame los displays", "los switch EU"
   if (entidad === 'productos' && filtros.tipo) {
     where.push('t.tipo = ? COLLATE NOCASE');
@@ -1407,6 +1424,29 @@ export function consultar(entidad, filtros = {}) {
 /* Resumen del dashboard                                               */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Cierra una cotización: sale de la lista de trabajo y queda en el historial
+ * del cliente.
+ *
+ * Sólo se puede cerrar si no falta plata. Cerrar algo con saldo sería perderlo
+ * de vista justo cuando todavía hay que cobrarlo, que es lo contrario de lo
+ * que uno quiere.
+ */
+export function cerrarCotizacion(id) {
+  const cot = obtenerPorId('cotizaciones', id);
+  if (!cot) throw new Error('Esa cotización no existe.');
+  if (Number(cot.saldo) > 0) {
+    throw new Error(
+      `Todavía le faltan ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: cot.moneda || 'COP', maximumFractionDigits: 0 }).format(cot.saldo)} por cobrar. `
+      + 'Registrá los abonos que falten y ahí sí se puede cerrar.',
+    );
+  }
+  return actualizar('cotizaciones', id, { archivada: 1 });
+}
+
+/** La devuelve a la lista de trabajo. */
+export const reabrirCotizacion = (id) => actualizar('cotizaciones', id, { archivada: 0 });
+
 /** Lo que falta cobrar de las cotizaciones ya aprobadas. */
 export const saldoAprobadas = () => one(`
   SELECT COALESCE(SUM(saldo), 0) n FROM (
@@ -1460,7 +1500,7 @@ export function resumen() {
       clientes: contar('SELECT COUNT(*) n FROM clientes'),
       citasHoy: contar("SELECT COUNT(*) n FROM citas WHERE substr(inicio,1,10) = ? AND estado='pendiente'", [d]),
       recordatorios: contar("SELECT COUNT(*) n FROM recordatorios WHERE estado='pendiente'"),
-      cotizaciones: contar("SELECT COUNT(*) n FROM cotizaciones WHERE estado IN ('pendiente','enviada')"),
+      cotizaciones: contar("SELECT COUNT(*) n FROM cotizaciones WHERE estado = 'pendiente'"),
       // Plata que el cliente ya se comprometió a pagar: los cobros sueltos
       // más el saldo de las cotizaciones aprobadas. Una cotización aprobada
       // es una venta cerrada, así que lo que falte de ella es cobranza; antes
@@ -1473,7 +1513,7 @@ export function resumen() {
       saldoCotizado: one(`
         SELECT COALESCE(SUM(saldo), 0) n FROM (
           SELECT t.monto - ${SUMA_ABONOS} AS saldo
-          FROM cotizaciones t WHERE t.estado IN ('pendiente', 'enviada')
+          FROM cotizaciones t WHERE t.estado = 'pendiente'
         ) WHERE saldo > 0`).n,
     },
   };
