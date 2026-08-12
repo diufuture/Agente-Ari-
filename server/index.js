@@ -29,7 +29,7 @@ const PUERTO = process.env.PORT || 3000;
 // este archivo con require(), que no admite top-level await en el módulo.
 async function iniciar() {
 
-const [db, tools, asistente, auth, xlsx, imprimir, remoto] = await Promise.all([
+const [db, tools, asistente, auth, xlsx, imprimir, remoto, trabajos] = await Promise.all([
   import('./db.js'),
   import('./tools.js'),
   import('./assistant.js'),
@@ -37,6 +37,7 @@ const [db, tools, asistente, auth, xlsx, imprimir, remoto] = await Promise.all([
   import('./xlsx.js'),
   import('./imprimir.js'),
   import('./remoto.js'),
+  import('./trabajos.js'),
 ]);
 
 const CARPETA_FOTOS = join(PUBLICO, 'uploads', 'productos');
@@ -596,7 +597,7 @@ async function api(req, res, url) {
     try {
       const { archivo_base64 } = await leerJson(req, 25_000_000);
       const buffer = decodificarBase64(archivo_base64);
-      const { hojas } = xlsx.leerXlsx(buffer, { conImagenes: true });
+      const { hojas } = await trabajos.leerXlsxEnSegundoPlano(buffer, { conImagenes: true });
 
       const resultado = hojas.map((h) => {
         const mapeo = xlsx.sugerirMapeo(h.filas);
@@ -650,7 +651,7 @@ async function api(req, res, url) {
       informe.fotosConservadas = 0;
       informe.sinFoto = [];
       if (!simular && traer_fotos && archivo_base64) {
-        const libro = xlsx.leerXlsx(decodificarBase64(archivo_base64), { conImagenes: true });
+        const libro = await trabajos.leerXlsxEnSegundoPlano(decodificarBase64(archivo_base64), { conImagenes: true });
         const imagenes = libro.hojas[Number(hoja) || 0]?.imagenes ?? new Map();
 
         for (const p of informe.paraFoto) {

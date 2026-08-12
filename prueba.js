@@ -586,6 +586,28 @@ comprobar('los cuatro interruptores quedan con su foto',
   [1, 2, 3, 4].map((f) => hojaLeida.imagenes.get(f)?.datos[8] ?? null), [1, 2, 3, 4]);
 comprobar('y ninguna queda sin ubicar', hojaLeida.imagenes.sinUbicar, 0);
 
+/* 8b-bis · Lo mismo, pero leído en el hilo de trabajo ---------------- */
+// El worker no puede simplemente devolver lo mismo que leerXlsx(): las
+// imágenes van en un Map con una propiedad extra colgada encima, que se
+// aplana para cruzar entre hilos y se vuelve a armar del otro lado. Esto
+// prueba que ese viaje de ida y vuelta no pierde ni cambia nada, comparando
+// contra el resultado ya verificado arriba en el hilo principal.
+const trabajos = await import('./server/trabajos.js');
+const hojaEnWorker = (await trabajos.leerXlsxEnSegundoPlano(libro, { conImagenes: true })).hojas[0];
+comprobar('el worker lee las mismas filas que el hilo principal',
+  hojaEnWorker.filas, hojaLeida.filas);
+comprobar('el worker conserva las fotos en la fila que les toca',
+  [1, 2, 3, 4].map((f) => hojaEnWorker.imagenes.get(f)?.datos[8] ?? null), [1, 2, 3, 4]);
+comprobar('y también el conteo de fotos sin ubicar', hojaEnWorker.imagenes.sinUbicar, hojaLeida.imagenes.sinUbicar);
+
+// Un archivo roto tiene que rechazarse igual desde el worker que desde el
+// hilo principal, no colgarse esperando una respuesta que nunca llega.
+let rotoEnWorker = null;
+try { await trabajos.leerXlsxEnSegundoPlano(Buffer.from('no es un zip'), { conImagenes: false }); }
+catch (err) { rotoEnWorker = err.message; }
+comprobar('un archivo que no es .xlsx se rechaza también desde el worker',
+  typeof rotoEnWorker === 'string' && rotoEnWorker.length > 0, true);
+
 /* 8c · La lista de precios que vive en línea ------------------------ */
 const remoto = await import('./server/remoto.js');
 
@@ -607,6 +629,33 @@ for (const mala of ['http://127.0.0.1:8734/api', 'http://192.168.1.10/lista.csv'
 let sinProtocolo = false;
 try { remoto.validarDireccion('file:///etc/passwd'); } catch { sinProtocolo = true; }
 comprobar('rechaza lo que no sea http o https', sinProtocolo, true);
+
+/* 8c-bis · descargar() no vuelve a bajar lo mismo enseguida ---------- */
+// "Probar" una lista antes de guardarla es a los ponchazos: se prueba, se
+// ajusta el mapeo, se prueba de nuevo. Sin esta caché cada clic volvería a
+// bajar la hoja entera. Se reemplaza fetch por uno que cuenta cuántas veces
+// lo llaman, y se pide la misma dirección dos veces seguidas.
+const fetchDeVerdad = globalThis.fetch;
+let llamadasFetch = 0;
+globalThis.fetch = async () => {
+  llamadasFetch += 1;
+  return {
+    ok: true,
+    status: 200,
+    arrayBuffer: async () => libro.buffer.slice(libro.byteOffset, libro.byteOffset + libro.byteLength),
+  };
+};
+try {
+  await remoto.descargar('https://ejemplo.com/lista.xlsx');
+  await remoto.descargar('https://ejemplo.com/lista.xlsx');
+  comprobar('la segunda descarga de la misma dirección no vuelve a pedirla', llamadasFetch, 1);
+
+  const traida = await remoto.traerLista('https://ejemplo.com/lista.xlsx');
+  comprobar('traerLista() reconoce el .xlsx y lo manda por el worker', traida.formato, 'xlsx');
+  comprobar('con las mismas filas que leerlo directo', traida.filas, hojaLeida.filas);
+} finally {
+  globalThis.fetch = fetchDeVerdad;
+}
 
 // El CSV como lo exporta una hoja en español: punto y coma de separador,
 // puntos de miles, y un campo entrecomillado con comas y comillas adentro.
@@ -673,6 +722,24 @@ t('eliminar', { entidad: 'productos', id: 1 });
 comprobar('borrar del catálogo no borra el renglón',
   db.obtenerPorId('cotizacion_items', items[0].id).descripcion.split('\n')[0],
   'Panel táctil de 4 pulgadas');
+
+/* 10 · La caché del resumen y los ajustes se entera de lo que cambia - */
+// El dashboard se pide muy seguido (cada acción del asistente lo vuelve a
+// pedir), así que resumen() y leerAjustes() se cachean unos segundos. Lo
+// que hay que probar no es que cacheen —eso se nota en la velocidad, no en
+// el resultado— sino que una escritura se ve enseguida y no hay que esperar
+// a que venza el plazo.
+const clientesAntes = db.resumen().contadores.clientes;
+db.crearCliente({ nombre: 'Cliente para probar la caché' });
+comprobar('el resumen ve un cliente nuevo sin esperar el vencimiento de la caché',
+  db.resumen().contadores.clientes, clientesAntes + 1);
+
+const empresaAntes = db.leerAjustes().empresa;
+db.guardarAjustes({ empresa: 'Otro nombre de prueba' });
+comprobar('los ajustes cambian sin esperar el vencimiento de la caché',
+  db.leerAjustes().empresa, 'Otro nombre de prueba');
+comprobar('y de verdad cambiaron (no es que ya tuvieran ese valor)',
+  empresaAntes === 'Otro nombre de prueba', false);
 
 /* ------------------------------------------------------------------ */
 

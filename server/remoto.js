@@ -12,7 +12,7 @@
  * y no algo reservado.
  */
 
-import { leerXlsx } from './xlsx.js';
+import { leerXlsxEnSegundoPlano } from './trabajos.js';
 
 /**
  * Direcciones que se rechazan antes de salir a la red.
@@ -77,10 +77,27 @@ export function direccionDeDescarga(url) {
 
 const PESO_MAXIMO = 25_000_000;
 
-/** Baja el archivo que hay en esa dirección. */
+/**
+ * Última descarga de cada dirección, por poco tiempo.
+ *
+ * "Probar" una lista antes de guardarla se hace a los ponchazos: se pega la
+ * dirección, se mira la vista previa, se ajusta el mapeo, se prueba nuevo...
+ * Sin esto cada clic vuelve a bajar la hoja entera de Google/Dropbox/
+ * OneDrive, que es la parte más lenta de todo el proceso y la que menos
+ * depende de nosotros. El TTL es corto a propósito: si el dueño edita la
+ * hoja y prueba de nuevo en el mismo minuto, tiene que ver el cambio, no una
+ * copia vieja.
+ */
+const TTL_DESCARGA_MS = 20_000;
+const cacheDescargas = new Map();
+
+/** Baja el archivo que hay en esa dirección (o lo sirve de la caché reciente). */
 export async function descargar(url) {
   const destino = direccionDeDescarga(url);
   validarDireccion(destino);
+
+  const enCache = cacheDescargas.get(destino);
+  if (enCache && enCache.expira > Date.now()) return enCache.buffer;
 
   let r;
   try {
@@ -97,6 +114,8 @@ export async function descargar(url) {
   const buffer = Buffer.from(await r.arrayBuffer());
   if (!buffer.length) throw new Error('El archivo llegó vacío.');
   if (buffer.length > PESO_MAXIMO) throw new Error('El archivo pesa demasiado (máximo 25MB).');
+
+  cacheDescargas.set(destino, { buffer, expira: Date.now() + TTL_DESCARGA_MS });
   return buffer;
 }
 
@@ -210,7 +229,7 @@ export async function traerLista(url, { hoja = 0 } = {}) {
   const buffer = await descargar(url);
 
   if (esZip(buffer)) {
-    const { hojas } = leerXlsx(buffer, { conImagenes: false });
+    const { hojas } = await leerXlsxEnSegundoPlano(buffer, { conImagenes: false });
     if (!hojas.length) throw new Error('Ese archivo de Excel no tiene ninguna hoja.');
     const elegida = hojas[Number(hoja) || 0] ?? hojas[0];
     return { filas: elegida.filas, formato: 'xlsx', hoja: elegida.nombre };

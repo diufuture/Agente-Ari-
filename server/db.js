@@ -197,6 +197,21 @@ CREATE INDEX IF NOT EXISTS idx_abo_cot       ON abonos(cotizacion_id);
 CREATE INDEX IF NOT EXISTS idx_prod_categoria ON productos(categoria);
 CREATE INDEX IF NOT EXISTS idx_mov_producto ON movimientos_stock(producto_id);
 CREATE INDEX IF NOT EXISTS idx_items_cot ON cotizacion_items(cotizacion_id);
+
+-- Estos cuatro cubren los filtros por estado que hace consultar() en cada
+-- pantalla (citas de hoy, recordatorios pendientes, cobros vencidos...): sin
+-- índice, cada uno recorre la tabla entera para descartar lo que no aplica.
+-- Van con la fecha como segunda columna porque casi siempre se filtra por
+-- estado Y se ordena (o se acota) por fecha en la misma consulta.
+CREATE INDEX IF NOT EXISTS idx_citas_estado  ON citas(estado, inicio);
+CREATE INDEX IF NOT EXISTS idx_rec_estado    ON recordatorios(estado, vence_en);
+CREATE INDEX IF NOT EXISTS idx_cob_estado    ON cobros(estado, vence_en);
+CREATE INDEX IF NOT EXISTS idx_cot_estado    ON cotizaciones(estado);
+-- Un producto descontinuado se filtra en casi cualquier consulta al catálogo.
+CREATE INDEX IF NOT EXISTS idx_prod_activo   ON productos(activo);
+-- sincronizarInventario() borra por cotizacion_id en cada aprobación o
+-- cambio de renglón; sólo había índice por producto_id, no por este lado.
+CREATE INDEX IF NOT EXISTS idx_mov_cotizacion ON movimientos_stock(cotizacion_id);
 `);
 
 // Migraciones suaves: CREATE TABLE IF NOT EXISTS no agrega columnas nuevas a
@@ -274,6 +289,16 @@ try {
   if (!mov.includes('cotizacion_id')) {
     db.exec('ALTER TABLE movimientos_stock ADD COLUMN cotizacion_id INTEGER REFERENCES cotizaciones(id) ON DELETE SET NULL');
   }
+
+  // Estos dos filtros son los que más se repiten (toda lista de cotizaciones
+  // pide archivada = 0; todo filtro por tipo de producto es sobre los
+  // activos), así que van compuestos en vez de sueltos. Se crean acá, no en
+  // el bloque de arriba, porque las columnas recién se crearon en esta misma
+  // pasada: si la migración falló y `archivada`/`tipo` no existen, tampoco
+  // se llega hasta acá, y el índice sobre una columna que no existe rompería
+  // el arranque en vez de simplemente no aplicar.
+  db.exec('CREATE INDEX IF NOT EXISTS idx_cot_archivada_estado ON cotizaciones(archivada, estado)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_prod_activo_tipo ON productos(activo, tipo)');
 } catch (err) {
   console.error('[base de datos] no pude aplicar una migración:', err.message);
   console.error('  La aplicación arranca igual. Si algo nuevo no funciona, reiniciala cuando');
@@ -327,7 +352,49 @@ export const ENTIDADES = {
 const all = (sql, params = []) => db.prepare(sql).all(...params);
 
 const one = (sql, params = []) => db.prepare(sql).get(...params);
-const run = (sql, params = []) => db.prepare(sql).run(...params);
+
+/**
+ * Caché de lectura, con invalidación automática.
+ *
+ * `resumen()` y `leerAjustes()` se piden muchas veces por minuto: el
+ * dashboard se refresca solo cada tanto, y encima el navegador lo vuelve a
+ * pedir después de cada acción del asistente (crear un cliente, agregar un
+ * renglón...) para que la pantalla quede al día enseguida. En una sesión de
+ * voz armando una cotización renglón por renglón eso son varios pedidos por
+ * minuto, cada uno recalculando media docena de sumas sobre toda la tabla de
+ * cotizaciones.
+ *
+ * En vez de guardar el resultado a mano en cada función y acordarse de
+ * borrarlo en cada lugar que escribe, se cuelga de `run()`: como *todas* las
+ * escrituras de la aplicación pasan por ahí (insertar/actualizar/eliminar,
+ * y hasta escribirAjuste), invalidar ahí es invalidar todo de una vez, sin
+ * tener que enumerar cada mutación por separado ni arriesgarse a que una
+ * nueva se quede afuera de la lista.
+ *
+ * El TTL es corto (segundos, no minutos) a propósito: la gracia no es dejar
+ * de consultar la base, es absorber ráfagas de pedidos casi seguidos. Un
+ * par de segundos de más en el dashboard no lo nota nadie; una cotización
+ * que no se actualiza en un minuto sí.
+ */
+const TTL_CACHE_MS = 4000;
+const cache = new Map();
+
+function cachear(clave, calcular) {
+  const entrada = cache.get(clave);
+  const ahora = Date.now();
+  if (entrada && entrada.expira > ahora) return entrada.valor;
+  const valor = calcular();
+  cache.set(clave, { valor, expira: ahora + TTL_CACHE_MS });
+  return valor;
+}
+
+const RE_ESCRITURA = /^\s*(INSERT|UPDATE|DELETE)/i;
+
+const run = (sql, params = []) => {
+  const r = db.prepare(sql).run(...params);
+  if (RE_ESCRITURA.test(sql)) cache.clear();
+  return r;
+};
 
 export const hoy = () => new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
 
@@ -855,9 +922,11 @@ const AJUSTES_POR_DEFECTO = {
 };
 
 export function leerAjustes() {
-  const filas = all('SELECT clave, valor FROM ajustes');
-  const guardados = Object.fromEntries(filas.map((f) => [f.clave, f.valor]));
-  return { ...AJUSTES_POR_DEFECTO, ...guardados };
+  return cachear('ajustes', () => {
+    const filas = all('SELECT clave, valor FROM ajustes');
+    const guardados = Object.fromEntries(filas.map((f) => [f.clave, f.valor]));
+    return { ...AJUSTES_POR_DEFECTO, ...guardados };
+  });
 }
 
 export function guardarAjustes(datos = {}) {
@@ -1506,6 +1575,10 @@ export function cobrosDeCotizaciones() {
 }
 
 export function resumen() {
+  return cachear('resumen', calcularResumen);
+}
+
+function calcularResumen() {
   const d = hoy();
   const contar = (sql, params = []) => one(sql, params).n;
   const activa = cotizacionActiva();
