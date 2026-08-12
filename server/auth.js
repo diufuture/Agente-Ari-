@@ -64,6 +64,38 @@ export function tokenValido(token) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Token para que otros sistemas escriban en la agenda                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * El formulario de agendamiento de la web avisa a Ari cada vez que alguien
+ * toma un turno. Ese aviso no lo manda una persona con su sesión abierta: lo
+ * manda un programa, así que no puede pasar por la pantalla de acceso.
+ *
+ * En vez de eso lleva un token fijo, que se configura en ARI_TOKEN_ENLACE y
+ * se pega también del lado que avisa. Mientras esa variable no exista, la
+ * puerta directamente no está: es mejor que quede cerrada por defecto y haya
+ * que abrirla a propósito, y no al revés.
+ *
+ * El token vive en el servidor de quien avisa (el Apps Script de Google), no
+ * en el navegador de nadie: si estuviera en la página, cualquiera que mirara
+ * el código fuente podría escribir en la agenda.
+ */
+const TOKEN_ENLACE = (process.env.ARI_TOKEN_ENLACE || '').trim();
+
+export const enlaceActivo = () => TOKEN_ENLACE.length >= 16;
+
+/** ¿Este pedido trae el token del enlace? Acepta `Authorization: Bearer …`. */
+export function tokenEnlaceValido(req) {
+  if (!enlaceActivo()) return false;
+  const cabecera = String(req.headers.authorization || '');
+  const enviado = cabecera.startsWith('Bearer ')
+    ? cabecera.slice(7).trim()
+    : String(req.headers['x-ari-token'] || '').trim();
+  return igualSeguro(enviado, TOKEN_ENLACE);
+}
+
+/* ------------------------------------------------------------------ */
 /* Cookies                                                             */
 /* ------------------------------------------------------------------ */
 

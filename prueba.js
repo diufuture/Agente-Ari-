@@ -723,6 +723,69 @@ comprobar('borrar del catálogo no borra el renglón',
   db.obtenerPorId('cotizacion_items', items[0].id).descripcion.split('\n')[0],
   'Panel táctil de 4 pulgadas');
 
+/* 9b · El formulario de la web agenda solo -------------------------- */
+// Lo que manda el Apps Script cuando alguien toma un turno en la web.
+const agendamiento = {
+  proyecto: 'Amazonía 96', fecha: '2026-08-21', hora: '8:30',
+  nombre: 'Isabella Ruiz', apto: '318',
+  telefono: '3108706368', correo: 'isabellaruizguarin2006@gmail.com',
+};
+
+const alta = db.registrarCitaExterna(agendamiento);
+comprobar('el agendamiento de la web entra como cita nueva', alta.creada, true);
+// Las 8:30 tienen que quedar como 08:30. Sin rellenar con cero, la agenda se
+// ordena como texto y una cita de las 8:30 aparecería DESPUÉS de una de las
+// 10:00, que es justo al revés de lo que pasa en el día.
+comprobar('la hora queda con dos dígitos para poder ordenarla', alta.cita.inicio, '2026-08-21T08:30');
+comprobar('el título dice qué es y en qué apartamento', alta.cita.titulo, 'Entrega domótica · Apto 318');
+comprobar('y el lugar junta proyecto y apartamento', alta.cita.lugar, 'Amazonía 96 · Apto 318');
+comprobar('se le creó el cliente con sus datos de contacto',
+  [db.obtenerCliente(alta.cita.cliente_id).nombre, db.obtenerCliente(alta.cita.cliente_id).telefono],
+  ['Isabella Ruiz', '3108706368']);
+
+// Que la cita aparezca en la agenda de ese día es el punto de todo esto.
+comprobar('la cita se ve en la agenda de ese día',
+  db.consultar('citas', { desde: '2026-08-21', hasta: '2026-08-21' }).map((c) => c.titulo),
+  ['Entrega domótica · Apto 318']);
+
+// Un reintento del aviso (la red se cortó, Google reintentó) no puede dejar
+// dos citas iguales: es el problema que ya apareció antes en la agenda.
+const repetido = db.registrarCitaExterna(agendamiento);
+comprobar('un aviso repetido actualiza en vez de duplicar', repetido.creada, false);
+comprobar('y sigue habiendo una sola cita en esa franja',
+  db.consultar('citas', { desde: '2026-08-21', hasta: '2026-08-21' }).length, 1);
+comprobar('y un solo cliente, no dos Isabellas',
+  db.consultar('clientes', { texto: 'Isabella Ruiz' }).length, 1);
+
+// El mismo correo escrito con otro nombre es la misma persona.
+const conOtroNombre = db.registrarCitaExterna({
+  ...agendamiento, hora: '9:00', nombre: 'isabella ruiz guarin',
+});
+comprobar('el correo manda sobre el nombre para reconocer al cliente',
+  conOtroNombre.cita.cliente_id, alta.cita.cliente_id);
+
+// Si alguien libera su turno y lo toma otro, la cita pasa a ser del nuevo:
+// el turno es el mismo, no son dos entregas.
+const reemplazo = db.registrarCitaExterna({
+  ...agendamiento, nombre: 'Pedro Gómez', apto: '402', correo: 'pedro@ejemplo.com', telefono: '3001112233',
+});
+comprobar('si otro toma ese turno, la cita cambia de dueño', reemplazo.creada, false);
+comprobar('y queda a nombre del nuevo', reemplazo.cita.titulo, 'Entrega domótica · Apto 402');
+comprobar('sin dejar dos citas en la misma franja',
+  db.consultar('citas', { desde: '2026-08-21', hasta: '2026-08-21' })
+    .filter((c) => c.inicio === '2026-08-21T08:30').length, 1);
+
+// Datos que no sirven se rechazan antes de tocar la agenda.
+for (const [que, malo] of [
+  ['sin nombre', { ...agendamiento, nombre: '  ' }],
+  ['con la fecha al revés', { ...agendamiento, fecha: '21/08/2026' }],
+  ['con una hora imposible', { ...agendamiento, hora: '25:00' }],
+]) {
+  let rechazado = false;
+  try { db.registrarCitaExterna(malo); } catch { rechazado = true; }
+  comprobar(`rechaza un agendamiento ${que}`, rechazado, true);
+}
+
 /* 10 · La caché del resumen y los ajustes se entera de lo que cambia - */
 // El dashboard se pide muy seguido (cada acción del asistente lo vuelve a
 // pedir), así que resumen() y leerAjustes() se cachean unos segundos. Lo

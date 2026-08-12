@@ -280,6 +280,14 @@ try {
     db.exec('ALTER TABLE cotizaciones ADD COLUMN archivada INTEGER NOT NULL DEFAULT 0');
   }
 
+  // De dónde salió una cita que no se creó acá adentro (el formulario de
+  // agendamiento de la web, por ejemplo). Guarda una marca única del turno de
+  // origen —"amazonia96:2026-08-21T08:30"— y es lo que evita que el mismo
+  // agendamiento entre dos veces si el aviso se reintenta: en vez de insertar
+  // a ciegas, se busca por esta marca y se actualiza la que ya estaba.
+  const cit = columnasDe('citas');
+  if (!cit.includes('origen')) db.exec('ALTER TABLE citas ADD COLUMN origen TEXT');
+
   // En qué parte de la casa va cada renglón (Sala, Cocina, Habitación...).
   // Es opcional: si nadie la usa, la columna no aparece impresa.
   const item = columnasDe('cotizacion_items');
@@ -299,6 +307,10 @@ try {
   // el arranque en vez de simplemente no aplicar.
   db.exec('CREATE INDEX IF NOT EXISTS idx_cot_archivada_estado ON cotizaciones(archivada, estado)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_prod_activo_tipo ON productos(activo, tipo)');
+  // Único de verdad, no sólo un índice para buscar rápido: si por lo que sea
+  // llegaran dos avisos del mismo turno a la vez, la base rechaza el segundo
+  // en lugar de dejar la agenda con la cita repetida.
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_citas_origen ON citas(origen) WHERE origen IS NOT NULL');
 } catch (err) {
   console.error('[base de datos] no pude aplicar una migración:', err.message);
   console.error('  La aplicación arranca igual. Si algo nuevo no funciona, reiniciala cuando');
@@ -1289,6 +1301,124 @@ export function resolverRegistro(entidad, texto, clienteId = null) {
     error: `Hay ${candidatos.length} que encajan con "${texto}".`,
     sugerencias: candidatos.slice(0, 6).map((f) => `#${f.id} ${nombrar(f)}`),
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Citas que llegan de afuera (el formulario de la web)                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Encuentra al cliente de un agendamiento web, o lo crea.
+ *
+ * No se usa `resolverCliente` a propósito: esa está pensada para cuando hay
+ * alguien escuchando y, ante la duda, contesta "hay varios que coinciden" y
+ * espera que le aclaren. Acá no hay nadie: el formulario ya se envió, el
+ * cliente ya recibió su confirmación, y quedarse sin agendar porque el nombre
+ * se parecía a otro sería lo peor que podría pasar. Así que siempre decide.
+ *
+ * Busca en orden de qué tan confiable es cada dato para identificar a alguien:
+ * el correo primero (es único de verdad), después el teléfono, y recién al
+ * final el nombre exacto. Un "Isabella Ruiz" con otro correo es otra persona,
+ * y va aparte; el mismo correo con el nombre escrito distinto es la misma, y
+ * se le completan los datos que falten sin pisar los que ya tenía cargados.
+ */
+function clienteDeAgendamiento({ nombre, telefono, correo }) {
+  const buscar = (columna, valor) => (valor
+    ? one(`SELECT * FROM clientes WHERE ${columna} = ? COLLATE NOCASE
+             AND ${columna} IS NOT NULL AND ${columna} <> '' ORDER BY id LIMIT 1`, [valor])
+    : null);
+
+  const encontrado = buscar('email', correo)
+    ?? buscar('telefono', telefono)
+    ?? buscar('nombre', nombre);
+
+  if (!encontrado) {
+    return crearCliente({ nombre, telefono: telefono || null, email: correo || null });
+  }
+
+  // Completar huecos, nunca reemplazar: si el dueño le corrigió el teléfono a
+  // mano, un formulario web no tiene por qué volver a ponerle el viejo.
+  const faltantes = {};
+  if (telefono && !encontrado.telefono) faltantes.telefono = telefono;
+  if (correo && !encontrado.email) faltantes.email = correo;
+  return Object.keys(faltantes).length
+    ? actualizar('clientes', encontrado.id, faltantes)
+    : encontrado;
+}
+
+/** '8:30' -> '08:30'. Sin esto una cita de las 8:30 se ordena después de las 10:00. */
+function horaDeDosDigitos(hora) {
+  const m = String(hora ?? '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  if (h > 23 || Number(m[2]) > 59) return null;
+  return `${String(h).padStart(2, '0')}:${m[2]}`;
+}
+
+/**
+ * Anota en la agenda una cita agendada desde afuera, sin duplicar.
+ *
+ * La marca `origen` identifica el turno de origen —proyecto + día + hora—, que
+ * es justamente lo que el formulario garantiza único: no puede haber dos
+ * personas en la franja de las 8:30 de un mismo viernes. Si ese turno ya
+ * estaba anotado, se actualiza en vez de volver a insertarlo. Eso cubre los
+ * dos casos que en la práctica pasan: que el aviso se reintente (queda una
+ * sola cita, no dos), y que alguien libere su turno y lo tome otro (la cita
+ * pasa a ser del nuevo, que es lo correcto: el turno es el mismo).
+ *
+ * @returns {{cita: object, creada: boolean}}
+ */
+export function registrarCitaExterna(datos = {}) {
+  const nombre = String(datos.nombre ?? '').trim();
+  const fecha = String(datos.fecha ?? '').trim();
+  const hora = horaDeDosDigitos(datos.hora);
+
+  if (!nombre) throw new Error('Falta el nombre de quien agendó.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) throw new Error('La fecha tiene que venir como AAAA-MM-DD.');
+  if (!hora) throw new Error('La hora tiene que venir como HH:MM (por ejemplo 8:30).');
+
+  const proyecto = String(datos.proyecto ?? '').trim();
+  const apto = String(datos.apto ?? '').trim();
+  const telefono = String(datos.telefono ?? '').trim();
+  const correo = String(datos.correo ?? '').trim();
+  const asunto = String(datos.asunto ?? '').trim() || 'Entrega domótica';
+
+  const cliente = clienteDeAgendamiento({ nombre, telefono, correo });
+
+  // La marca del turno. Sin proyecto igual funciona; con proyecto, dos
+  // edificios distintos pueden tener su entrega el mismo viernes a la misma
+  // hora sin pisarse.
+  const clave = [proyecto || 'web', `${fecha}T${hora}`].join(':').toLowerCase();
+
+  const cita = {
+    titulo: apto ? `${asunto} · Apto ${apto}` : asunto,
+    cliente_id: cliente.id,
+    inicio: `${fecha}T${hora}`,
+    // Las franjas del formulario van de media hora.
+    duracion_min: Number(datos.duracion_min) > 0 ? Number(datos.duracion_min) : 30,
+    lugar: [proyecto, apto && `Apto ${apto}`].filter(Boolean).join(' · ') || null,
+    notas: [
+      telefono && `Teléfono: ${telefono}`,
+      correo && `Correo: ${correo}`,
+      'Agendado desde el formulario de la web.',
+    ].filter(Boolean).join('\n'),
+    estado: 'pendiente',
+    origen: clave,
+  };
+
+  // Si la columna `origen` no llegó a crearse (su migración falló porque otro
+  // proceso tenía la base tomada), se agenda igual: perder la protección
+  // contra duplicados es molesto, no agendar es peor.
+  if (!columnasReales('citas').has('origen')) {
+    delete cita.origen;
+    return { cita: insertar('citas', cita), creada: true };
+  }
+
+  const yaEstaba = one('SELECT id FROM citas WHERE origen = ?', [clave]);
+  if (yaEstaba) {
+    return { cita: actualizar('citas', yaEstaba.id, cita), creada: false };
+  }
+  return { cita: insertar('citas', cita), creada: true };
 }
 
 /**

@@ -333,6 +333,43 @@ async function api(req, res, url) {
     return json(res, 200, { ok: true });
   }
 
+  // POST /api/enlace/cita -> el formulario de agendamiento de la web avisa que
+  // alguien tomó un turno, y la cita aparece sola en la agenda.
+  //
+  // Va antes del muro de sesión porque quien avisa es un programa (el Apps
+  // Script de la hoja), no una persona con el navegador abierto: se identifica
+  // con el token de ARI_TOKEN_ENLACE en vez de con la cookie.
+  if (recurso === 'enlace' && partes[1] === 'cita' && req.method === 'POST') {
+    if (!auth.enlaceActivo()) {
+      return json(res, 503, {
+        error: 'El enlace con la web no está configurado. Definí ARI_TOKEN_ENLACE '
+          + '(mínimo 16 caracteres) en las variables de entorno y reiniciá la aplicación.',
+      });
+    }
+
+    // El mismo freno que el acceso normal: sin esto, el token se podría
+    // adivinar a fuerza de intentos, y esta puerta escribe en la agenda.
+    const ip = auth.origen(req);
+    if (auth.bloqueado(ip)) {
+      return json(res, 429, { error: 'Demasiados intentos fallidos. Esperá unos minutos.' });
+    }
+    if (!auth.tokenEnlaceValido(req)) {
+      auth.registrarFallo(ip);
+      return json(res, 401, { error: 'Token inválido.' });
+    }
+    auth.limpiarIntentos(ip);
+
+    try {
+      const { cita, creada } = db.registrarCitaExterna(await leerJson(req));
+      // 200 y no 201 aunque sea nueva: quien avisa sólo necesita saber que
+      // quedó anotada, y distinguir "creada" de "ya estaba" por el código de
+      // respuesta invitaría a tratar un reintento como si fuera un error.
+      return json(res, 200, { ok: true, creada, cita_id: cita.id, inicio: cita.inicio });
+    } catch (err) {
+      return json(res, 400, { ok: false, error: err.message });
+    }
+  }
+
   // De acá en adelante hace falta sesión
   if (!auth.sesionValida(req)) {
     return json(res, 401, { error: 'Sesión expirada. Volvé a entrar.' });

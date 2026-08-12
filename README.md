@@ -607,6 +607,64 @@ La sesión es una cookie firmada (HMAC-SHA256), dura 30 días y se invalida sola
 al cambiar la contraseña. Tras 8 intentos fallidos la dirección queda frenada
 10 minutos.
 
+## Agendamientos que llegan de la web
+
+El formulario de entregas de la web (el que se apoya en una hoja de Google)
+puede avisarle a Ari cada vez que alguien toma un turno, y la cita aparece
+sola en la agenda con su cliente. Son dos pasos.
+
+**1. Definir el token**, en `.env` o en las variables de entorno de cPanel:
+
+```bash
+ARI_TOKEN_ENLACE=una-clave-larga-e-inventada-de-al-menos-16-caracteres
+```
+
+Mientras esa variable no exista, la puerta no está abierta: la ruta responde
+503 y no hay forma de escribir en la agenda desde afuera.
+
+**2. Pegar el aviso en el Apps Script de la hoja** (Extensiones → Apps Script),
+y llamar a `avisarAAri(...)` justo después de guardar la fila:
+
+```js
+var ARI_URL   = 'https://ari.clickcontrol.co/api/enlace/cita';
+var ARI_TOKEN = 'el mismo valor de ARI_TOKEN_ENLACE';
+
+function avisarAAri(datos) {
+  try {
+    UrlFetchApp.fetch(ARI_URL, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + ARI_TOKEN },
+      payload: JSON.stringify({
+        proyecto: 'Amazonía 96',
+        fecha: datos.fecha, hora: datos.hora,     // '2026-08-21', '8:30'
+        nombre: datos.nombre, apto: datos.apto,
+        telefono: datos.telefono, correo: datos.correo,
+      }),
+      muteHttpExceptions: true,   // que un error de Ari no tumbe el agendamiento
+    });
+  } catch (e) {
+    Logger.log('No pude avisarle a Ari: ' + e);
+  }
+}
+```
+
+El aviso lo manda el Apps Script, no el navegador: así el token vive en el
+servidor de Google y no en el código de la página, donde cualquiera que mirara
+el fuente podría copiarlo y escribir en tu agenda.
+
+**El aviso no puede duplicar citas.** Cada agendamiento queda marcado con su
+turno de origen (proyecto + día + hora), que es justo lo que el formulario ya
+garantiza único: no hay dos personas en la franja de las 8:30 de un mismo
+viernes. Si el aviso se reintenta, se actualiza la cita que ya estaba en vez
+de crear otra; y si alguien libera su turno y lo toma otro, la cita pasa a
+nombre del nuevo, que es lo correcto porque el turno es el mismo.
+
+Al cliente se lo reconoce por el correo primero, después por el teléfono y
+recién al final por el nombre exacto, así que la misma persona agendando dos
+veces no queda duplicada en la lista de clientes. Los datos que ya tuviera
+cargados no se pisan: sólo se completan los que estén vacíos.
+
 ## Datos
 
 Todo queda en `data/clic-control.db` (SQLite), en tu propia máquina o servidor.
