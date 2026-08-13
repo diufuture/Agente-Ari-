@@ -47,8 +47,8 @@
     width: 46vmax;
     height: 46vmax;
     border-radius: 50%;
-    filter: blur(70px);
-    opacity: .28;
+    filter: blur(80px);
+    opacity: .16;
     will-change: transform;
   }
   .aurora .blob-1 {
@@ -60,14 +60,15 @@
   .aurora .blob-2 {
     bottom: -20vmax;
     right: -16vmax;
-    background: radial-gradient(circle, var(--purple), transparent 65%);
+    background: radial-gradient(circle, var(--ok), transparent 65%);
+    opacity: .1;
     animation: flotarBlob2 28s ease-in-out infinite alternate;
   }
   .aurora .blob-3 {
     top: 40vmax;
     left: 30vmax;
-    background: radial-gradient(circle, var(--orange), transparent 65%);
-    opacity: .16;
+    background: radial-gradient(circle, var(--cyan), transparent 65%);
+    opacity: .09;
     animation: flotarBlob3 34s ease-in-out infinite alternate;
   }
   @keyframes flotarBlob1 { from { transform: translate(0, 0); } to { transform: translate(6vmax, 8vmax); } }
@@ -151,14 +152,14 @@
   .aviso-error { background: rgba(255, 122, 110, .14); color: var(--err); border: 1px solid rgba(255, 122, 110, .35); }
 
   .tarjeta {
-    border-radius: 18px;
-    padding: 1.4rem 1.25rem;
-    margin-bottom: 1.1rem;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 1.3rem 1.15rem;
+    margin-bottom: .85rem;
     opacity: 0;
-    transform: translateY(36px);
-    transition: opacity .7s cubic-bezier(.2, .7, .3, 1), transform .7s cubic-bezier(.2, .7, .3, 1);
+    transform: translateY(24px);
+    transition: opacity .6s cubic-bezier(.2, .7, .3, 1), transform .6s cubic-bezier(.2, .7, .3, 1);
   }
   .tarjeta.visible, .gancho.visible {
     opacity: 1;
@@ -166,54 +167,69 @@
   }
   .gancho {
     opacity: 0;
-    transform: translateY(36px);
-    transition: opacity .7s cubic-bezier(.2, .7, .3, 1), transform .7s cubic-bezier(.2, .7, .3, 1);
+    transform: translateY(24px);
+    transition: opacity .6s cubic-bezier(.2, .7, .3, 1), transform .6s cubic-bezier(.2, .7, .3, 1);
   }
-  .s-blue { background: rgba(13, 78, 130, .35); border: 1px solid rgba(109, 228, 252, .25); }
-  .s-orange { background: rgba(130, 70, 13, .3); border: 1px solid rgba(255, 170, 70, .3); }
-  .s-green { background: rgba(15, 100, 60, .3); border: 1px solid rgba(61, 220, 151, .3); }
-  .s-purple { background: rgba(80, 40, 130, .3); border: 1px solid rgba(196, 165, 255, .25); }
+  .tarjeta-exito {
+    background: rgba(61, 220, 151, .08);
+    border-color: rgba(61, 220, 151, .3);
+  }
 
   .step-label {
-    font-size: .72rem;
+    font-size: .7rem;
     font-weight: 600;
-    margin-bottom: .5rem;
+    margin-bottom: .4rem;
     display: block;
+    color: var(--cyan);
+    opacity: .8;
   }
-  .s-blue .step-label { color: var(--cyan); }
-  .s-orange .step-label { color: var(--orange); }
-  .s-green .step-label { color: var(--ok); }
-  .s-purple .step-label { color: var(--purple); }
 
   .tarjeta h2 {
-    font-size: 1.1rem;
-    margin: 0 0 .35rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0 0 .3rem;
   }
   .tarjeta p.descripcion {
     color: var(--muted);
-    font-size: .87rem;
-    margin: 0 0 1rem;
+    font-size: .85rem;
+    margin: 0 0 .9rem;
   }
 
-  .campo { margin-bottom: 1rem; }
+  .subseccion {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    font-size: .88rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 .7rem;
+  }
+  .subseccion:not(:first-child) { margin-top: 1.15rem; }
+  .divisor-suave {
+    border: none;
+    border-top: 1px solid var(--line);
+    margin: 1.15rem 0 0;
+  }
+
+  .campo { margin-bottom: .85rem; }
   .campo:last-child { margin-bottom: 0; }
   .campo label {
     display: block;
-    font-size: .85rem;
+    font-size: .83rem;
     font-weight: 600;
-    margin-bottom: .4rem;
+    margin-bottom: .35rem;
     color: var(--text);
   }
   .campo input[type="text"],
   .campo input[type="email"],
   .campo textarea {
     width: 100%;
-    padding: .7rem .85rem;
+    padding: .65rem .8rem;
     border-radius: 10px;
     border: 1px solid var(--line);
     background: var(--panel-2);
     color: var(--text);
-    font-size: 1rem;
+    font-size: .95rem;
     font-family: inherit;
   }
   .campo input::placeholder, .campo textarea::placeholder { color: var(--muted); }
@@ -232,33 +248,31 @@
   }
   .casilla input { width: 17px; height: 17px; }
 
-  .pregunta { margin-bottom: 1.1rem; }
+  .pregunta { margin-bottom: .8rem; }
   .pregunta:last-child { margin-bottom: 0; }
   .pregunta > .etiqueta {
     display: block;
     font-weight: 600;
-    font-size: .92rem;
-    margin-bottom: .55rem;
+    font-size: .85rem;
+    margin-bottom: .4rem;
   }
 
   .opciones {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .55rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .5rem;
   }
   .opcion {
-    flex: 1 1 auto;
-    min-width: 150px;
     background: var(--panel-2);
     border: 1px solid var(--line);
     color: var(--text);
-    border-radius: 10px;
-    padding: .7rem .8rem;
-    font-size: .87rem;
+    border-radius: 9px;
+    padding: .6rem .5rem;
+    font-size: .8rem;
     font-family: inherit;
     font-weight: 600;
     cursor: pointer;
-    text-align: left;
+    text-align: center;
     transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease, border-color .15s ease;
   }
   .opcion:hover { transform: translateY(-2px); border-color: var(--cyan); }
@@ -272,18 +286,24 @@
     100% { transform: scale(1); }
   }
 
-  .condicional { margin-top: .85rem; animation: entrarArriba .4s ease both; }
+  .condicional { margin-top: .65rem; animation: entrarArriba .4s ease both; }
   .condicional[hidden] { display: none; }
 
-  .estrellas-grupo { }
+  .calificaciones-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem .9rem;
+  }
+  .calificaciones-grid .pregunta { margin-bottom: 0; }
+  .estrellas-grupo .etiqueta { min-height: 2.3em; }
   .estrellas {
     display: flex;
-    gap: .3rem;
+    gap: .15rem;
   }
   .estrella {
     background: none;
     border: none;
-    font-size: 2rem;
+    font-size: 1.5rem;
     line-height: 1;
     color: var(--line);
     cursor: pointer;
@@ -300,8 +320,8 @@
   }
   .estrella-etiqueta {
     display: block;
-    margin-top: .35rem;
-    font-size: .82rem;
+    margin-top: .3rem;
+    font-size: .74rem;
     color: var(--muted);
   }
 
@@ -461,8 +481,8 @@
 
   <form id="formulario" novalidate>
 
-    <section class="tarjeta s-blue">
-      <span class="step-label mono">Sección 1 · Tus datos</span>
+    <section class="tarjeta">
+      <span class="step-label mono">01 · Tus datos</span>
       <h2>¿Quién recibió la entrega?</h2>
       <div class="campo">
         <label for="campo-nombre">Nombre completo del propietario</label>
@@ -482,51 +502,45 @@
       </div>
     </section>
 
-    <section class="tarjeta s-orange">
-      <span class="step-label mono">Sección 2 · Amazon Alexa</span>
-      <h2>Entrega y configuración de Alexa</h2>
-      <p class="descripcion">Confirma la recepción y configuración del dispositivo Alexa en tu apartamento.</p>
+    <section class="tarjeta">
+      <span class="step-label mono">02 · Equipos entregados</span>
+      <h2>Confirma que todo llegó y funciona</h2>
 
+      <div class="subseccion">🔊 Alexa</div>
       <div class="pregunta">
-        <span class="etiqueta">Dispositivo Alexa entregado</span>
+        <span class="etiqueta">Dispositivo entregado</span>
         <div class="opciones" data-campo="alexaEntrega" data-obs="obsAlexa">
-          <button type="button" class="opcion" data-valor="Sí" data-estado="ok">✅ Sí, lo recibí correctamente</button>
-          <button type="button" class="opcion" data-valor="No" data-estado="err">❌ No fue entregado</button>
+          <button type="button" class="opcion" data-valor="Sí" data-estado="ok">✅ Sí</button>
+          <button type="button" class="opcion" data-valor="No" data-estado="err">❌ No</button>
         </div>
         <input type="hidden" id="campo-alexaEntrega">
       </div>
-
       <div class="pregunta">
-        <span class="etiqueta">Alexa fue configurada correctamente en mi apartamento</span>
+        <span class="etiqueta">Quedó bien configurada</span>
         <div class="opciones" data-campo="alexaFunciona" data-obs="obsAlexa">
-          <button type="button" class="opcion" data-valor="Funciona bien" data-estado="ok">👍 Sí, funciona correctamente</button>
-          <button type="button" class="opcion" data-valor="Tiene inconvenientes" data-estado="warn">⚠️ Tiene un inconveniente</button>
+          <button type="button" class="opcion" data-valor="Funciona bien" data-estado="ok">👍 Funciona bien</button>
+          <button type="button" class="opcion" data-valor="Tiene inconvenientes" data-estado="warn">⚠️ Con problema</button>
         </div>
         <input type="hidden" id="campo-alexaFunciona">
       </div>
-
       <div class="condicional" id="bloque-obsAlexa" data-obs-target="obsAlexa" hidden>
         <div class="campo">
           <label for="campo-obsAlexa">Describe el inconveniente con la Alexa</label>
           <textarea id="campo-obsAlexa" rows="2" placeholder="Cuéntanos qué pasó"></textarea>
         </div>
       </div>
-    </section>
 
-    <section class="tarjeta s-green">
-      <span class="step-label mono">Sección 3 · Hub e interruptores</span>
-      <h2>Entrega y configuración del Hub (cerebro)</h2>
-      <p class="descripcion">Confirma la recepción y configuración del Hub y las luces o interruptores de tu apartamento.</p>
+      <hr class="divisor-suave">
 
+      <div class="subseccion">🧠 Hub (cerebro)</div>
       <div class="pregunta">
-        <span class="etiqueta">El Hub (cerebro) funciona correctamente</span>
+        <span class="etiqueta">Funciona correctamente</span>
         <div class="opciones" data-campo="hubFunciona" data-obs="obsHub">
-          <button type="button" class="opcion" data-valor="Funciona bien" data-estado="ok">👍 Sí, funciona correctamente</button>
-          <button type="button" class="opcion" data-valor="Tiene inconvenientes" data-estado="warn">⚠️ Tiene un inconveniente</button>
+          <button type="button" class="opcion" data-valor="Funciona bien" data-estado="ok">👍 Funciona bien</button>
+          <button type="button" class="opcion" data-valor="Tiene inconvenientes" data-estado="warn">⚠️ Con problema</button>
         </div>
         <input type="hidden" id="campo-hubFunciona">
       </div>
-
       <div class="condicional" id="bloque-obsHub" data-obs-target="obsHub" hidden>
         <div class="campo">
           <label for="campo-obsHub">Describe el inconveniente con el Hub</label>
@@ -534,15 +548,17 @@
         </div>
       </div>
 
+      <hr class="divisor-suave">
+
+      <div class="subseccion">💡 Interruptores y luces</div>
       <div class="pregunta">
-        <span class="etiqueta">Los interruptores y luces fueron configurados correctamente</span>
+        <span class="etiqueta">Quedaron bien configurados</span>
         <div class="opciones" data-campo="switchesFunciona" data-obs="obsSwitches">
-          <button type="button" class="opcion" data-valor="Todos funcionan" data-estado="ok">👍 Sí, todos funcionan correctamente</button>
-          <button type="button" class="opcion" data-valor="Algunos fallan" data-estado="warn">⚠️ Alguno presenta inconveniente</button>
+          <button type="button" class="opcion" data-valor="Todos funcionan" data-estado="ok">👍 Todos bien</button>
+          <button type="button" class="opcion" data-valor="Algunos fallan" data-estado="warn">⚠️ Algunos fallan</button>
         </div>
         <input type="hidden" id="campo-switchesFunciona">
       </div>
-
       <div class="condicional" id="bloque-obsSwitches" data-obs-target="obsSwitches" hidden>
         <div class="campo">
           <label for="campo-obsSwitches">Indica cuáles interruptores o luces presentaron inconveniente</label>
@@ -551,66 +567,68 @@
       </div>
     </section>
 
-    <section class="tarjeta s-purple">
-      <span class="step-label mono">Sección 4 · Capacitación</span>
+    <section class="tarjeta">
+      <span class="step-label mono">03 · Capacitación</span>
       <h2>Evaluación de la capacitación recibida</h2>
       <p class="descripcion">Valora la capacitación que recibiste sobre el uso de los dispositivos instalados.</p>
 
-      <div class="pregunta estrellas-grupo" data-campo="califClaridad">
-        <span class="etiqueta">Claridad de la explicación recibida</span>
-        <div class="estrellas">
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
+      <div class="calificaciones-grid">
+        <div class="pregunta estrellas-grupo" data-campo="califClaridad">
+          <span class="etiqueta">Claridad de la explicación</span>
+          <div class="estrellas">
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+          </div>
+          <input type="hidden" id="campo-califClaridad">
+          <span class="estrella-etiqueta">Toca para calificar</span>
         </div>
-        <input type="hidden" id="campo-califClaridad">
-        <span class="estrella-etiqueta">Toca una estrella para calificar</span>
-      </div>
 
-      <div class="pregunta estrellas-grupo" data-campo="califDominio">
-        <span class="etiqueta">Dominio del técnico sobre el sistema</span>
-        <div class="estrellas">
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
+        <div class="pregunta estrellas-grupo" data-campo="califDominio">
+          <span class="etiqueta">Dominio del técnico</span>
+          <div class="estrellas">
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+          </div>
+          <input type="hidden" id="campo-califDominio">
+          <span class="estrella-etiqueta">Toca para calificar</span>
         </div>
-        <input type="hidden" id="campo-califDominio">
-        <span class="estrella-etiqueta">Toca una estrella para calificar</span>
-      </div>
 
-      <div class="pregunta estrellas-grupo" data-campo="califAtencion">
-        <span class="etiqueta">Atención y disposición del técnico</span>
-        <div class="estrellas">
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
+        <div class="pregunta estrellas-grupo" data-campo="califAtencion">
+          <span class="etiqueta">Atención y disposición</span>
+          <div class="estrellas">
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+          </div>
+          <input type="hidden" id="campo-califAtencion">
+          <span class="estrella-etiqueta">Toca para calificar</span>
         </div>
-        <input type="hidden" id="campo-califAtencion">
-        <span class="estrella-etiqueta">Toca una estrella para calificar</span>
-      </div>
 
-      <div class="pregunta estrellas-grupo" data-campo="califGeneral">
-        <span class="etiqueta">Satisfacción general con el servicio</span>
-        <div class="estrellas">
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
-          <button type="button" class="estrella">★</button>
+        <div class="pregunta estrellas-grupo" data-campo="califGeneral">
+          <span class="etiqueta">Satisfacción general</span>
+          <div class="estrellas">
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+            <button type="button" class="estrella">★</button>
+          </div>
+          <input type="hidden" id="campo-califGeneral">
+          <span class="estrella-etiqueta">Toca para calificar</span>
         </div>
-        <input type="hidden" id="campo-califGeneral">
-        <span class="estrella-etiqueta">Toca una estrella para calificar</span>
       </div>
     </section>
 
-    <section class="tarjeta s-blue">
-      <span class="step-label mono">Sección 5 · Conformidad</span>
+    <section class="tarjeta">
+      <span class="step-label mono">04 · Conformidad</span>
       <h2>Comentarios y conformidad final</h2>
       <p class="descripcion">
         <strong>Declaración de conformidad:</strong> confirmo que recibí los equipos instalados
@@ -620,8 +638,8 @@
 
       <div class="pregunta">
         <div class="opciones" data-campo="conformidad" data-obs="obsConformidad">
-          <button type="button" class="opcion" data-valor="Conforme" data-estado="ok">✅ Sí, estoy conforme con todo lo recibido</button>
-          <button type="button" class="opcion" data-valor="Con observaciones" data-estado="warn">📝 Tengo observaciones</button>
+          <button type="button" class="opcion" data-valor="Conforme" data-estado="ok">✅ Conforme</button>
+          <button type="button" class="opcion" data-valor="Con observaciones" data-estado="warn">📝 Con observaciones</button>
         </div>
         <input type="hidden" id="campo-conformidad">
       </div>
@@ -642,7 +660,7 @@
     <button type="submit" id="btn-enviar" class="enviar" disabled>Enviar acta de conformidad</button>
   </form>
 
-  <div id="pantalla-gracias" class="tarjeta s-green" hidden>
+  <div id="pantalla-gracias" class="tarjeta tarjeta-exito" hidden>
     <div class="icono">✅</div>
     <h2>¡Gracias por tu calificación!</h2>
     <p>Tu acta de conformidad ha sido registrada exitosamente.</p>
