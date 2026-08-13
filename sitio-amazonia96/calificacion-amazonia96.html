@@ -851,27 +851,48 @@
       Newsletter: document.getElementById('campo-newsletter').checked ? 'Sí' : 'No'
     };
 
+    var controlador = ('AbortController' in window) ? new AbortController() : null;
+    var vencido = false;
+    var temporizador = setTimeout(function () {
+      vencido = true;
+      if (controlador) controlador.abort();
+    }, 20000);
+
     fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: controlador ? controlador.signal : undefined
     })
-      .then(function (respuesta) { return respuesta.json(); })
-      .then(function (datos) {
-        if (datos && datos.ok) {
-          document.getElementById('formulario').hidden = true;
-          var gracias = document.getElementById('pantalla-gracias');
-          gracias.hidden = false;
-          gracias.classList.add('visible');
-          gracias.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          lanzarConfeti();
-        } else {
-          throw new Error((datos && datos.motivo) || 'No se pudo guardar');
-        }
+      .then(function (respuesta) {
+        clearTimeout(temporizador);
+        return respuesta.text().then(function (texto) {
+          var datos;
+          try {
+            datos = JSON.parse(texto);
+          } catch (errorParseo) {
+            throw new Error('el servidor respondió algo inesperado (revisa que el Apps Script esté bien implementado)');
+          }
+          if (!respuesta.ok || !datos || !datos.ok) {
+            throw new Error((datos && datos.motivo) || ('Error del servidor (código ' + respuesta.status + ').'));
+          }
+          return datos;
+        });
       })
-      .catch(function () {
+      .then(function () {
+        document.getElementById('formulario').hidden = true;
+        var gracias = document.getElementById('pantalla-gracias');
+        gracias.hidden = false;
+        gracias.classList.add('visible');
+        gracias.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        lanzarConfeti();
+      })
+      .catch(function (error) {
+        clearTimeout(temporizador);
         var aviso = document.getElementById('aviso-error');
-        aviso.textContent = 'No se pudo enviar el formulario. Revisa tu conexión e intenta de nuevo.';
+        aviso.textContent = vencido
+          ? 'El servidor tardó demasiado en responder. Intenta de nuevo en un momento.'
+          : ('No se pudo enviar el formulario: ' + (error && error.message ? error.message : 'error desconocido') + '. Intenta de nuevo.');
         aviso.hidden = false;
         aviso.scrollIntoView({ behavior: 'smooth', block: 'center' });
         boton.disabled = false;

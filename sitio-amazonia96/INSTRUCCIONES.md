@@ -12,31 +12,49 @@ una hoja de Google Sheets y te avisa por correo.
 CSS, el JavaScript y el logo (base64), igual que el formulario de
 agendamiento.
 
+## ⚠️ Qué estaba fallando (y por qué)
+
+El formulario se quedaba en "Enviando…" sin hacer nada porque el Apps
+Script que recibía los datos no los estaba leyendo bien: llegaban con
+nombres de campo (`Nombre`, `Apto`, `Cal Claridad`…) que ese script no
+reconocía, y por eso el correo que llegaba mostraba puros `undefined`. La
+hoja real donde vive el histórico es **"Acta Entrega"**, pestaña **"Form
+Responses 1"**, con las columnas del Google Forms viejo — no coincide con
+lo que el script esperaba.
+
+La solución (`codigo-apps-script.gs.txt`, en esta misma carpeta) no toca
+"Form Responses 1" ni el histórico: crea su **propia pestaña nueva**,
+`Respuestas Web`, con sus propios encabezados, la primera vez que alguien
+envía el formulario nuevo. Así los dos sistemas conviven sin pisarse.
+
 ## Publicarlo
 
 1. Sube `calificacion-amazonia96.html` a `public_html/` en tu cPanel, junto
    a `agendamiento-amazonia96.html`.
-2. Verifica que la hoja de cálculo **"Calificaciones Amazonía 96"**, pestaña
-   **"Respuestas"**, tenga estas columnas (en este orden o con estos
-   encabezados exactos, que es lo que usa el Apps Script para ubicar cada
-   dato):
-
-   ```
-   Nombre, Apto, Correo, Alexa Entrega, Alexa Funciona, Obs Alexa,
-   Hub Funciona, Obs Hub, Switches Funciona, Obs Switches,
-   Cal Claridad, Cal Dominio, Cal Atencion, Cal General,
-   Conformidad, Obs Conformidad, Newsletter
-   ```
-
-3. El formulario ya apunta al Apps Script existente:
+2. Abre la hoja de cálculo **"Acta Entrega"** (la del Google Forms viejo) →
+   **Extensiones → Apps Script**.
+3. Borra todo el código que haya ahí (probablemente sea el que genera los
+   correos con "undefined") y pega completo el contenido de
+   `codigo-apps-script.gs.txt`.
+4. Guarda. Luego **Implementar → Administrar implementaciones** → ícono de
+   lápiz sobre la implementación de tipo "Aplicación web" → en "Versión"
+   elige **Nueva versión** → Implementar.
+   Si no existe ninguna implementación de tipo "Aplicación web" todavía,
+   créala con **Implementar → Nueva implementación**: tipo *Aplicación
+   web*, ejecutar como *Yo*, acceso *Cualquier usuario*.
+   **Este paso de crear una versión nueva es obligatorio** — guardar el
+   código solo no actualiza el enlace `/exec` que ya está en uso.
+5. Copia la URL que termina en `/exec`. El formulario ya trae esta:
    `https://script.google.com/macros/s/AKfycbxN44YkL9dIZR2Zw3hY-QlCo25gluvmLZUrtteh2jZvg0mhw7cZfMEGshnLrOT-7g5q/exec`
-   Si alguna vez vuelves a implementar (Deploy) ese Apps Script y cambia la
-   URL, actualiza la constante `API_URL` al inicio del `<script>` del
-   archivo HTML.
-4. Abre `https://clickcontrol.co/calificacion-amazonia96.html`, llena un
+   Si la tuya es distinta, ábreme el archivo `calificacion-amazonia96.html`,
+   busca `var API_URL =` (cerca del final, dentro del `<script>`) y
+   reemplázala — o dímela y la actualizo yo.
+6. Abre `https://clickcontrol.co/calificacion-amazonia96.html`, llena un
    registro de prueba de principio a fin (incluida la sección de
-   conformidad) y confirma que aparece la fila nueva en la hoja de cálculo
-   y que te llega el correo de aviso.
+   conformidad) y confirma tres cosas: que aparece la fila nueva en la
+   pestaña **"Respuestas Web"**, que te llega el correo de aviso a
+   `ari.bravob18@gmail.com`, y que llega el correo bonito a la dirección
+   de correo que pusiste en la prueba.
 
 ## Qué pide el formulario
 

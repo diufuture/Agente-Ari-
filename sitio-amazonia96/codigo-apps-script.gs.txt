@@ -1,0 +1,288 @@
+/**
+ * Acta de Conformidad · Amazonía 96 — Apps Script
+ *
+ * Qué hace:
+ * 1. Recibe el POST de calificacion-amazonia96.html.
+ * 2. Guarda la fila en una pestaña PROPIA y NUEVA ("Respuestas Web") de
+ *    esta hoja de cálculo — a propósito distinta de "Form Responses 1",
+ *    que es la que ya usa el Google Forms viejo. Así no se toca ni un
+ *    dato de los registros históricos. Si la pestaña no existe, este
+ *    script la crea solo la primera vez, con sus encabezados.
+ * 3. Manda un correo a Click Control con el detalle del registro.
+ * 4. Manda un correo bonito (HTML) al cliente, agradeciéndole y
+ *    mostrándole otros productos.
+ *
+ * CÓMO INSTALARLO
+ * 1. Abre la hoja de cálculo "Acta Entrega" (la misma donde ya cae el
+ *    Google Forms viejo, pestaña "Form Responses 1").
+ * 2. Extensiones → Apps Script.
+ * 3. Selecciona TODO el código que haya en Code.gs (Ctrl+A / Cmd+A) y
+ *    bórralo. Pega este archivo completo en su lugar.
+ *    (Si hay otro código ahí que hace algo más, ese es probablemente el
+ *    que manda el correo con los "undefined" — se puede borrar tranquilo.)
+ * 4. Revisa las constantes de configuración aquí abajo (correo del
+ *    administrador, URLs) y ajústalas si hace falta.
+ * 5. Guarda (icono de disquete, o Ctrl+S).
+ * 6. Implementar → Nueva implementación (o, si ya hay una de tipo
+ *    "Aplicación web", Administrar implementaciones → lápiz → Versión:
+ *    "Nueva versión" → Implementar). Tipo: Aplicación web. Ejecutar
+ *    como: Yo. Quién tiene acceso: Cualquier usuario.
+ *    ¡Este paso es obligatorio! Guardar el código solo no alcanza.
+ * 7. Copia la URL que termina en /exec y pégamela (o verifica que sea la
+ *    misma que ya tiene calificacion-amazonia96.html en la constante
+ *    API_URL — si es distinta, dímelo para actualizar el archivo).
+ * 8. Prueba el formulario real. Si algo falla, el mensaje de error que
+ *    aparece en la pantalla del formulario ahora trae el motivo exacto.
+ */
+
+// ───────────────────────── CONFIGURACIÓN ─────────────────────────
+
+var CORREO_ADMIN = 'ari.bravob18@gmail.com';
+var NOMBRE_HOJA_RESPUESTAS = 'Respuestas Web';
+var ENCABEZADOS_RESPUESTAS = [
+  'Fecha registro', 'Nombre', 'Apto', 'Correo',
+  'Alexa Entrega', 'Alexa Funciona', 'Obs Alexa',
+  'Hub Funciona', 'Obs Hub', 'Switches Funciona', 'Obs Switches',
+  'Cal Claridad', 'Cal Dominio', 'Cal Atencion', 'Cal General',
+  'Conformidad', 'Obs Conformidad', 'Newsletter'
+];
+var URL_LOGO = 'https://clickcontrol.co/images/logo-clickcontrol.png';
+var URL_SITIO = 'https://clickcontrol.co';
+var URL_WHATSAPP = 'https://wa.me/573215073310';
+
+// ───────────────────────── PUNTO DE ENTRADA ─────────────────────────
+
+function doPost(e) {
+  var candado = LockService.getScriptLock();
+  try {
+    candado.waitLock(30000);
+  } catch (errorCandado) {
+    return respuestaJSON({ ok: false, motivo: 'El servidor está ocupado, intenta de nuevo en unos segundos.' });
+  }
+
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      throw new Error('No llegaron datos en la solicitud.');
+    }
+
+    var datos = JSON.parse(e.postData.contents);
+
+    guardarFila(datos);
+
+    // Si un correo falla, no debe tumbar el guardado ya hecho.
+    try { enviarCorreoAdmin(datos); } catch (errorCorreoAdmin) { /* seguimos */ }
+    try { enviarCorreoCliente(datos); } catch (errorCorreoCliente) { /* seguimos */ }
+
+    return respuestaJSON({ ok: true });
+  } catch (error) {
+    return respuestaJSON({ ok: false, motivo: String(error && error.message ? error.message : error) });
+  } finally {
+    candado.releaseLock();
+  }
+}
+
+// ───────────────────────── GUARDAR EN LA HOJA ─────────────────────────
+
+function obtenerOCrearHojaRespuestas() {
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = libro.getSheetByName(NOMBRE_HOJA_RESPUESTAS);
+  if (!hoja) {
+    hoja = libro.insertSheet(NOMBRE_HOJA_RESPUESTAS);
+    hoja.getRange(1, 1, 1, ENCABEZADOS_RESPUESTAS.length).setValues([ENCABEZADOS_RESPUESTAS]);
+    hoja.setFrozenRows(1);
+  }
+  return hoja;
+}
+
+function guardarFila(datos) {
+  var hoja = obtenerOCrearHojaRespuestas();
+
+  var ultimaColumna = Math.max(hoja.getLastColumn(), 1);
+  var encabezados = hoja.getRange(1, 1, 1, ultimaColumna).getDisplayValues()[0];
+
+  var fila = encabezados.map(function (encabezado) {
+    var clave = String(encabezado || '').trim();
+    if (/fecha/i.test(clave) && /(registro|env[ií]o|timestamp)/i.test(clave)) {
+      return Utilities.formatDate(new Date(), 'America/Bogota', 'yyyy-MM-dd HH:mm:ss');
+    }
+    var valor = datos[clave];
+    return (valor === undefined || valor === null) ? '' : String(valor);
+  });
+
+  var siguienteFila = hoja.getLastRow() + 1;
+  var rango = hoja.getRange(siguienteFila, 1, 1, fila.length);
+  rango.setNumberFormat('@'); // texto plano: que no reformatee teléfonos, aptos, fechas
+  rango.setValues([fila]);
+}
+
+// ───────────────────────── CORREO A CLICK CONTROL ─────────────────────────
+
+function promedioCalificacion(datos) {
+  var campos = ['Cal Claridad', 'Cal Dominio', 'Cal Atencion', 'Cal General'];
+  var valores = campos.map(function (campo) { return Number(datos[campo]) || 0; });
+  var suma = valores.reduce(function (a, b) { return a + b; }, 0);
+  return Math.round((suma / campos.length) * 10) / 10;
+}
+
+function enviarCorreoAdmin(datos) {
+  var promedio = promedioCalificacion(datos);
+  var asunto = 'Nueva calificación Amazonía 96 · Apto ' + (datos['Apto'] || '?') + ' · ' + promedio + '/5';
+
+  var lineas = [
+    'Nuevo registro de acta de conformidad.',
+    '',
+    'Nombre: ' + (datos['Nombre'] || ''),
+    'Apartamento: ' + (datos['Apto'] || ''),
+    'Correo: ' + (datos['Correo'] || '(no dejó correo)'),
+    'Se suscribió a novedades: ' + (datos['Newsletter'] || 'No'),
+    '',
+    '— Alexa —',
+    'Entregada: ' + (datos['Alexa Entrega'] || ''),
+    'Funciona: ' + (datos['Alexa Funciona'] || ''),
+    'Observaciones: ' + (datos['Obs Alexa'] || '—'),
+    '',
+    '— Hub e interruptores —',
+    'Hub funciona: ' + (datos['Hub Funciona'] || ''),
+    'Observaciones del Hub: ' + (datos['Obs Hub'] || '—'),
+    'Interruptores: ' + (datos['Switches Funciona'] || ''),
+    'Observaciones de interruptores: ' + (datos['Obs Switches'] || '—'),
+    '',
+    '— Calificación —',
+    'Claridad: ' + (datos['Cal Claridad'] || '') + '/5',
+    'Dominio del técnico: ' + (datos['Cal Dominio'] || '') + '/5',
+    'Atención: ' + (datos['Cal Atencion'] || '') + '/5',
+    'Satisfacción general: ' + (datos['Cal General'] || '') + '/5',
+    'Promedio: ' + promedio + '/5',
+    '',
+    '— Conformidad —',
+    'Estado: ' + (datos['Conformidad'] || ''),
+    'Observaciones: ' + (datos['Obs Conformidad'] || '—'),
+    '',
+    'Hoja: ' + SpreadsheetApp.getActiveSpreadsheet().getUrl()
+  ];
+
+  MailApp.sendEmail({
+    to: CORREO_ADMIN,
+    subject: asunto,
+    body: lineas.join('\n')
+  });
+}
+
+// ───────────────────────── CORREO AL CLIENTE ─────────────────────────
+
+function enviarCorreoCliente(datos) {
+  var correo = datos['Correo'];
+  if (!correo || String(correo).indexOf('@') === -1) return;
+
+  var nombreCompleto = String(datos['Nombre'] || '').trim();
+  var primerNombre = nombreCompleto.split(' ')[0] || 'vecino';
+  var promedio = promedioCalificacion(datos);
+
+  MailApp.sendEmail({
+    to: correo,
+    subject: '¡Gracias por confiar en Click Control! · Amazonía 96',
+    htmlBody: plantillaCorreoCliente(primerNombre, datos, promedio),
+    name: 'Click Control'
+  });
+}
+
+function estrellasHTML(valor) {
+  var n = Math.max(0, Math.min(5, Math.round(Number(valor) || 0)));
+  var html = '';
+  for (var i = 0; i < 5; i++) {
+    html += '<span style="color:' + (i < n ? '#F5C21B' : '#3A4A5A') + ';font-size:20px;">★</span>';
+  }
+  return html;
+}
+
+function filaEstado(etiqueta, ok) {
+  var color = ok ? '#3DDC97' : '#FFAA46';
+  var icono = ok ? '✅' : '⚠️';
+  return '' +
+    '<tr>' +
+      '<td style="padding:6px 0;color:#8FB0C4;font-family:Arial,Helvetica,sans-serif;font-size:14px;">' + etiqueta + '</td>' +
+      '<td style="padding:6px 0;text-align:right;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:' + color + ';font-weight:bold;">' + icono + '</td>' +
+    '</tr>';
+}
+
+function tarjetaProducto(href, emoji, nombre) {
+  return '' +
+    '<td width="50%" style="padding:6px;">' +
+      '<a href="' + href + '" style="display:block;background:#0A2C4C;border:1px solid #12405F;border-radius:10px;padding:16px 8px;text-align:center;text-decoration:none;color:#EAF6FC;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:bold;">' +
+        emoji + '<br>' + nombre +
+      '</a>' +
+    '</td>';
+}
+
+function plantillaCorreoCliente(primerNombre, d, promedio) {
+  var alexaOk = d['Alexa Entrega'] === 'Sí' && d['Alexa Funciona'] === 'Funciona bien';
+  var hubOk = d['Hub Funciona'] === 'Funciona bien';
+  var switchesOk = d['Switches Funciona'] === 'Todos funcionan';
+
+  return '' +
+'<!doctype html>' +
+'<html><body style="margin:0;padding:0;background:#00182C;">' +
+'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#00182C;padding:32px 12px;">' +
+  '<tr><td align="center">' +
+    '<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#062440;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">' +
+
+      '<tr><td style="padding:32px 32px 8px;text-align:center;">' +
+        '<img src="' + URL_LOGO + '" alt="Click Control" width="180" style="display:block;margin:0 auto 18px;border:0;">' +
+        '<h1 style="color:#EAF6FC;font-size:22px;margin:0 0 8px;">¡Gracias por confiar en Click Control, ' + primerNombre + '!</h1>' +
+        '<p style="color:#8FB0C4;font-size:14px;margin:0;line-height:1.5;">Registramos la entrega de tu sistema de domótica en <strong style="color:#6DE4FC;">Amazonía 96</strong> y tu acta de conformidad quedó guardada.</p>' +
+      '</td></tr>' +
+
+      '<tr><td style="padding:16px 32px;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0A2C4C;border:1px solid #12405F;border-radius:12px;padding:18px 20px;">' +
+          filaEstado('Alexa entregada y funcionando', alexaOk) +
+          filaEstado('Hub (cerebro) funcionando', hubOk) +
+          filaEstado('Interruptores y luces funcionando', switchesOk) +
+        '</table>' +
+      '</td></tr>' +
+
+      '<tr><td style="padding:8px 32px 20px;text-align:center;">' +
+        '<p style="color:#8FB0C4;font-size:13px;margin:0 0 6px;">Tu calificación general</p>' +
+        '<div>' + estrellasHTML(promedio) + '</div>' +
+        '<p style="color:#EAF6FC;font-size:13px;margin:6px 0 0;">' + promedio + ' / 5</p>' +
+      '</td></tr>' +
+
+      '<tr><td style="padding:0 32px 28px;text-align:center;">' +
+        '<a href="' + URL_WHATSAPP + '" style="display:inline-block;background:#3DDC97;color:#06301f;text-decoration:none;font-weight:bold;font-size:14px;padding:12px 26px;border-radius:8px;">💬 Escríbenos por WhatsApp</a>' +
+      '</td></tr>' +
+
+      '<tr><td style="padding:0 32px 8px;border-top:1px solid #12405F;">' +
+        '<p style="color:#EAF6FC;font-size:16px;font-weight:bold;margin:24px 0 4px;text-align:center;">Nuevos productos para tu hogar inteligente</p>' +
+        '<p style="color:#8FB0C4;font-size:13px;margin:0 0 18px;text-align:center;">Ahora que ya tienes domótica, descubre todo lo que puedes agregar.</p>' +
+      '</td></tr>' +
+
+      '<tr><td style="padding:0 24px 24px;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' +
+          '<tr>' +
+            tarjetaProducto(URL_SITIO + '/agendamiento-amazonia96.html?vista=cortinas', '🪟', 'Cortinas inteligentes') +
+            tarjetaProducto(URL_SITIO + '/agendamiento-amazonia96.html?vista=sonido', '🔊', 'Sonido inteligente') +
+          '</tr>' +
+          '<tr>' +
+            tarjetaProducto(URL_SITIO + '/pantalla-4-pulgadas.html', '📱', 'Pantalla táctil con Alexa') +
+            tarjetaProducto(URL_SITIO + '/security-hub.html', '📷', 'Cámara inteligente') +
+          '</tr>' +
+        '</table>' +
+      '</td></tr>' +
+
+      '<tr><td style="padding:20px 32px;border-top:1px solid #12405F;text-align:center;">' +
+        '<p style="color:#8FB0C4;font-size:12px;margin:0;">Click Control · Integración de domótica y automatización<br>' +
+        '<a href="' + URL_SITIO + '" style="color:#6DE4FC;text-decoration:none;">clickcontrol.co</a> · ' +
+        '<a href="' + URL_WHATSAPP + '" style="color:#6DE4FC;text-decoration:none;">WhatsApp</a></p>' +
+      '</td></tr>' +
+
+    '</table>' +
+  '</td></tr>' +
+'</table>' +
+'</body></html>';
+}
+
+// ───────────────────────── RESPUESTA ─────────────────────────
+
+function respuestaJSON(objeto) {
+  return ContentService.createTextOutput(JSON.stringify(objeto))
+    .setMimeType(ContentService.MimeType.JSON);
+}
