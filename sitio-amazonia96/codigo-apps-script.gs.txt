@@ -52,6 +52,14 @@ var URL_WHATSAPP = 'https://wa.me/573215073310';
 
 // ───────────────────────── PUNTO DE ENTRADA ─────────────────────────
 
+// Visitar la URL /exec directo en el navegador dispara esto (GET). Sirve
+// para probar que la implementación está viva sin tener que llenar el
+// formulario — si esto no muestra {"ok":true,...}, el problema está en el
+// deployment (permisos/autorización), no en el formulario.
+function doGet(e) {
+  return respuestaJSON({ ok: true, info: 'Apps Script de Amazonía 96 funcionando. Usa POST para enviar datos.' });
+}
+
 function doPost(e) {
   var candado = LockService.getScriptLock();
   try {
