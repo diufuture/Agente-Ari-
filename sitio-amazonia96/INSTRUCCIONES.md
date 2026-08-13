@@ -44,11 +44,13 @@ envía el formulario nuevo. Así los dos sistemas conviven sin pisarse.
    web*, ejecutar como *Yo*, acceso *Cualquier usuario*.
    **Este paso de crear una versión nueva es obligatorio** — guardar el
    código solo no actualiza el enlace `/exec` que ya está en uso.
-5. Copia la URL que termina en `/exec`. El formulario ya trae esta:
-   `https://script.google.com/macros/s/AKfycbxN44YkL9dIZR2Zw3hY-QlCo25gluvmLZUrtteh2jZvg0mhw7cZfMEGshnLrOT-7g5q/exec`
-   Si la tuya es distinta, ábreme el archivo `calificacion-amazonia96.html`,
-   busca `var API_URL =` (cerca del final, dentro del `<script>`) y
-   reemplázala — o dímela y la actualizo yo.
+5. Copia la URL que termina en `/exec`. El formulario ya trae esta (real,
+   verificada — la anterior nunca existió de verdad):
+   `https://script.google.com/macros/s/AKfycbxcF_A6tCjTaM84fAQLKyLKeLRe1Xl2uI1aZnNjEjWmm_GSUUnuH43JNgw05bX-dETO/exec`
+   Si alguna vez vuelves a crear una implementación nueva (no una "nueva
+   versión" de la misma, sino otra desde cero) la URL cambia: ábreme el
+   archivo `calificacion-amazonia96.html`, busca `var API_URL =` (cerca del
+   final, dentro del `<script>`) y reemplázala — o dímela y la actualizo yo.
 6. Abre `https://clickcontrol.co/calificacion-amazonia96.html`, llena un
    registro de prueba de principio a fin (incluida la sección de
    conformidad) y confirma tres cosas: que aparece la fila nueva en la
