@@ -370,6 +370,38 @@ async function api(req, res, url) {
     }
   }
 
+  // POST /api/enlace/agenda -> la hoja manda la lista completa de turnos que
+  // siguen en pie, y la agenda se pone a tono: lo que está se agenda, lo que
+  // ya no está se cancela. Es la única forma de enterarse de una cancelación,
+  // porque el formulario no avisa cuando se borra una fila de la hoja.
+  if (recurso === 'enlace' && partes[1] === 'agenda' && req.method === 'POST') {
+    if (!auth.enlaceActivo()) {
+      return json(res, 503, {
+        error: 'El enlace con la web no está configurado. Definí ARI_TOKEN_ENLACE '
+          + '(mínimo 16 caracteres) en las variables de entorno y reiniciá la aplicación.',
+      });
+    }
+
+    const ip = auth.origen(req);
+    if (auth.bloqueado(ip)) {
+      return json(res, 429, { error: 'Demasiados intentos fallidos. Esperá unos minutos.' });
+    }
+    if (!auth.tokenEnlaceValido(req)) {
+      auth.registrarFallo(ip);
+      return json(res, 401, { error: 'Token inválido.' });
+    }
+    auth.limpiarIntentos(ip);
+
+    try {
+      // La lista entera de un proyecto puede ser larga: se lee con más margen
+      // que un aviso suelto.
+      const resultado = db.sincronizarAgendaExterna(await leerJson(req, 2_000_000));
+      return json(res, 200, { ok: true, ...resultado });
+    } catch (err) {
+      return json(res, 400, { ok: false, error: err.message });
+    }
+  }
+
   // De acá en adelante hace falta sesión
   if (!auth.sesionValida(req)) {
     return json(res, 401, { error: 'Sesión expirada. Volvé a entrar.' });

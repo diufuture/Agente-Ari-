@@ -653,6 +653,32 @@ El aviso lo manda el Apps Script, no el navegador: así el token vive en el
 servidor de Google y no en el código de la página, donde cualquiera que mirara
 el fuente podría copiarlo y escribir en tu agenda.
 
+### Cancelaciones
+
+El formulario no tiene botón de cancelar: cuando alguien avisa que no puede,
+la fila se borra de la hoja y ahí se acaba. Nada de eso llega solo, así que la
+cita quedaría en la agenda para siempre.
+
+Para eso está `POST /api/enlace/agenda`: la hoja manda cada tanto la lista
+completa de los turnos que siguen en pie, y Ari compara. Lo que está en la
+lista se agenda o se actualiza; lo que ya no está se marca como **cancelado**
+(no se borra: el registro queda). En el Apps Script es la función
+`sincronizarConAri()`, y se deja corriendo sola con un activador de tiempo
+(Apps Script → Activadores → cada hora).
+
+Tres cosas que esa sincronización **no** toca, a propósito:
+
+- **Las citas que cargaste a mano.** Se filtra por la marca de origen, así que
+  una reunión tuya nunca se cancela sola.
+- **Lo que ya pasó.** Sólo mira de hoy en adelante: si limpiás la hoja, las
+  entregas viejas siguen en la agenda.
+- **Una lista vacía.** Si llega sin ningún turno y hay citas agendadas, frena y
+  avisa en vez de vaciarte la agenda: es más probable que la hoja no se haya
+  podido leer a que se cancelara todo junto. Para vaciarla de verdad hay que
+  pedirlo con `permitir_vaciar`.
+
+Si el turno vuelve a tomarse, la cita revive en vez de duplicarse.
+
 **El aviso no puede duplicar citas.** Cada agendamiento queda marcado con su
 turno de origen (proyecto + día + hora), que es justo lo que el formulario ya
 garantiza único: no hay dos personas en la franja de las 8:30 de un mismo

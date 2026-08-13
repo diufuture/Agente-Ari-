@@ -764,6 +764,17 @@ const conOtroNombre = db.registrarCitaExterna({
 comprobar('el correo manda sobre el nombre para reconocer al cliente',
   conOtroNombre.cita.cliente_id, alta.cita.cliente_id);
 
+// Y al revés: mismo teléfono pero otro correo son DOS personas. Pasa cuando
+// el administrador del edificio agenda por varios apartamentos dejando
+// siempre su número; sin esto, todas esas entregas quedarían colgadas del
+// mismo cliente y la cartera de cada uno saldría mezclada.
+const vecino = db.registrarCitaExterna({
+  ...agendamiento, hora: '9:30', nombre: 'Andrés Peña', apto: '405',
+  correo: 'andres@ejemplo.com',   // el teléfono sigue siendo el mismo
+});
+comprobar('mismo teléfono y otro correo son dos clientes distintos',
+  vecino.cita.cliente_id === alta.cita.cliente_id, false);
+
 // Si alguien libera su turno y lo toma otro, la cita pasa a ser del nuevo:
 // el turno es el mismo, no son dos entregas.
 const reemplazo = db.registrarCitaExterna({
@@ -785,6 +796,91 @@ for (const [que, malo] of [
   try { db.registrarCitaExterna(malo); } catch { rechazado = true; }
   comprobar(`rechaza un agendamiento ${que}`, rechazado, true);
 }
+
+/* 9c · Cancelar: la hoja manda lo que sigue en pie -------------------- */
+// El formulario no avisa cuando se borra una fila, así que la hoja manda cada
+// tanto la lista completa y Ari cancela lo que ya no está.
+const turno = (hora, nombre, apto) => ({ fecha: '2026-09-18', hora, nombre, apto,
+  correo: `${apto}@ejemplo.com`, telefono: '3000000000' });
+
+const sync1 = db.sincronizarAgendaExterna({
+  proyecto: 'Amazonía 96',
+  desde: '2026-01-01',   // en la prueba las fechas son futuras, pero se fija para no depender de hoy
+  turnos: [turno('8:30', 'Ana Díaz', '101'), turno('9:00', 'Beto Pérez', '102'), turno('9:30', 'Caro Ruiz', '103')],
+});
+comprobar('la primera sincronización agenda los tres turnos', [sync1.agendadas, sync1.nuevas], [3, 3]);
+
+// Beto canceló: su fila ya no viene en la lista.
+const sync2 = db.sincronizarAgendaExterna({
+  proyecto: 'Amazonía 96',
+  desde: '2026-01-01',
+  turnos: [turno('8:30', 'Ana Díaz', '101'), turno('9:30', 'Caro Ruiz', '103')],
+});
+comprobar('el turno que ya no viene queda cancelado',
+  sync2.canceladas.map((c) => c.titulo), ['Entrega domótica · Apto 102']);
+comprobar('no vuelve a crear los que siguen en pie', sync2.nuevas, 0);
+comprobar('y la agenda de ese día ya sólo muestra dos',
+  db.consultar('citas', { desde: '2026-09-18', hasta: '2026-09-18', estado: 'pendiente' }).length, 2);
+// Cancelada, no borrada: el registro queda para poder mirarlo después.
+comprobar('la cancelada sigue existiendo, sólo que tachada',
+  db.consultar('citas', { desde: '2026-09-18', hasta: '2026-09-18', estado: 'cancelada' })
+    .map((c) => c.titulo), ['Entrega domótica · Apto 102']);
+
+// Si Beto vuelve a tomar el turno, su cita revive en vez de duplicarse.
+const sync3 = db.sincronizarAgendaExterna({
+  proyecto: 'Amazonía 96',
+  desde: '2026-01-01',
+  turnos: [turno('8:30', 'Ana Díaz', '101'), turno('9:00', 'Beto Pérez', '102'), turno('9:30', 'Caro Ruiz', '103')],
+});
+comprobar('si vuelve a tomar el turno, revive sin duplicar', sync3.nuevas, 0);
+comprobar('y la agenda vuelve a mostrar los tres',
+  db.consultar('citas', { desde: '2026-09-18', hasta: '2026-09-18', estado: 'pendiente' }).length, 3);
+
+// Lo que NO puede pasar: que una cita cargada a mano se cancele sola.
+const aMano = db.insertar('citas', {
+  titulo: 'Visita técnica cargada a mano', inicio: '2026-09-18T14:00', estado: 'pendiente',
+});
+db.sincronizarAgendaExterna({ proyecto: 'Amazonía 96', desde: '2026-01-01', turnos: [] , permitir_vaciar: true });
+comprobar('una cita cargada a mano no se cancela sola',
+  db.obtenerPorId('citas', aMano.id).estado, 'pendiente');
+comprobar('pero sí se cancelaron las del proyecto',
+  db.consultar('citas', { desde: '2026-09-18', hasta: '2026-09-18', estado: 'pendiente' })
+    .map((c) => c.titulo), ['Visita técnica cargada a mano']);
+
+// Una lista vacía sin pedirlo con todas las letras no vacía la agenda: es más
+// probable que la hoja no se haya podido leer a que se cancelara todo junto.
+db.sincronizarAgendaExterna({ proyecto: 'Amazonía 96', desde: '2026-01-01', turnos: [turno('8:30', 'Ana Díaz', '101')] });
+let frenoVacio = false;
+try { db.sincronizarAgendaExterna({ proyecto: 'Amazonía 96', desde: '2026-01-01', turnos: [] }); }
+catch { frenoVacio = true; }
+comprobar('una lista vacía inesperada no vacía la agenda', frenoVacio, true);
+comprobar('y la cita que había sigue en pie',
+  db.consultar('citas', { desde: '2026-09-18', hasta: '2026-09-18', estado: 'pendiente' })
+    .filter((c) => c.titulo.includes('101')).length, 1);
+
+// Un turno mal formado frena todo: si se salteara, su cita se cancelaría por
+// no aparecer en la lista de vigentes, que es exactamente lo que no queremos.
+let frenoTurnoMalo = false;
+try {
+  db.sincronizarAgendaExterna({
+    proyecto: 'Amazonía 96', desde: '2026-01-01',
+    turnos: [turno('8:30', 'Ana Díaz', '101'), { ...turno('9:00', 'Beto Pérez', '102'), fecha: '18/09/2026' }],
+  });
+} catch { frenoTurnoMalo = true; }
+comprobar('un turno mal formado frena la sincronización entera', frenoTurnoMalo, true);
+comprobar('sin haber cancelado nada por el camino',
+  db.consultar('citas', { desde: '2026-09-18', hasta: '2026-09-18', estado: 'pendiente' })
+    .filter((c) => c.titulo.includes('101')).length, 1);
+
+// Lo viejo no se toca: si la hoja se limpia, las entregas ya hechas siguen ahí.
+db.registrarCitaExterna({ proyecto: 'Amazonía 96', fecha: '2026-02-06', hora: '8:30',
+  nombre: 'Entrega vieja', apto: '001', correo: 'vieja@ejemplo.com' });
+db.sincronizarAgendaExterna({
+  proyecto: 'Amazonía 96', desde: '2026-09-01',
+  turnos: [turno('8:30', 'Ana Díaz', '101')],
+});
+comprobar('una entrega anterior a la fecha de corte no se cancela',
+  db.consultar('citas', { desde: '2026-02-06', hasta: '2026-02-06' })[0].estado, 'pendiente');
 
 /* 10 · La caché del resumen y los ajustes se entera de lo que cambia - */
 // El dashboard se pide muy seguido (cada acción del asistente lo vuelve a

@@ -1328,9 +1328,18 @@ function clienteDeAgendamiento({ nombre, telefono, correo }) {
              AND ${columna} IS NOT NULL AND ${columna} <> '' ORDER BY id LIMIT 1`, [valor])
     : null);
 
-  const encontrado = buscar('email', correo)
-    ?? buscar('telefono', telefono)
-    ?? buscar('nombre', nombre);
+  // Dos correos distintos son dos personas distintas, aunque compartan el
+  // teléfono o se llamen parecido. Pasa de verdad: el administrador del
+  // edificio agenda por varios apartamentos dejando siempre su número, y sin
+  // esto todas esas entregas terminarían colgadas del mismo cliente.
+  const otraPersona = (c) => Boolean(correo && c.email && c.email.toLowerCase() !== correo.toLowerCase());
+
+  const porCorreo = buscar('email', correo);
+  const porTelefono = porCorreo ? null : buscar('telefono', telefono);
+  const porNombre = porCorreo || porTelefono ? null : buscar('nombre', nombre);
+
+  const candidato = porCorreo ?? porTelefono ?? porNombre;
+  const encontrado = candidato && !otraPersona(candidato) ? candidato : null;
 
   if (!encontrado) {
     return crearCliente({ nombre, telefono: telefono || null, email: correo || null });
@@ -1355,20 +1364,19 @@ function horaDeDosDigitos(hora) {
   return `${String(h).padStart(2, '0')}:${m[2]}`;
 }
 
+/** La marca del turno: proyecto + día + hora, que es lo que lo hace único. */
+const claveDeTurno = (proyecto, fecha, hora) =>
+  [proyecto || 'web', `${fecha}T${hora}`].join(':').toLowerCase();
+
 /**
- * Anota en la agenda una cita agendada desde afuera, sin duplicar.
+ * Revisa un agendamiento y lo deja listo para guardar, o explica qué le falta.
  *
- * La marca `origen` identifica el turno de origen —proyecto + día + hora—, que
- * es justamente lo que el formulario garantiza único: no puede haber dos
- * personas en la franja de las 8:30 de un mismo viernes. Si ese turno ya
- * estaba anotado, se actualiza en vez de volver a insertarlo. Eso cubre los
- * dos casos que en la práctica pasan: que el aviso se reintente (queda una
- * sola cita, no dos), y que alguien libere su turno y lo tome otro (la cita
- * pasa a ser del nuevo, que es lo correcto: el turno es el mismo).
- *
- * @returns {{cita: object, creada: boolean}}
+ * Va separado de la escritura porque al sincronizar la agenda entera hay que
+ * revisar TODOS los turnos antes de tocar nada: si se validara sobre la
+ * marcha, un turno con la fecha mal escrita se saltearía, y al no aparecer en
+ * la lista de vigentes su cita terminaría cancelada por error.
  */
-export function registrarCitaExterna(datos = {}) {
+function revisarAgendamiento(datos = {}) {
   const nombre = String(datos.nombre ?? '').trim();
   const fecha = String(datos.fecha ?? '').trim();
   const hora = horaDeDosDigitos(datos.hora);
@@ -1383,28 +1391,33 @@ export function registrarCitaExterna(datos = {}) {
   const correo = String(datos.correo ?? '').trim();
   const asunto = String(datos.asunto ?? '').trim() || 'Entrega domótica';
 
-  const cliente = clienteDeAgendamiento({ nombre, telefono, correo });
-
-  // La marca del turno. Sin proyecto igual funciona; con proyecto, dos
-  // edificios distintos pueden tener su entrega el mismo viernes a la misma
-  // hora sin pisarse.
-  const clave = [proyecto || 'web', `${fecha}T${hora}`].join(':').toLowerCase();
-
-  const cita = {
-    titulo: apto ? `${asunto} · Apto ${apto}` : asunto,
-    cliente_id: cliente.id,
-    inicio: `${fecha}T${hora}`,
-    // Las franjas del formulario van de media hora.
-    duracion_min: Number(datos.duracion_min) > 0 ? Number(datos.duracion_min) : 30,
-    lugar: [proyecto, apto && `Apto ${apto}`].filter(Boolean).join(' · ') || null,
-    notas: [
-      telefono && `Teléfono: ${telefono}`,
-      correo && `Correo: ${correo}`,
-      'Agendado desde el formulario de la web.',
-    ].filter(Boolean).join('\n'),
-    estado: 'pendiente',
-    origen: clave,
+  return {
+    nombre,
+    telefono,
+    correo,
+    clave: claveDeTurno(proyecto, fecha, hora),
+    cita: {
+      titulo: apto ? `${asunto} · Apto ${apto}` : asunto,
+      inicio: `${fecha}T${hora}`,
+      // Las franjas del formulario van de media hora.
+      duracion_min: Number(datos.duracion_min) > 0 ? Number(datos.duracion_min) : 30,
+      lugar: [proyecto, apto && `Apto ${apto}`].filter(Boolean).join(' · ') || null,
+      notas: [
+        telefono && `Teléfono: ${telefono}`,
+        correo && `Correo: ${correo}`,
+        'Agendado desde el formulario de la web.',
+      ].filter(Boolean).join('\n'),
+      // Vuelve a 'pendiente' a propósito: si el turno se había cancelado y
+      // alguien lo tomó de nuevo, la cita revive en vez de quedar tachada.
+      estado: 'pendiente',
+    },
   };
+}
+
+/** Guarda un agendamiento ya revisado, actualizando si ese turno ya existía. */
+function guardarAgendamiento(revisado) {
+  const cliente = clienteDeAgendamiento(revisado);
+  const cita = { ...revisado.cita, cliente_id: cliente.id, origen: revisado.clave };
 
   // Si la columna `origen` no llegó a crearse (su migración falló porque otro
   // proceso tenía la base tomada), se agenda igual: perder la protección
@@ -1414,11 +1427,113 @@ export function registrarCitaExterna(datos = {}) {
     return { cita: insertar('citas', cita), creada: true };
   }
 
-  const yaEstaba = one('SELECT id FROM citas WHERE origen = ?', [clave]);
+  const yaEstaba = one('SELECT id FROM citas WHERE origen = ?', [revisado.clave]);
   if (yaEstaba) {
     return { cita: actualizar('citas', yaEstaba.id, cita), creada: false };
   }
   return { cita: insertar('citas', cita), creada: true };
+}
+
+/**
+ * Anota en la agenda una cita agendada desde afuera, sin duplicar.
+ *
+ * La marca `origen` identifica el turno de origen —proyecto + día + hora—, que
+ * es justamente lo que el formulario garantiza único: no puede haber dos
+ * personas en la franja de las 8:30 de un mismo viernes. Si ese turno ya
+ * estaba anotado, se actualiza en vez de volver a insertarlo. Eso cubre los
+ * dos casos que en la práctica pasan: que el aviso se reintente (queda una
+ * sola cita, no dos), y que alguien libere su turno y lo tome otro (la cita
+ * pasa a ser del nuevo, que es lo correcto: el turno es el mismo).
+ *
+ * @returns {{cita: object, creada: boolean}}
+ */
+export function registrarCitaExterna(datos = {}) {
+  return guardarAgendamiento(revisarAgendamiento(datos));
+}
+
+/**
+ * Pone la agenda a tono con la lista de turnos que hay hoy en la hoja.
+ *
+ * El formulario no tiene botón de cancelar: cuando alguien avisa que no puede,
+ * la fila se borra (o se vacía) en la hoja de Google, y ahí se acaba. Nada de
+ * eso le llega a Ari, así que la cita quedaría en la agenda para siempre.
+ *
+ * Por eso la hoja manda cada tanto la lista completa de los turnos que siguen
+ * en pie, y acá se comparan contra lo que hay anotado: lo que está en la lista
+ * se agenda o se actualiza, y lo que ya no está se marca como cancelado. Es la
+ * misma idea que la sincronización de listas de precios: comparar contra lo
+ * que hay, en vez de pedirle a alguien que avise cada cambio.
+ *
+ * Tres cosas que NO toca, a propósito:
+ *
+ *  - Las citas que no salieron de este proyecto. Se filtra por la marca de
+ *    origen, así que una reunión que cargaste a mano nunca se cancela sola.
+ *  - Lo que ya pasó. Sólo mira de `desde` en adelante (hoy, salvo que se pida
+ *    otra cosa): si la hoja se limpia de vez en cuando, las entregas viejas no
+ *    tienen por qué desaparecer de la agenda.
+ *  - Las que ya se completaron. Que se borre la fila después de hacer la
+ *    entrega no puede reescribir lo que ya pasó.
+ *
+ * @returns {{agendadas: number, nuevas: number, canceladas: Array}}
+ */
+export function sincronizarAgendaExterna(datos = {}) {
+  const proyecto = String(datos.proyecto ?? '').trim();
+  const turnos = datos.turnos;
+  if (!Array.isArray(turnos)) throw new Error('Falta la lista de turnos.');
+
+  if (!columnasReales('citas').has('origen')) {
+    throw new Error(
+      'No puedo sincronizar la agenda: falta la columna que marca de dónde viene '
+      + 'cada cita. Reiniciá la aplicación cuando no haya otro proceso usando la base.',
+    );
+  }
+
+  // Todo se revisa antes de escribir nada: un turno mal formado tiene que
+  // frenar la sincronización entera, no colarse como una cancelación.
+  const revisados = turnos.map((t, i) => {
+    try {
+      return revisarAgendamiento({ ...t, proyecto });
+    } catch (err) {
+      throw new Error(`El turno ${i + 1} de la lista no sirve: ${err.message}`);
+    }
+  });
+
+  const prefijo = `${(proyecto || 'web').toLowerCase()}:`;
+  const desde = /^\d{4}-\d{2}-\d{2}$/.test(String(datos.desde ?? '')) ? datos.desde : hoy();
+
+  const enPie = all(
+    `SELECT id, origen, inicio, titulo FROM citas
+      WHERE origen IS NOT NULL AND substr(origen, 1, ?) = ?
+        AND substr(inicio, 1, 10) >= ? AND estado = 'pendiente'`,
+    [prefijo.length, prefijo, desde],
+  );
+
+  // Una lista vacía puede ser verdad (se cancelaron todas) o el síntoma de que
+  // algo se rompió del otro lado. Como la diferencia no se puede saber desde
+  // acá y equivocarse significa vaciarle la agenda al negocio, se frena y se
+  // avisa; para vaciarla de verdad hay que pedirlo con todas las letras.
+  if (!revisados.length && enPie.length && !datos.permitir_vaciar) {
+    throw new Error(
+      `La lista llegó vacía y hay ${enPie.length} cita(s) agendada(s). No cancelé nada: `
+      + 'puede que la hoja no se haya podido leer. Si de verdad se cancelaron todas, '
+      + 'mandá permitir_vaciar.',
+    );
+  }
+
+  let nuevas = 0;
+  for (const revisado of revisados) {
+    if (guardarAgendamiento(revisado).creada) nuevas += 1;
+  }
+
+  const vigentes = new Set(revisados.map((r) => r.clave));
+  const canceladas = [];
+  for (const cita of enPie) {
+    if (vigentes.has(cita.origen)) continue;
+    actualizar('citas', cita.id, { estado: 'cancelada' });
+    canceladas.push({ id: cita.id, titulo: cita.titulo, inicio: cita.inicio });
+  }
+
+  return { agendadas: revisados.length, nuevas, canceladas };
 }
 
 /**
