@@ -145,10 +145,15 @@ function aJpeg(direccion) {
 
 /** Arma el PDF de una cotización y lo devuelve como archivo. */
 async function pdfDeCotizacion(cot) {
-  const { filas: items = [] } = await api(`/cotizaciones/${cot.id}/items`);
+  const [{ filas: items = [] }, aj] = await Promise.all([
+    api(`/cotizaciones/${cot.id}/items`),
+    api('/ajustes'),
+  ]);
 
-  // Sólo una vez por foto, aunque el producto se repita en varios renglones.
-  const direcciones = [...new Set(items.map((i) => i.foto).filter(Boolean))];
+  // El logo viaja por el mismo camino que las fotos: también hay que
+  // convertirlo, y también es el navegador el único que puede.
+  // Sólo una vez por imagen, aunque el producto se repita en varios renglones.
+  const direcciones = [...new Set([aj.logo, ...items.map((i) => i.foto)].filter(Boolean))];
   const fotos = {};
   await Promise.all(direcciones.map(async (d) => {
     const jpeg = await aJpeg(d);

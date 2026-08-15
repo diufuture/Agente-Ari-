@@ -263,7 +263,10 @@ export function paginaCotizacion(id) {
     <div class="marca">
       <img src="${esc(aj.logo || '/logo.png')}" alt="${esc(aj.empresa)}"
            onerror="if (this.dataset.n) { this.remove(); } else { this.dataset.n = 1; this.src = '/logo.svg'; }" />
-      <h1>${esc(aj.empresa)}</h1>
+      ${/* El logo ya dice el nombre de la empresa: repetirlo abajo en letras
+            era decirlo dos veces. Sin logo cargado sí hace falta, o la oferta
+            saldría sin decir de quién es. */ ''}
+      ${aj.logo ? '' : `<h1>${esc(aj.empresa)}</h1>`}
       <div class="datos">
         ${[aj.nit && `NIT ${aj.nit}`, aj.direccion, aj.telefono, aj.email]
           .filter(Boolean).map(esc).join('<br />')}

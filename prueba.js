@@ -739,14 +739,15 @@ comprobar('cerrado como corresponde', armado.pdf.subarray(-6).toString('latin1')
 comprobar('trae la tabla de posiciones', armado.pdf.includes(Buffer.from('startxref')), true);
 
 // Lo que va adentro tiene que ser lo de esta cotización, no cualquier cosa.
-const textoPdf = (() => {
+const leerTextoPdf = (pdf) => {
   let salida = '';
-  const crudo = armado.pdf.toString('latin1');
+  const crudo = pdf.toString('latin1');
   for (const m of crudo.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
     try { salida += inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1'); } catch { /* imagen */ }
   }
   return salida;
-})();
+};
+const textoPdf = leerTextoPdf(armado.pdf);
 comprobar('lleva el número de la cotización', textoPdf.includes(`COTIZACIÓN N.º ${cotId}`), true);
 comprobar('y el nombre del cliente', textoPdf.includes('Jimmy'), true);
 // Las tildes y la eñe sobreviven al viaje: el PDF no habla el mismo alfabeto
@@ -773,6 +774,45 @@ comprobar('una palabra gigante también se corta',
 
 // El tamaño de la foto se lee de la cabecera del JPEG, sin descomprimirla.
 comprobar('un JPEG falso no se toma por bueno', bajo.medirJpeg(Buffer.from('no soy jpeg')), null);
+
+/* 9a-bis · El logo no se dice dos veces --------------------------- */
+// Con el logo cargado, el nombre de la empresa en letras grandes debajo era
+// decir lo mismo dos veces: el logo ya lo dice. Sin logo sí tiene que estar,
+// o la oferta saldría sin decir de quién es.
+//
+// El pie de página no cuenta: ahí el nombre acompaña al teléfono y al correo,
+// y es lo que se mira cuando la hoja quedó suelta sobre un escritorio.
+const cuantasVeces = (texto, aguja) => texto.split(aguja).length - 1;
+
+db.guardarAjustes({ empresa: 'Click Control', logo: '' });
+const sinLogo = leerTextoPdf(pdfMod.pdfDeCotizacion(cotId).pdf);
+comprobar('sin logo, el nombre va en el encabezado y en el pie',
+  cuantasVeces(sinLogo, 'Click Control'), 2);
+
+// Un JPEG mínimo pero legítimo, para que el generador lo acepte como logo.
+const jpegDePrueba = Buffer.from(
+  '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a'
+  + 'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA'
+  + 'AAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64');
+comprobar('el JPEG de prueba es válido', Boolean(bajo.medirJpeg(jpegDePrueba)), true);
+
+db.guardarAjustes({ logo: '/uploads/marca/logo.png' });
+const conLogo = pdfMod.pdfDeCotizacion(cotId, new Map([['/uploads/marca/logo.png', jpegDePrueba]]));
+const textoConLogo = leerTextoPdf(conLogo.pdf);
+comprobar('con logo, el nombre queda sólo en el pie',
+  cuantasVeces(textoConLogo, 'Click Control'), 1);
+comprobar('y el logo va incrustado de verdad',
+  conLogo.pdf.includes(Buffer.from('DCTDecode')), true);
+// La fecha no puede irse abajo arrastrada por el alto del logo.
+comprobar('la fecha sigue en el encabezado', textoConLogo.includes('Fecha:'), true);
+
+// Si el logo está configurado pero no llegó convertido, la oferta sale igual:
+// se cae al nombre en letras en vez de quedarse sin encabezado.
+const logoQueNoLlego = leerTextoPdf(pdfMod.pdfDeCotizacion(cotId).pdf);
+comprobar('si el logo no llegó, vuelve el nombre en letras',
+  cuantasVeces(logoQueNoLlego, 'Click Control'), 2);
+
+db.guardarAjustes({ logo: '' });
 
 /* 9b · El formulario de la web agenda solo -------------------------- */
 // Lo que manda el Apps Script cuando alguien toma un turno en la web.

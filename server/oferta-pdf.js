@@ -72,24 +72,45 @@ export function pdfDeCotizacion(id, fotos = new Map()) {
   const util = doc.anchoUtil;
 
   /* ---- Encabezado ---- */
-  doc.texto(aj.empresa, izq, doc.y, { tamano: 17, negrita: true, color: TINTA });
-  doc.texto(`COTIZACIÓN N.º ${cot.id}`, izq, doc.y, {
+  // Las dos columnas arrancan a la misma altura y se dibujan por separado: la
+  // izquierda cambia de alto según haya logo o no, y sin fijar la derecha a
+  // este punto la fecha se iría bajando detrás del logo.
+  const yTope = doc.y;
+
+  doc.texto(`COTIZACIÓN N.º ${cot.id}`, izq, yTope, {
     tamano: 12, negrita: true, color: MARCA, alinear: 'derecha', ancho: util,
   });
-  doc.y += 21;
-
-  const datosEmpresa = [aj.nit && `NIT ${aj.nit}`, aj.direccion, aj.telefono, aj.email].filter(Boolean).join('  ·  ');
-  if (datosEmpresa) {
-    doc.texto(datosEmpresa, izq, doc.y, { tamano: 8, color: TENUE });
-  }
   const cabecera = [
     `Fecha: ${fechaLarga(cot.creado_en)}`,
     aj.ciudad && `Ciudad: ${aj.ciudad}`,
     `Validez: ${cot.validez || aj.validez}`,
     cot.vence_en && `Vence: ${fechaLarga(cot.vence_en)}`,
   ].filter(Boolean).join('  ·  ');
-  doc.texto(cabecera, izq, doc.y + 11, { tamano: 8, color: TENUE, alinear: 'derecha', ancho: util });
-  doc.y += 30;
+  doc.texto(cabecera, izq, yTope + 18, { tamano: 8, color: TENUE, alinear: 'derecha', ancho: util });
+
+  // El logo manda: si está cargado, no se repite el nombre en letras abajo,
+  // porque el logo ya lo dice. Sin logo sí va el nombre, o la oferta saldría
+  // sin decir de quién es.
+  const logo = aj.logo && fotos.get(aj.logo);
+  let yIzquierda = yTope;
+  // El mismo tamaño que en la vista de pantalla (240×62 px), pasado a puntos.
+  // La imagen se encaja adentro sin deformarse, así que un logo cuadrado y uno
+  // alargado quedan los dos bien.
+  if (logo && doc.imagen('__logo__', logo, izq, yTope - 2, 180, 47)) {
+    yIzquierda += 51;
+  } else {
+    doc.texto(aj.empresa, izq, yTope, { tamano: 17, negrita: true, color: TINTA });
+    yIzquierda += 21;
+  }
+
+  const datosEmpresa = [aj.nit && `NIT ${aj.nit}`, aj.direccion, aj.telefono, aj.email].filter(Boolean).join('  ·  ');
+  if (datosEmpresa) {
+    doc.texto(datosEmpresa, izq, yIzquierda, { tamano: 8, color: TENUE });
+    yIzquierda += 11;
+  }
+
+  // La línea va debajo de la más alta de las dos columnas.
+  doc.y = Math.max(yIzquierda, yTope + 30) + 4;
 
   doc.linea(izq, doc.y, izq + util, doc.y, { color: MARCA, grosor: 1.4 });
   doc.y += 14;
