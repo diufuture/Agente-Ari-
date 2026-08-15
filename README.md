@@ -640,10 +640,18 @@ constructor sin rehacerla.
 
 Dos cosas que no toca:
 
-- **Los renglones cuyo precio se cambió a mano.** Si a uno se le tocó el
-  precio, ya no vale el de la lista, y volver a ponérselo sería borrar una
-  decisión sin avisar. Se avisa cuántos quedaron afuera, para que no parezca
-  un olvido.
+- **Los renglones cuyo precio se escribió a mano.** Si a uno se le escribió el
+  precio —tecleado, dictado, o dictado distinto al agregarlo—, ya no vale el
+  de la lista, y volver a ponérselo sería borrar una decisión sin avisar. Se
+  avisa cuántos quedaron afuera, para que no parezca un olvido.
+
+  Eso se sabe porque al escribir un precio el renglón queda marcado, no
+  comparándolo contra el catálogo. Compararlo fue el primer intento y estaba
+  mal: al reimportar una lista de precios los renglones ya cotizados quedan
+  legítimamente desalineados del catálogo —a propósito, una oferta enviada no
+  cambia sola—, así que **todos** parecían tocados a mano y cambiar de lista
+  no movía un peso. Las cotizaciones armadas antes de este cambio no tienen la
+  marca: en ellas, cambiar de lista repone todos los renglones del catálogo.
 - **Los renglones libres** ("Mano de obra", "Obra civil"): no salieron del
   catálogo, así que no tienen precio de canal ni de constructor.
 

@@ -3234,10 +3234,10 @@ $('#contenido').addEventListener('submit', async (e) => {
       if (guardado?.renglonesActualizados) {
         avisar(`${guardado.renglonesActualizados} renglón(es) con el precio nuevo ✓`
           + (respetados.length
-            ? ` · ${respetados.length} quedó(aron) como estaba(n): les habías tocado el precio`
+            ? ` · ${respetados.length} quedó(aron) como estaba(n): les escribiste el precio a mano`
             : ''));
       } else if (respetados.length) {
-        avisar(`Guardado, pero no cambié precios: a esos ${respetados.length} renglón(es) se los habías tocado a mano.`);
+        avisar(`Guardado, pero no cambié precios: a esos ${respetados.length} renglón(es) les escribiste el precio a mano.`);
       } else {
         avisar('Datos actualizados ✓');
       }
@@ -3350,10 +3350,10 @@ $('#contenido').addEventListener('submit', async (e) => {
       if (r.renglonesActualizados) {
         avisar(`${r.renglonesActualizados} renglón(es) con el precio nuevo ✓`
           + (respetados.length
-            ? ` · ${respetados.length} quedó(aron) como estaba(n): les habías tocado el precio`
+            ? ` · ${respetados.length} quedó(aron) como estaba(n): les escribiste el precio a mano`
             : ''));
       } else if (respetados.length) {
-        avisar(`No cambié ningún precio: a esos ${respetados.length} renglón(es) se los habías tocado a mano.`);
+        avisar(`No cambié ningún precio: a esos ${respetados.length} renglón(es) les escribiste el precio a mano.`);
       } else {
         avisar('Totales actualizados ✓');
       }

@@ -168,6 +168,10 @@ CREATE TABLE IF NOT EXISTS cotizacion_items (
   foto            TEXT,
   cantidad        REAL NOT NULL DEFAULT 1,
   precio_unitario REAL NOT NULL DEFAULT 0,
+  -- Queda en 1 cuando el precio lo escribió una persona, no la lista. Es el
+  -- único dato con el que se puede saber si un renglón fuera de lista está así
+  -- porque alguien lo decidió o porque la lista del proveedor cambió después.
+  precio_manual   INTEGER NOT NULL DEFAULT 0,
   orden           INTEGER NOT NULL DEFAULT 0,
   creado_en       TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
@@ -292,6 +296,9 @@ try {
   // Es opcional: si nadie la usa, la columna no aparece impresa.
   const item = columnasDe('cotizacion_items');
   if (!item.includes('area')) db.exec('ALTER TABLE cotizacion_items ADD COLUMN area TEXT');
+  if (!item.includes('precio_manual')) {
+    db.exec('ALTER TABLE cotizacion_items ADD COLUMN precio_manual INTEGER NOT NULL DEFAULT 0');
+  }
 
   const mov = columnasDe('movimientos_stock');
   if (!mov.includes('cotizacion_id')) {
@@ -1067,11 +1074,14 @@ export function precioSegunNivel(producto, nivel = 'cliente') {
  * mismo. Servía para empezar una oferta, no para pasarla de un cliente final
  * a un constructor, que es justo cuando uno lo necesita.
  *
- * Lo que se tocó a mano no se pisa. Si a un renglón se le cambió el precio
+ * Lo que se tocó a mano no se pisa: si a un renglón se le escribió el precio
  * —por voz o a mano— ya no vale el de la lista, y volver a ponérselo sería
- * borrar una decisión sin avisar. Se reconoce comparándolo con lo que le
- * tocaba en el nivel anterior: si coincide, nadie lo tocó. Los que quedan
- * afuera se devuelven para poder decirlo, no para esconderlo.
+ * borrar una decisión sin avisar. Eso se sabe por la marca `precio_manual`,
+ * que se pone al escribir el precio, y NO comparando contra lo que decía el
+ * catálogo. Compararlo era lo que hacía antes y estaba mal: al reimportar una
+ * lista de precios los renglones viejos quedan legítimamente desalineados del
+ * catálogo, así que TODOS parecían tocados a mano y no se cambiaba ninguno.
+ * Los que se dejan quietos se devuelven para poder decirlo, no para esconderlo.
  *
  * Los renglones libres ("Mano de obra", "Obra civil") tampoco cambian: no
  * salieron del catálogo, así que no tienen precio de canal ni de constructor.
@@ -1097,15 +1107,14 @@ export function cambiarNivelPrecio(id, nivel) {
       const producto = one('SELECT * FROM productos WHERE id = ?', [item.producto_id]);
       if (!producto) continue;                          // ya no está en el catálogo
 
-      const leTocaba = precioSegunNivel(producto, anterior);
-      const nuevo = precioSegunNivel(producto, nivel);
-
-      // Con céntimos de por medio, comparar con === deja pasar diferencias que
-      // no existen. Un peso de margen alcanza y sobra para plata colombiana.
-      if (Math.abs(Number(item.precio_unitario) - leTocaba) > 1) {
+      if (item.precio_manual) {
         respetados.push({ descripcion: item.descripcion.split('\n')[0], precio: item.precio_unitario });
         continue;
       }
+
+      // Con céntimos de por medio, comparar con === deja pasar diferencias que
+      // no existen. Un peso de margen alcanza y sobra para plata colombiana.
+      const nuevo = precioSegunNivel(producto, nivel);
       if (Math.abs(nuevo - Number(item.precio_unitario)) > 1) {
         run('UPDATE cotizacion_items SET precio_unitario = ? WHERE id = ?', [nuevo, item.id]);
         actualizados += 1;
@@ -1236,6 +1245,11 @@ export function agregarItem(cotizacionId, datos = {}) {
   const seccion = datos.seccion ?? base.seccion ?? null;
   const area = datos.area ?? null;
 
+  // Un producto del catálogo al que se le dicta otro precio al agregarlo ya
+  // nace con el precio tocado a mano: cambiar de lista después no lo pisa.
+  const precioDictado = base.producto_id
+    && Math.abs(precio - Number(base.precio_unitario ?? 0)) > 1 ? 1 : 0;
+
   // Agregar dos veces el mismo producto suma la cantidad en vez de repetir el
   // renglón: "agregá dos cámaras… agregá dos cámaras más" son cuatro cámaras,
   // no dos renglones de dos. Se exige que coincidan también la sección, el
@@ -1275,6 +1289,7 @@ export function agregarItem(cotizacionId, datos = {}) {
     foto: base.foto ?? null,
     cantidad,
     precio_unitario: precio,
+    precio_manual: precioDictado,
     orden: datos.orden ?? siguiente,
   });
 
@@ -1664,6 +1679,16 @@ export function actualizarItem(itemId, datos = {}) {
   const limpio = { ...datos };
   delete limpio.id;
   delete limpio.cotizacion_id;
+
+  // Si por acá pasa un precio distinto del que tenía, lo escribió una persona:
+  // se anota, y de ahí en adelante cambiar de lista de precios no lo pisa.
+  // Sin esta marca no hay manera de distinguirlo de un renglón que quedó
+  // desalineado porque después se reimportó la lista del proveedor.
+  if (limpio.precio_unitario != null
+      && Math.abs(Number(limpio.precio_unitario) - Number(item.precio_unitario)) > 1) {
+    limpio.precio_manual = 1;
+  }
+
   const actualizado = actualizar('cotizacion_items', itemId, limpio);
   recalcularCotizacion(item.cotizacion_id);
   sincronizarInventario(item.cotizacion_id);

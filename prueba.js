@@ -779,6 +779,31 @@ let nivelInvalido = false;
 try { db.cambiarNivelPrecio(cotNivel.id, 'mayorista'); } catch { nivelInvalido = true; }
 comprobar('un nivel que no existe se rechaza', nivelInvalido, true);
 
+// El caso que dejaba el selector inservible: reimportar la lista del proveedor
+// deja los renglones ya cotizados con SU precio —a propósito, una oferta
+// enviada no cambia sola—, pero comparar contra el catálogo hacía que todos
+// parecieran tocados a mano y cambiar de lista no movía un peso.
+const cotVieja = db.insertar('cotizaciones', { titulo: 'De antes del aumento' });
+db.agregarItem(cotVieja.id, { producto_id: idNv2, cantidad: 10 });
+db.conciliarProductos('Niveles', [
+  { fila: 2, referencia: 'NV-2', descripcion: 'Interruptor 2 canales', precio_canal: 161000, precio_constructor: 225000, precio_cliente: 258000 },
+], {});
+comprobar('el renglón conserva el precio con el que se cotizó',
+  precioDe(cotVieja.id, '2 canales'), 247790);
+
+const trasAumento = db.cambiarNivelPrecio(cotVieja.id, 'constructor');
+comprobar('haber reimportado la lista no lo hace pasar por tocado a mano',
+  [trasAumento.actualizados, trasAumento.respetados.length], [1, 0]);
+comprobar('y queda con el precio de constructor que rige hoy',
+  precioDe(cotVieja.id, '2 canales'), 225000);
+
+// Dictar otro precio al agregar el renglón ya cuenta como tocarlo a mano.
+const cotDictada = db.insertar('cotizaciones', { titulo: 'Con precio dictado' });
+db.agregarItem(cotDictada.id, { producto_id: idNv3, cantidad: 1, precio_unitario: 300000 });
+const trasDictar = db.cambiarNivelPrecio(cotDictada.id, 'canal');
+comprobar('un precio dictado al agregar el renglón tampoco se pisa',
+  [precioDe(cotDictada.id, '3 canales'), trasDictar.actualizados], [300000, 0]);
+
 /* 8e · Eliminar una cotización -------------------------------------- */
 // Una oferta abierta por error no tenía cómo salir de la lista.
 const cotBorrar = db.insertar('cotizaciones', { titulo: 'Abierta por error', estado: 'aprobada' });
