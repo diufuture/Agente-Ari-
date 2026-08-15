@@ -29,7 +29,7 @@ const PUERTO = process.env.PORT || 3000;
 // este archivo con require(), que no admite top-level await en el módulo.
 async function iniciar() {
 
-const [db, tools, asistente, auth, xlsx, imprimir, remoto, trabajos] = await Promise.all([
+const [db, tools, asistente, auth, xlsx, imprimir, remoto, trabajos, ofertaPdf] = await Promise.all([
   import('./db.js'),
   import('./tools.js'),
   import('./assistant.js'),
@@ -38,6 +38,7 @@ const [db, tools, asistente, auth, xlsx, imprimir, remoto, trabajos] = await Pro
   import('./imprimir.js'),
   import('./remoto.js'),
   import('./trabajos.js'),
+  import('./oferta-pdf.js'),
 ]);
 
 const CARPETA_FOTOS = join(PUBLICO, 'uploads', 'productos');
@@ -619,6 +620,37 @@ async function api(req, res, url) {
     } catch (err) {
       return json(res, 400, { error: err.message });
     }
+  }
+
+  // POST /api/cotizaciones/:id/pdf -> la oferta como PDF de verdad.
+  //
+  // Es POST y no GET porque el navegador manda con el pedido las fotos ya
+  // convertidas a JPEG: se guardan en WebP (que pesa menos) y el formato PDF
+  // no sabe leer WebP. El único que puede convertirlas es el navegador, que
+  // ya las tiene dibujadas; el servidor no, sin arrastrar una librería de
+  // imágenes entera. Si no llega ninguna, la oferta sale sin esa columna.
+  if (recurso === 'cotizaciones' && id && partes[2] === 'pdf' && req.method === 'POST') {
+    const cuerpo = await leerJson(req, 12_000_000).catch(() => ({}));
+    const fotos = new Map();
+    for (const [direccion, dataUrl] of Object.entries(cuerpo.fotos ?? {})) {
+      try {
+        const { buffer, ext } = leerImagenBase64(dataUrl);
+        if (ext === 'jpg') fotos.set(direccion, buffer);
+      } catch { /* una foto que no se pudo convertir no frena la oferta */ }
+    }
+
+    const armado = ofertaPdf.pdfDeCotizacion(Number(id), fotos);
+    if (!armado) return json(res, 404, { error: 'No encontré esa cotización.' });
+
+    res.writeHead(200, {
+      'Content-Type': 'application/pdf',
+      'Content-Length': armado.pdf.length,
+      // `inline` para poder verlo sin bajarlo; el nombre lo usa el navegador
+      // al guardarlo y es el que se ve al recibirlo por WhatsApp.
+      'Content-Disposition': `inline; filename="${ofertaPdf.nombreDeArchivo(armado.cotizacion)}"`,
+      'Cache-Control': 'no-store',
+    });
+    return res.end(armado.pdf);
   }
 
   // GET|POST /api/cotizaciones/:id/items -> renglones de una cotización

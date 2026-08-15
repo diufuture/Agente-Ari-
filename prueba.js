@@ -10,7 +10,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { deflateRawSync } from 'node:zlib';
+import { deflateRawSync, inflateSync } from 'node:zlib';
 
 /** Un .zip mínimo pero de verdad, para poder armar un .xlsx de prueba. */
 const CRC = (() => {
@@ -722,6 +722,57 @@ t('eliminar', { entidad: 'productos', id: 1 });
 comprobar('borrar del catálogo no borra el renglón',
   db.obtenerPorId('cotizacion_items', items[0].id).descripcion.split('\n')[0],
   'Panel táctil de 4 pulgadas');
+
+/* 9a · La cotización en PDF ----------------------------------------- */
+// El botón "Imprimir" no hacía nada en la aplicación instalada del celular
+// (iOS no le da diálogo de impresión a una app instalada), así que la oferta
+// no se podía mandar. Ahora el PDF lo arma el servidor.
+const pdfMod = await import('./server/oferta-pdf.js');
+const bajo = await import('./server/pdf.js');
+
+const armado = pdfMod.pdfDeCotizacion(cotId);
+comprobar('el PDF se arma', Boolean(armado?.pdf?.length), true);
+comprobar('y es un PDF de verdad', armado.pdf.subarray(0, 5).toString('latin1'), '%PDF-');
+comprobar('cerrado como corresponde', armado.pdf.subarray(-6).toString('latin1').trim(), '%%EOF');
+// La tabla de posiciones del final es lo que hace que un lector pueda abrirlo;
+// sin ella el archivo existe pero ningún visor lo muestra.
+comprobar('trae la tabla de posiciones', armado.pdf.includes(Buffer.from('startxref')), true);
+
+// Lo que va adentro tiene que ser lo de esta cotización, no cualquier cosa.
+const textoPdf = (() => {
+  let salida = '';
+  const crudo = armado.pdf.toString('latin1');
+  for (const m of crudo.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    try { salida += inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1'); } catch { /* imagen */ }
+  }
+  return salida;
+})();
+comprobar('lleva el número de la cotización', textoPdf.includes(`COTIZACIÓN N.º ${cotId}`), true);
+comprobar('y el nombre del cliente', textoPdf.includes('Jimmy'), true);
+// Las tildes y la eñe sobreviven al viaje: el PDF no habla el mismo alfabeto
+// que el navegador y hay que traducirlas.
+comprobar('las tildes salen bien', textoPdf.includes('DESCRIPCIÓN'), true);
+
+const nombre = pdfMod.nombreDeArchivo(armado.cotizacion);
+comprobar('el archivo se llama de forma reconocible', /^Cotizacion-\d+-.*\.pdf$/.test(nombre), true);
+comprobar('sin tildes ni espacios, que rompen al descargarlo', /^[A-Za-z0-9.-]+$/.test(nombre), true);
+
+// Una cotización que no existe no revienta: avisa que no está.
+comprobar('una cotización inexistente no arma nada', pdfMod.pdfDeCotizacion(99999), null);
+
+// Cortar renglones largos es lo que evita que el texto se salga de la columna.
+const cortado = bajo.partirEnRenglones('Panel táctil de cuatro pulgadas con marco de aluminio anodizado', 90, 8);
+comprobar('parte los textos largos en varios renglones', cortado.length > 1, true);
+comprobar('y ninguno se pasa del ancho',
+  cortado.every((r) => bajo.anchoTexto(r, 8) <= 90), true);
+
+// Una palabra sola más larga que la columna se parte, en vez de desbordarse.
+const palabrota = bajo.partirEnRenglones('Supercalifragilisticoespialidoso', 40, 8);
+comprobar('una palabra gigante también se corta',
+  palabrota.every((r) => bajo.anchoTexto(r, 8) <= 40), true);
+
+// El tamaño de la foto se lee de la cabecera del JPEG, sin descomprimirla.
+comprobar('un JPEG falso no se toma por bueno', bajo.medirJpeg(Buffer.from('no soy jpeg')), null);
 
 /* 9b · El formulario de la web agenda solo -------------------------- */
 // Lo que manda el Apps Script cuando alguien toma un turno en la web.

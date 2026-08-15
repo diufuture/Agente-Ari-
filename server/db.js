@@ -449,7 +449,9 @@ function selectConCliente(tabla) {
   // ítems (ver recalcularCotizacion), así que sirve de fuente única para el
   // saldo tanto si la cotización se armó con ítems como si se puso a mano.
   if (tabla === 'cotizaciones') {
-    return `SELECT t.*, c.nombre AS cliente,
+    // El teléfono del cliente viene con la cotización porque es lo que hace
+    // falta para mandársela por WhatsApp sin tener que ir a buscarlo aparte.
+    return `SELECT t.*, c.nombre AS cliente, c.telefono AS cliente_telefono,
                    ${SUMA_ABONOS} AS abonado,
                    t.monto - ${SUMA_ABONOS} AS saldo,
                    ${SUMA_ITEMS} AS subtotal,

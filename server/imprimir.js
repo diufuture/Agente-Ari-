@@ -238,10 +238,26 @@ export function paginaCotizacion(id) {
 <body>
 
   <div class="barra-acciones">
-    <span class="pista">Usá «Imprimir» y elegí <b>Guardar como PDF</b> para mandársela al cliente.</span>
+    <span class="pista" id="pista">Usá «Imprimir» y elegí <b>Guardar como PDF</b> para mandársela al cliente.</span>
     <a href="/">Volver</a>
-    <button class="principal" onclick="window.print()">Imprimir</button>
+    <button class="principal" id="btn-imprimir" onclick="window.print()">Imprimir</button>
   </div>
+  <script>
+    // En la aplicación instalada en el celular, iOS no da diálogo de
+    // impresión: el botón no hace absolutamente nada y no hay manera de
+    // saberlo desde acá una vez apretado. Se detecta antes y se manda a la
+    // pantalla que sí arma el PDF, en vez de dejar a alguien apretando un
+    // botón muerto.
+    (function () {
+      var instalada = window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
+      if (!instalada) return;
+      document.getElementById('btn-imprimir').style.display = 'none';
+      document.getElementById('pista').innerHTML =
+        'Para mandársela al cliente, volvé y usá <b>Guardar PDF</b> o <b>Enviar por WhatsApp</b>: '
+        + 'acá adentro el celular no abre el menú de impresión.';
+    }());
+  </script>
 
   <header class="tope">
     <div class="marca">

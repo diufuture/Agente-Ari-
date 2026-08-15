@@ -108,6 +108,118 @@ async function api(ruta, opciones = {}) {
 // funcionar.
 let visorEnHistorial = false;
 
+/* ------------------------------------------------------------------ */
+/* La cotización en PDF                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Pasa una foto a JPEG.
+ *
+ * Las fotos de los productos se guardan en WEBP porque pesa mucho menos, pero
+ * el formato PDF no sabe leer WEBP. El único que puede convertirlas es el
+ * navegador —ya las tiene dibujadas en pantalla—, así que se dibujan en un
+ * lienzo sobre fondo blanco (las de catálogo suelen venir con el fondo
+ * transparente, que en JPG saldría negro) y se leen de vuelta como JPG.
+ */
+function aJpeg(direccion) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const lienzo = document.createElement('canvas');
+        lienzo.width = img.naturalWidth || 1;
+        lienzo.height = img.naturalHeight || 1;
+        const ctx = lienzo.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, lienzo.width, lienzo.height);
+        ctx.drawImage(img, 0, 0);
+        resolve(lienzo.toDataURL('image/jpeg', 0.85));
+      } catch {
+        resolve(null);   // una foto que no se pudo convertir no frena la oferta
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = direccion;
+  });
+}
+
+/** Arma el PDF de una cotización y lo devuelve como archivo. */
+async function pdfDeCotizacion(cot) {
+  const { filas: items = [] } = await api(`/cotizaciones/${cot.id}/items`);
+
+  // Sólo una vez por foto, aunque el producto se repita en varios renglones.
+  const direcciones = [...new Set(items.map((i) => i.foto).filter(Boolean))];
+  const fotos = {};
+  await Promise.all(direcciones.map(async (d) => {
+    const jpeg = await aJpeg(d);
+    if (jpeg) fotos[d] = jpeg;
+  }));
+
+  const r = await fetch(`/api/cotizaciones/${cot.id}/pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fotos }),
+  });
+  if (!r.ok) {
+    const { error } = await r.json().catch(() => ({}));
+    throw new Error(error || 'No pude armar el PDF.');
+  }
+
+  const blob = await r.blob();
+  const nombre = (r.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1]
+    || `Cotizacion-${cot.id}.pdf`;
+  return new File([blob], nombre, { type: 'application/pdf' });
+}
+
+/**
+ * Guarda la cotización, o la manda por WhatsApp si el teléfono se puede usar.
+ *
+ * En el celular se usa el menú de compartir del sistema, que es el único
+ * camino para adjuntar un archivo a WhatsApp: los enlaces de wa.me sólo saben
+ * mandar texto. En el computador ese menú no existe (o no acepta archivos),
+ * así que se baja el PDF y se abre WhatsApp Web con el mensaje escrito, para
+ * arrastrar el archivo ahí.
+ */
+async function compartirCotizacion(cot, { porWhatsapp = false } = {}) {
+  const archivo = await pdfDeCotizacion(cot);
+
+  const saludo = `Hola${cot.cliente ? ` ${String(cot.cliente).split(' ')[0]}` : ''}, `
+    + `te comparto la cotización N.º ${cot.id}: ${cot.titulo}.`;
+
+  // El menú del sistema: adjunta el PDF de verdad y deja elegir WhatsApp.
+  if (navigator.canShare?.({ files: [archivo] })) {
+    try {
+      await navigator.share({ files: [archivo], title: archivo.name, text: porWhatsapp ? saludo : undefined });
+      return { compartido: true };
+    } catch (err) {
+      // Cerrar el menú a propósito no es un error que haya que mostrar.
+      if (err?.name === 'AbortError') return { compartido: false, cancelado: true };
+    }
+  }
+
+  // Sin menú de compartir: se baja el archivo.
+  const url = URL.createObjectURL(archivo);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = archivo.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+
+  if (porWhatsapp) {
+    const tel = String(cot.cliente_telefono || '').replace(/[^\d]/g, '');
+    const conPais = tel && tel.length === 10 ? `57${tel}` : tel;
+    window.open(
+      conPais ? `https://wa.me/${conPais}?text=${encodeURIComponent(saludo)}`
+        : `https://wa.me/?text=${encodeURIComponent(saludo)}`,
+      '_blank', 'noopener',
+    );
+    return { compartido: false, bajado: true, whatsappAbierto: true };
+  }
+  return { compartido: false, bajado: true };
+}
+
 function abrirVisorPdf(url, titulo = 'Documento') {
   const visor = $('#visor-pdf');
   $('#visor-titulo').textContent = titulo;
@@ -657,8 +769,9 @@ function detalleCotizacion(cot, abonos, items = [], totales = null) {
             ? `<a class="mini destacado" href="${escapar(cot.archivo)}" target="_blank" rel="noopener"
                   data-titulo="${escapar(cot.archivo_nombre || cot.titulo)}">Ver el PDF</a>`
             : ''}
-          <a class="mini${cot.archivo ? '' : ' destacado'}" href="/imprimir/cotizacion/${cot.id}" target="_blank" rel="noopener">${
-            cot.archivo ? 'Armar una acá' : 'Imprimir / PDF'}</a>
+          <button class="mini${cot.archivo ? '' : ' destacado'}" data-accion="guardar-pdf">Guardar PDF</button>
+          <button class="mini" data-accion="whatsapp-pdf">Enviar por WhatsApp</button>
+          <a class="mini" href="/imprimir/cotizacion/${cot.id}" target="_blank" rel="noopener">Ver</a>
           <button class="mini destacado" data-accion="editar">Editar</button>
         </div>
       </div>
@@ -2411,6 +2524,30 @@ $('#contenido').addEventListener('click', async (e) => {
   if (accion === 'editar' || accion === 'cancelar-edicion') {
     estado.editando = accion === 'editar';
     await pintar();
+    return;
+  }
+
+  if (accion === 'guardar-pdf' || accion === 'whatsapp-pdf') {
+    if (!estado.cotizacionAbierta) return;
+    const porWhatsapp = accion === 'whatsapp-pdf';
+    const rotulo = boton.textContent;
+    boton.disabled = true;
+    boton.textContent = 'Armando el PDF…';
+    try {
+      // Se relee la cotización en vez de guardarla al pintar: así el PDF sale
+      // con lo último, aunque se hayan tocado renglones desde que se abrió.
+      const cot = await api(`/cotizaciones/${estado.cotizacionAbierta}`);
+      const r = await compartirCotizacion(cot, { porWhatsapp });
+      if (r.cancelado) avisar('Listo, no se envió nada.');
+      else if (r.compartido) avisar('PDF enviado ✓');
+      else if (r.whatsappAbierto) avisar('PDF guardado. Adjuntalo en la ventana de WhatsApp que se abrió.');
+      else avisar('PDF guardado ✓');
+    } catch (err) {
+      avisar(err.message, true);
+    } finally {
+      boton.disabled = false;
+      boton.textContent = rotulo;
+    }
     return;
   }
   if (accion === 'abrir-producto') {

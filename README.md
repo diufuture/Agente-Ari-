@@ -607,6 +607,32 @@ La sesión es una cookie firmada (HMAC-SHA256), dura 30 días y se invalida sola
 al cambiar la contraseña. Tras 8 intentos fallidos la dirección queda frenada
 10 minutos.
 
+## La cotización en PDF, y mandarla por WhatsApp
+
+En la ficha de cada cotización hay dos botones: **Guardar PDF** y **Enviar por
+WhatsApp**. El PDF lo arma el servidor —no el diálogo de impresión del
+navegador— así que sale igual en el computador y en el celular.
+
+Antes esto se hacía con «Imprimir → Guardar como PDF». En la aplicación
+instalada del celular eso **no funciona**: iOS no le da diálogo de impresión a
+una app instalada, así que el botón no hacía absolutamente nada y no había
+forma de mandarle la oferta al cliente.
+
+**Enviar por WhatsApp** abre el menú de compartir del sistema con el PDF ya
+adjunto: ahí se elige WhatsApp y el contacto. Es el único camino que existe
+para adjuntar un archivo — los enlaces `wa.me` sólo saben mandar texto. En el
+computador, donde ese menú no acepta archivos, se baja el PDF y se abre
+WhatsApp Web con el mensaje escrito para arrastrarlo.
+
+Las fotos de los productos se guardan en WEBP, que pesa bastante menos, pero
+el formato PDF no sabe leerlo. Por eso el navegador las convierte a JPEG antes
+de mandarlas: es el único que puede, porque ya las tiene dibujadas en
+pantalla. El servidor no podría sin arrastrar una librería de imágenes entera.
+
+El generador (`server/pdf.js`) está escrito a mano, sin dependencias: las
+librerías de PDF habituales manejan un navegador entero por dentro y en un
+hosting compartido se quedan sin memoria.
+
 ## Agendamientos que llegan de la web
 
 El formulario de entregas de la web (el que se apoya en una hoja de Google)
