@@ -1164,6 +1164,47 @@ const CAMPOS_AJUSTES = [
   { n: 'condiciones', e: 'Condiciones comerciales por defecto', area: true, ancho: true },
 ];
 
+/* ─────────── Tema claro / oscuro ─────────── */
+
+// La elección vive en este dispositivo, no en la base: es normal querer la
+// aplicación oscura en el celular y clara en el computador, y guardarla en el
+// servidor obligaría a que fuera igual en los dos.
+const TEMAS = [
+  ['auto', 'Automático', 'Sigue al celular o al computador'],
+  ['claro', 'Claro', 'Siempre en claro'],
+  ['oscuro', 'Oscuro', 'Siempre en oscuro'],
+];
+
+const temaElegido = () => {
+  try { return localStorage.getItem('ari_tema') || 'auto'; } catch { return 'auto'; }
+};
+
+const oscuroDelSistema = () =>
+  !window.matchMedia || window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+/** Escribe el tema en el <html>, que es lo que mira el CSS. */
+function aplicarTema(elegido = temaElegido()) {
+  document.documentElement.dataset.tema =
+    elegido === 'auto' ? (oscuroDelSistema() ? 'oscuro' : 'claro') : elegido;
+  // La barra de estado del celular también se pinta, o queda un borde del
+  // color viejo arriba de todo.
+  const color = getComputedStyle(document.documentElement).getPropertyValue('--fondo').trim();
+  for (const m of $$('meta[name="theme-color"]')) m.setAttribute('content', color);
+}
+
+function guardarTema(elegido) {
+  try { localStorage.setItem('ari_tema', elegido); } catch { /* sin espacio: al menos se aplica ahora */ }
+  aplicarTema(elegido);
+}
+
+// Con "automático", seguir al sistema cuando cambia solo (por ejemplo al
+// anochecer, si el teléfono lo tiene programado).
+if (window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (temaElegido() === 'auto') aplicarTema('auto');
+  });
+}
+
 function vistaAjustes(aj) {
   const campos = CAMPOS_AJUSTES.map((c) => {
     const valor = aj[c.n] ?? '';
@@ -1173,9 +1214,27 @@ function vistaAjustes(aj) {
     return `<label class="${c.ancho ? 'ancho' : ''}"><span>${c.e}</span>${control}</label>`;
   }).join('');
 
+  const actual = temaElegido();
+  const opcionesTema = TEMAS.map(([clave, nombre, ayuda]) => `
+    <button type="button" class="opcion-tema${clave === actual ? ' elegida' : ''}"
+            data-accion="tema" data-tema="${clave}">
+      <span class="muestra muestra-${clave}"></span>
+      <strong>${nombre}</strong>
+      <small>${ayuda}</small>
+    </button>`).join('');
+
   return `
-    <p class="ayuda" style="margin-bottom:16px">
-      Estos datos encabezan y cierran las cotizaciones que imprimís. Se usan como
+    ${bloque('Apariencia', `
+      <div class="tarjeta">
+        <p class="ayuda" style="margin:0 0 12px">
+          Cómo se ve la aplicación. Queda guardado en este dispositivo, así que
+          podés tenerla oscura en el celular y clara en el computador.
+        </p>
+        <div class="temas">${opcionesTema}</div>
+      </div>`)}
+
+    <p class="ayuda" style="margin:22px 0 16px">
+      Lo de abajo encabeza y cierra las cotizaciones que imprimís. Se usa como
       punto de partida: cada cotización puede llevar su propia validez, sus
       propias condiciones y su propio representante si hace falta.
     </p>
@@ -2514,6 +2573,14 @@ $('#contenido').addEventListener('click', async (e) => {
     return;
   }
 
+  if (accion === 'tema') {
+    guardarTema(boton.dataset.tema);
+    // Se marca la elegida a mano en vez de repintar toda la pantalla: repintar
+    // haría saltar el scroll al principio justo cuando se está mirando esto.
+    $$('.opcion-tema').forEach((b) => b.classList.toggle('elegida', b === boton));
+    return;
+  }
+
   if (accion === 'guardar-pdf') {
     if (!estado.cotizacionAbierta) return;
     const rotulo = boton.textContent;
@@ -3602,6 +3669,22 @@ $('#btn-refrescar').addEventListener('click', () => {
   estado.vistaAsistente = null;
   refrescarTodo();
   avisar('Actualizado');
+});
+
+// El piñón lleva a los ajustes. En el celular es el único camino: la barra de
+// abajo no tiene lugar para ellos, así que antes no se podía ni poner el
+// representante de ventas ni cambiar el logo desde el teléfono.
+$('#btn-ajustes').addEventListener('click', () => {
+  estado.vista = 'ajustes';
+  estado.vistaAsistente = null;
+  estado.cotizacionAbierta = null;
+  estado.clienteAbierto = null;
+  estado.productoAbierto = null;
+  estado.editando = false;
+  $$('.nav-item').forEach((b) => b.classList.remove('activo'));
+  cerrarHoja();
+  pintar();
+  $('#contenido').scrollTop = 0;
 });
 
 /**

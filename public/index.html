@@ -3,8 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#071a2e" media="(prefers-color-scheme: dark)" />
-  <meta name="theme-color" content="#eef4f9" media="(prefers-color-scheme: light)" />
+  <!-- Uno solo, sin atar al sistema: el color lo pone el tema elegido. Con dos
+       etiquetas gobernadas por prefers-color-scheme, la barra de estado seguía
+       al celular y contradecía la elección. -->
+  <meta name="theme-color" content="#071a2e" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -14,6 +16,28 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icono.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/icono.svg" />
+  <script>
+    // El tema elegido se aplica ACÁ, antes de que se dibuje nada. Si esperara
+    // a app.js —que carga como módulo, o sea después— la pantalla aparecería
+    // oscura y cambiaría a clara de golpe delante de los ojos.
+    //
+    // "auto" no se guarda como tal en el atributo: se resuelve ahora contra lo
+    // que diga el sistema. Así el CSS sólo tiene que conocer dos temas, en vez
+    // de repetir la paleta clara para el caso automático y para el elegido.
+    (function () {
+      try {
+        var elegido = localStorage.getItem('ari_tema') || 'auto';
+        var oscuroDelSistema = !window.matchMedia
+          || window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var tema = elegido === 'auto' ? (oscuroDelSistema ? 'oscuro' : 'claro') : elegido;
+        document.documentElement.dataset.tema = tema;
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', tema === 'claro' ? '#eef4f9' : '#071a2e');
+      } catch (e) {
+        document.documentElement.dataset.tema = 'oscuro';
+      }
+    }());
+  </script>
 </head>
 <body>
   <div class="app">
@@ -84,7 +108,13 @@
           <h1 id="titulo-vista">Hoy</h1>
           <p class="fecha" id="fecha-hoy"></p>
         </div>
-        <button class="btn-fantasma" id="btn-refrescar" title="Actualizar">↻</button>
+        <div class="acciones-cabecera">
+          <!-- En el celular la barra de abajo no tiene lugar para los ajustes,
+               así que sin este botón no había manera de llegar a ellos desde
+               el teléfono: ni al representante de ventas, ni al logo. -->
+          <button class="btn-fantasma" id="btn-ajustes" title="Ajustes" aria-label="Ajustes">⚙</button>
+          <button class="btn-fantasma" id="btn-refrescar" title="Actualizar">↻</button>
+        </div>
       </header>
 
       <!-- Aviso de la cotización que se está dictando -->

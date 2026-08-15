@@ -607,6 +607,26 @@ La sesión es una cookie firmada (HMAC-SHA256), dura 30 días y se invalida sola
 al cambiar la contraseña. Tras 8 intentos fallidos la dirección queda frenada
 10 minutos.
 
+## Ajustes y tema claro / oscuro
+
+El **piñón ⚙** de arriba a la derecha abre los ajustes. En el celular es el
+único camino: la barra de abajo no tiene lugar para ellos, así que antes no se
+podía ni poner el representante de ventas ni cambiar el logo desde el teléfono.
+
+Ahí adentro, en **Apariencia**, se elige cómo se ve la aplicación:
+
+- **Automático** — sigue al celular o al computador, y cambia solo si el
+  aparato cambia (por ejemplo al anochecer, si lo tiene programado).
+- **Claro** / **Oscuro** — siempre así, sin importar lo que diga el aparato.
+
+La elección se guarda **en ese dispositivo**, no en la base: es normal quererla
+oscura en el celular y clara en el computador. Se aplica antes de que se dibuje
+la pantalla, así que al abrir no se ve el destello del tema anterior.
+
+Debajo están los datos de la empresa que encabezan y cierran las cotizaciones,
+**el representante de ventas** incluido. Cada cotización puede además llevar su
+propio representante si esa oferta la firma otra persona.
+
 ## La cotización en PDF, y mandarla por WhatsApp
 
 En la ficha de cada cotización está el botón **Guardar PDF**. El PDF lo arma

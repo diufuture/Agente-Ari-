@@ -26,21 +26,28 @@
   --tipo:         'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --fondo:      #eef4f9;
-    --fondo-2:    #e5eef6;
-    --panel:      #ffffff;
-    --panel-alto: #f3f8fc;
-    --borde:      #d3e2ee;
-    --texto:      #071a2e;
-    --texto-2:    #4a6b85;
-    --texto-3:    #7d97ad;
-    --acento:     #1a9fd4;
-    --acento-2:   #10b48f;
-    --sombra:     0 10px 30px rgba(23, 32, 58, .10);
-  }
+/* El tema claro.
+   Antes esto vivía en un @media (prefers-color-scheme: light), o sea que lo
+   mandaba el sistema y no había forma de elegirlo. Ahora la elección se guarda
+   y se escribe en el atributo data-tema del <html>; el "automático" lo resuelve
+   un script en el <head> antes de dibujar nada, así que acá sólo hay dos temas
+   y no hace falta repetir esta paleta para el caso automático. */
+:root[data-tema="claro"] {
+  --fondo:      #eef4f9;
+  --fondo-2:    #e5eef6;
+  --panel:      #ffffff;
+  --panel-alto: #f3f8fc;
+  --borde:      #d3e2ee;
+  --texto:      #071a2e;
+  --texto-2:    #4a6b85;
+  --texto-3:    #7d97ad;
+  --acento:     #1a9fd4;
+  --acento-2:   #10b48f;
+  --sombra:     0 10px 30px rgba(23, 32, 58, .10);
+  color-scheme: light;
 }
+
+:root[data-tema="oscuro"] { color-scheme: dark; }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -130,7 +137,11 @@ button { cursor: pointer; border: none; background: none; }
   color: var(--texto-2); border: 1px solid var(--borde);
   transition: .15s;
 }
-.btn-fantasma:hover { background: var(--panel-alto); color: var(--texto); transform: rotate(90deg); }
+.btn-fantasma:hover { background: var(--panel-alto); color: var(--texto); }
+/* El giro es para el de actualizar, que es una flecha en círculo. En el
+   piñón de ajustes quedaba raro, como si estuviera cargando algo. */
+#btn-refrescar:hover { transform: rotate(90deg); }
+.acciones-cabecera { display: flex; gap: 8px; align-items: center; }
 
 .contenido { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 32px 40px; }
 
@@ -960,6 +971,29 @@ p .pastilla { margin-left: 6px; }
   transition: color .15s, background .15s;
 }
 .enlace-ajustes:hover { color: var(--acento); background: var(--panel-alto); }
+
+/* ─────────── Elegir el tema ─────────── */
+
+.temas { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.opcion-tema {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  padding: 12px; border-radius: 12px; text-align: left;
+  border: 1.5px solid var(--borde); background: var(--panel-alto);
+  color: var(--texto); transition: border-color .15s, background .15s;
+}
+.opcion-tema:hover { border-color: var(--acento); }
+.opcion-tema.elegida { border-color: var(--acento); background: color-mix(in srgb, var(--acento) 12%, var(--panel-alto)); }
+.opcion-tema strong { font-size: 13.5px; font-weight: 650; }
+.opcion-tema small { font-size: 11px; color: var(--texto-3); line-height: 1.35; }
+
+/* Una muestra de cada tema, para reconocerlo sin tener que probarlo. */
+.opcion-tema .muestra {
+  width: 100%; height: 30px; border-radius: 7px; margin-bottom: 5px;
+  border: 1px solid var(--borde);
+}
+.muestra-oscuro { background: linear-gradient(135deg, #071a2e 0 50%, #14375e 50% 100%); }
+.muestra-claro  { background: linear-gradient(135deg, #ffffff 0 50%, #e5eef6 50% 100%); }
+.muestra-auto   { background: linear-gradient(135deg, #071a2e 0 50%, #ffffff 50% 100%); }
 
 /* Un <a> que se ve igual que los botones .mini de las fichas */
 a.mini { text-decoration: none; display: inline-flex; align-items: center; }
