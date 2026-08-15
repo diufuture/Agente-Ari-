@@ -1059,6 +1059,103 @@ export function precioSegunNivel(producto, nivel = 'cliente') {
 }
 
 /**
+ * Cambia con qué lista de precios está armada una cotización, y vuelve a
+ * ponerle precio a los renglones que ya tenía.
+ *
+ * Antes el nivel sólo mandaba sobre los renglones NUEVOS: se cambiaba a
+ * "constructor", se apretaba aplicar, y la cotización seguía valiendo lo
+ * mismo. Servía para empezar una oferta, no para pasarla de un cliente final
+ * a un constructor, que es justo cuando uno lo necesita.
+ *
+ * Lo que se tocó a mano no se pisa. Si a un renglón se le cambió el precio
+ * —por voz o a mano— ya no vale el de la lista, y volver a ponérselo sería
+ * borrar una decisión sin avisar. Se reconoce comparándolo con lo que le
+ * tocaba en el nivel anterior: si coincide, nadie lo tocó. Los que quedan
+ * afuera se devuelven para poder decirlo, no para esconderlo.
+ *
+ * Los renglones libres ("Mano de obra", "Obra civil") tampoco cambian: no
+ * salieron del catálogo, así que no tienen precio de canal ni de constructor.
+ *
+ * @returns {{cotizacion: object, actualizados: number, respetados: Array}}
+ */
+export function cambiarNivelPrecio(id, nivel) {
+  const cot = one('SELECT * FROM cotizaciones WHERE id = ?', [id]);
+  if (!cot) throw new Error('Esa cotización no existe.');
+  if (!['canal', 'constructor', 'cliente'].includes(nivel)) {
+    throw new Error('El nivel de precio tiene que ser canal, constructor o cliente.');
+  }
+
+  const anterior = cot.nivel_precio || 'cliente';
+  run('UPDATE cotizaciones SET nivel_precio = ? WHERE id = ?', [nivel, id]);
+
+  let actualizados = 0;
+  const respetados = [];
+
+  if (nivel !== anterior) {
+    for (const item of all('SELECT * FROM cotizacion_items WHERE cotizacion_id = ?', [id])) {
+      if (!item.producto_id) continue;                  // renglón libre
+      const producto = one('SELECT * FROM productos WHERE id = ?', [item.producto_id]);
+      if (!producto) continue;                          // ya no está en el catálogo
+
+      const leTocaba = precioSegunNivel(producto, anterior);
+      const nuevo = precioSegunNivel(producto, nivel);
+
+      // Con céntimos de por medio, comparar con === deja pasar diferencias que
+      // no existen. Un peso de margen alcanza y sobra para plata colombiana.
+      if (Math.abs(Number(item.precio_unitario) - leTocaba) > 1) {
+        respetados.push({ descripcion: item.descripcion.split('\n')[0], precio: item.precio_unitario });
+        continue;
+      }
+      if (Math.abs(nuevo - Number(item.precio_unitario)) > 1) {
+        run('UPDATE cotizacion_items SET precio_unitario = ? WHERE id = ?', [nuevo, item.id]);
+        actualizados += 1;
+      }
+    }
+  }
+
+  recalcularCotizacion(id);
+  return { cotizacion: obtenerPorId('cotizaciones', id), actualizados, respetados };
+}
+
+/**
+ * Borra una cotización entera, con sus renglones y sus abonos.
+ *
+ * Hace falta poder deshacer: una oferta que se abrió por error, o que quedó
+ * mal armada, no tenía forma de salir de la lista y quedaba estorbando para
+ * siempre.
+ *
+ * Lo que no puede pasar es que se lleve el inventario por delante. Si estaba
+ * aprobada, sus productos ya habían salido de bodega; al borrarla esa salida
+ * deja de tener motivo, así que primero se deshace y las existencias vuelven.
+ * Sin esto, la bodega quedaría descontada por una cotización que ya no existe
+ * y nadie podría averiguar por qué.
+ *
+ * @returns {{borrada: boolean, abonos: number, devueltosAlInventario: number}}
+ */
+export function eliminarCotizacion(id) {
+  const cot = obtenerPorId('cotizaciones', id);
+  if (!cot) return { borrada: false, abonos: 0, devueltosAlInventario: 0 };
+
+  const abonos = one('SELECT COUNT(*) n FROM abonos WHERE cotizacion_id = ?', [id]).n;
+  const movimientos = one(
+    'SELECT COUNT(*) n FROM movimientos_stock WHERE cotizacion_id = ?', [id],
+  ).n;
+  run('DELETE FROM movimientos_stock WHERE cotizacion_id = ?', [id]);
+
+  // Los renglones y los abonos se van solos: cuelgan de la cotización con
+  // ON DELETE CASCADE.
+  run('DELETE FROM cotizaciones WHERE id = ?', [id]);
+  cerrarSiEsLaActiva(id);
+  return { borrada: true, abonos, devueltosAlInventario: movimientos };
+}
+
+/** Si la que se borró era la que se estaba dictando, se deja de apuntar a ella. */
+function cerrarSiEsLaActiva(id) {
+  const fila = one('SELECT valor FROM ajustes WHERE clave = ?', [CLAVE_ACTIVA]);
+  if (Number(fila?.valor) === Number(id)) cerrarCotizacionActiva();
+}
+
+/**
  * Vuelve a calcular el total de una cotización a partir de sus renglones y
  * guarda el resultado en `monto`.
  *

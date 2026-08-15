@@ -922,6 +922,15 @@ async function api(req, res, url) {
         delete datos[c];
       }
       try {
+        // Cambiar de lista de precios no es guardar un campo más: hay que
+        // volver a ponerle precio a los renglones que ya estaban, o la
+        // cotización sigue valiendo lo de la lista anterior.
+        let cambioDeNivel = null;
+        if (tabla === 'cotizaciones' && datos.nivel_precio) {
+          cambioDeNivel = db.cambiarNivelPrecio(Number(id), datos.nivel_precio);
+          delete datos.nivel_precio;
+        }
+
         let fila = db.actualizar(tabla, Number(id), datos);
         if (!fila) return json(res, 404, { error: 'No encontrado' });
         if (tabla === 'cotizaciones') {
@@ -929,6 +938,10 @@ async function api(req, res, url) {
           // Aprobarla saca sus productos propios de la bodega; desaprobarla los devuelve.
           const { descontados } = db.sincronizarInventario(Number(id));
           if (descontados.length) fila.descontadosDelInventario = descontados;
+          if (cambioDeNivel) {
+            fila.renglonesActualizados = cambioDeNivel.actualizados;
+            fila.renglonesRespetados = cambioDeNivel.respetados;
+          }
         }
         return json(res, 200, fila);
       } catch (err) {
@@ -937,6 +950,13 @@ async function api(req, res, url) {
     }
 
     if (req.method === 'DELETE' && id) {
+      // Borrar una cotización no es sólo borrar la fila: si estaba aprobada,
+      // sus productos ya habían salido de bodega y hay que devolverlos, o el
+      // inventario queda descontado por algo que ya no existe.
+      if (tabla === 'cotizaciones') {
+        const r = db.eliminarCotizacion(Number(id));
+        return json(res, r.borrada ? 200 : 404, r);
+      }
       return json(res, db.eliminar(tabla, Number(id)) ? 200 : 404, { ok: true });
     }
   }

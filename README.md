@@ -627,6 +627,30 @@ Debajo están los datos de la empresa que encabezan y cierran las cotizaciones,
 **el representante de ventas** incluido. Cada cotización puede además llevar su
 propio representante si esa oferta la firma otra persona.
 
+## Cambiar de lista de precios, y borrar una cotización
+
+En la tarjeta de totales de cada cotización está **Precios que se usan**:
+canal, constructor o cliente final. Por defecto se cotiza al cliente final.
+
+Cambiarlo **vuelve a ponerle precio a los renglones que ya estaban**, no sólo
+a los que se agreguen después: la misma oferta pasa de un cliente final a un
+constructor sin rehacerla.
+
+Dos cosas que no toca:
+
+- **Los renglones cuyo precio se cambió a mano.** Si a uno se le tocó el
+  precio, ya no vale el de la lista, y volver a ponérselo sería borrar una
+  decisión sin avisar. Se avisa cuántos quedaron afuera, para que no parezca
+  un olvido.
+- **Los renglones libres** ("Mano de obra", "Obra civil"): no salieron del
+  catálogo, así que no tienen precio de canal ni de constructor.
+
+Para **borrar** una cotización: **Editar → Eliminar cotización**. Antes de
+preguntar dice qué se lleva puesto —los renglones, y los abonos si los tiene,
+con su valor—. Si estaba aprobada, lo que había salido de bodega vuelve al
+inventario: si no, la bodega quedaría descontada por una oferta que ya no
+existe y no habría forma de averiguar por qué.
+
 ## La cotización en PDF, y mandarla por WhatsApp
 
 En la ficha de cada cotización está el botón **Guardar PDF**. El PDF lo arma

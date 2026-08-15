@@ -723,6 +723,96 @@ comprobar('borrar del catálogo no borra el renglón',
   db.obtenerPorId('cotizacion_items', items[0].id).descripcion.split('\n')[0],
   'Panel táctil de 4 pulgadas');
 
+/* 8d · Cambiar con qué lista de precios está armada la cotización ---- */
+// Se cotiza al cliente final, pero la misma oferta puede tener que salir a
+// precio de constructor o de canal. Antes el selector guardaba el nivel pero
+// no le volvía a poner precio a lo que ya estaba, así que no servía de nada.
+// Con productos propios de esta prueba: los de más arriba ya pasaron por
+// importaciones y borrados, y apoyarse en ellos haría fallar esto por algo
+// que no tiene nada que ver.
+db.conciliarProductos('Niveles', [
+  { fila: 2, referencia: 'NV-2', descripcion: 'Interruptor 2 canales', precio_canal: 154868, precio_constructor: 216816, precio_cliente: 247790 },
+  { fila: 3, referencia: 'NV-3', descripcion: 'Interruptor 3 canales', precio_canal: 163793, precio_constructor: 229311, precio_cliente: 262070 },
+], {});
+const idNv2 = db.consultar('productos', { texto: 'NV-2' })[0].id;
+const idNv3 = db.consultar('productos', { texto: 'NV-3' })[0].id;
+
+const cotNivel = db.insertar('cotizaciones', { titulo: 'Para un constructor' });
+db.agregarItem(cotNivel.id, { producto_id: idNv2, cantidad: 2 });
+db.agregarItem(cotNivel.id, { producto_id: idNv3, cantidad: 1 });
+db.agregarItem(cotNivel.id, { descripcion: 'Mano de obra', precio_unitario: 900000 });
+
+const precioDe = (cotId, texto) =>
+  db.consultar('cotizacion_items', { cotizacion_id: cotId })
+    .find((i) => i.descripcion.includes(texto))?.precio_unitario;
+
+comprobar('arranca con el precio de cliente final', precioDe(cotNivel.id, '2 canales'), 247790);
+
+const aConstructor = db.cambiarNivelPrecio(cotNivel.id, 'constructor');
+comprobar('pasarla a constructor cambia los renglones del catálogo',
+  precioDe(cotNivel.id, '2 canales'), 216816);
+comprobar('todos los del catálogo, no sólo el primero',
+  precioDe(cotNivel.id, '3 canales'), 229311);
+comprobar('y avisa cuántos cambió', aConstructor.actualizados, 2);
+// Un renglón libre no salió del catálogo: no tiene precio de constructor.
+comprobar('la mano de obra no se toca', precioDe(cotNivel.id, 'Mano de obra'), 900000);
+comprobar('el total se recalcula solo',
+  db.obtenerPorId('cotizaciones', cotNivel.id).monto, 2 * 216816 + 229311 + 900000);
+
+// Lo tocado a mano se respeta: volver a ponerle el precio de lista sería
+// borrar una decisión del usuario sin avisar.
+const itemTocado = db.consultar('cotizacion_items', { cotizacion_id: cotNivel.id })
+  .find((i) => i.descripcion.includes('2 canales'));
+db.actualizarItem(itemTocado.id, { precio_unitario: 200000 });
+const aCanal = db.cambiarNivelPrecio(cotNivel.id, 'canal');
+comprobar('el renglón con precio tocado a mano no se pisa',
+  precioDe(cotNivel.id, '2 canales'), 200000);
+comprobar('y se dice cuál quedó afuera, no se esconde',
+  aCanal.respetados.map((r) => r.descripcion), ['Interruptor 2 canales']);
+comprobar('los demás sí pasan a canal', precioDe(cotNivel.id, '3 canales'), 163793);
+
+// Volver al mismo nivel no toca nada.
+const sinCambio = db.cambiarNivelPrecio(cotNivel.id, 'canal');
+comprobar('reaplicar el mismo nivel no cambia nada', [sinCambio.actualizados, sinCambio.respetados.length], [0, 0]);
+
+let nivelInvalido = false;
+try { db.cambiarNivelPrecio(cotNivel.id, 'mayorista'); } catch { nivelInvalido = true; }
+comprobar('un nivel que no existe se rechaza', nivelInvalido, true);
+
+/* 8e · Eliminar una cotización -------------------------------------- */
+// Una oferta abierta por error no tenía cómo salir de la lista.
+const cotBorrar = db.insertar('cotizaciones', { titulo: 'Abierta por error', estado: 'aprobada' });
+const propio = db.consultar('productos', { texto: 'CC-CAM' })[0];
+db.agregarItem(cotBorrar.id, { producto_id: propio.id, cantidad: 3 });
+db.insertar('abonos', { cotizacion_id: cotBorrar.id, monto: 100000 });
+db.activarCotizacion(cotBorrar.id);
+
+const stockAntesDeBorrar = db.consultar('productos', { texto: 'CC-CAM' })[0].stock;
+comprobar('estando aprobada, ya descontó de la bodega',
+  db.consultar('movimientos_stock', { producto_id: propio.id })
+    .some((m) => m.cotizacion_id === cotBorrar.id), true);
+
+const borrado = db.eliminarCotizacion(cotBorrar.id);
+comprobar('la cotización se borra', borrado.borrada, true);
+comprobar('y avisa cuántos abonos se llevó', borrado.abonos, 1);
+comprobar('ya no está en la lista', db.obtenerPorId('cotizaciones', cotBorrar.id), undefined);
+comprobar('sus renglones se van con ella',
+  db.consultar('cotizacion_items', { cotizacion_id: cotBorrar.id }).length, 0);
+comprobar('y sus abonos también',
+  db.consultar('abonos', { cotizacion_id: cotBorrar.id }).length, 0);
+
+// Lo que no puede pasar: que la bodega quede descontada por algo que ya no existe.
+comprobar('lo que había salido de bodega vuelve',
+  db.consultar('productos', { texto: 'CC-CAM' })[0].stock, stockAntesDeBorrar + 3);
+comprobar('sin dejar movimientos huérfanos apuntando a la nada',
+  db.consultar('movimientos_stock', { producto_id: propio.id })
+    .some((m) => m.cotizacion_id === cotBorrar.id), false);
+
+// Si era la que se estaba dictando, se deja de apuntar a ella.
+comprobar('deja de ser la cotización en curso', db.cotizacionActiva(), null);
+comprobar('borrar una que no existe avisa en vez de romper',
+  db.eliminarCotizacion(99999).borrada, false);
+
 /* 9a · La cotización en PDF ----------------------------------------- */
 // El botón "Imprimir" no hacía nada en la aplicación instalada del celular
 // (iOS no le da diálogo de impresión a una app instalada), así que la oferta

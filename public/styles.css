@@ -808,6 +808,16 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
   background: none; border: 1px solid var(--borde); color: var(--texto-2);
 }
 .form-acciones .secundario:hover { color: var(--texto); border-color: var(--acento); transform: none; }
+/* Borrar no se ofrece como una opción más: va apagado, y sólo se enciende en
+   rojo cuando el dedo ya está encima. */
+.form-acciones .peligro {
+  background: none; border: 1px solid var(--borde); color: var(--texto-3);
+  margin-left: auto;
+}
+.form-acciones .peligro:hover {
+  color: var(--alerta); border-color: var(--alerta); transform: none;
+}
+@media (max-width: 640px) { .form-acciones .peligro { margin-left: 0; } }
 
 @media (max-width: 640px) {
   .form-editar { grid-template-columns: 1fr; }

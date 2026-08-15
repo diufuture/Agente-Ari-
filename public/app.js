@@ -996,6 +996,11 @@ function formularioEdicion(entidad, fila) {
         <div class="form-acciones">
           <button type="submit">Guardar cambios</button>
           <button type="button" class="secundario" data-accion="cancelar-edicion">Cancelar</button>
+          ${/* Una oferta que se abrió por error o que quedó mal armada no tenía
+                cómo salir de la lista, y quedaba estorbando para siempre. */ ''}
+          ${entidad === 'cotizaciones'
+            ? '<button type="button" class="peligro" data-accion="eliminar-cotizacion">Eliminar cotización</button>'
+            : ''}
         </div>
       </form>
     </div>`;
@@ -2647,6 +2652,42 @@ $('#contenido').addEventListener('click', async (e) => {
     return;
   }
 
+  if (accion === 'eliminar-cotizacion') {
+    if (!estado.cotizacionAbierta) return;
+    const cot = await api(`/cotizaciones/${estado.cotizacionAbierta}`);
+
+    // Se dice qué se lleva puesto ANTES de preguntar. Los abonos son plata
+    // registrada: borrarlos sin nombrarlos sería lo peor que podría pasar acá.
+    const abonos = Number(cot.abonado) || 0;
+    const aviso = [
+      `¿Eliminar la cotización #${cot.id} "${cot.titulo}"?`,
+      cot.n_items ? `Se van sus ${cot.n_items} renglón(es).` : '',
+      abonos > 0
+        ? `⚠ Tiene ${fmtDinero(abonos, cot.moneda)} en abonos registrados, que también se borran.`
+        : '',
+      cot.estado === 'aprobada' ? 'Lo que había salido de bodega por esta oferta vuelve al inventario.' : '',
+      'Esto no se puede deshacer.',
+    ].filter(Boolean).join('\n\n');
+
+    if (!confirm(aviso)) return;
+    try {
+      const r = await api(`/cotizaciones/${cot.id}`, { method: 'DELETE' });
+      avisar(r.devueltosAlInventario
+        ? 'Cotización eliminada ✓ · el inventario volvió a su lugar'
+        : 'Cotización eliminada ✓');
+      fichaEnHistorial = false;
+      estado.cotizacionAbierta = null;
+      estado.vista = 'cotizaciones';
+      estado.editando = false;
+      $$('.nav-item').forEach((b) => b.classList.toggle('activo', b.dataset.vista === 'cotizaciones'));
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+
   if (accion === 'guardar-pdf') {
     if (!estado.cotizacionAbierta) return;
     const rotulo = boton.textContent;
@@ -3262,7 +3303,7 @@ $('#contenido').addEventListener('submit', async (e) => {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target));
     try {
-      await api(`/cotizaciones/${e.target.dataset.id}`, {
+      const r = await api(`/cotizaciones/${e.target.dataset.id}`, {
         method: 'PATCH',
         body: {
           porcentaje_servicio: Number(d.porcentaje_servicio) || 0,
@@ -3270,7 +3311,20 @@ $('#contenido').addEventListener('submit', async (e) => {
           nivel_precio: d.nivel_precio,
         },
       });
-      avisar('Totales actualizados ✓');
+      // Cambiar de lista de precios vuelve a poner precio a los renglones: hay
+      // que decir cuántos cambiaron, y sobre todo cuáles NO, para que un
+      // precio que se tocó a mano no parezca un olvido.
+      const respetados = r.renglonesRespetados ?? [];
+      if (r.renglonesActualizados) {
+        avisar(`${r.renglonesActualizados} renglón(es) con el precio nuevo ✓`
+          + (respetados.length
+            ? ` · ${respetados.length} quedó(aron) como estaba(n): les habías tocado el precio`
+            : ''));
+      } else if (respetados.length) {
+        avisar(`No cambié ningún precio: a esos ${respetados.length} renglón(es) se los habías tocado a mano.`);
+      } else {
+        avisar('Totales actualizados ✓');
+      }
       await refrescarResumen();
       await pintar();
     } catch (err) {
