@@ -109,6 +109,61 @@ async function api(ruta, opciones = {}) {
 let visorEnHistorial = false;
 
 /* ------------------------------------------------------------------ */
+/* Abrir y cerrar una ficha, y el gesto de "atrás" del celular         */
+/* ------------------------------------------------------------------ */
+
+// Las fichas (una cotización, un cliente, un producto) se abren encima de su
+// lista, pero para el navegador seguían siendo la misma página. En el celular
+// eso se notaba feo: al deslizar para volver atrás no había nada que deshacer,
+// así que la aplicación instalada se recargaba desde cero y aparecía el
+// inicio. La cotización que se estaba mirando se perdía y había que ir a
+// buscarla de nuevo.
+//
+// Anotando la ficha en el historial, "atrás" hace lo que uno espera: cierra la
+// ficha y deja la lista de donde salió.
+let fichaEnHistorial = false;
+
+function anotarFichaEnHistorial() {
+  if (fichaEnHistorial) return;
+  history.pushState({ fichaAri: true }, '');
+  fichaEnHistorial = true;
+}
+
+/** A qué lista vuelve cada ficha, y con qué botón de la barra encendido. */
+const LISTA_DE_FICHA = [
+  ['cotizacionAbierta', 'cotizaciones'],
+  ['clienteAbierto', 'clientes'],
+  ['productoAbierto', 'productos'],
+];
+
+/**
+ * Cierra la ficha abierta y vuelve a su lista.
+ *
+ * Con `desdeHistorial` viene del gesto de atrás: el navegador ya sacó la
+ * entrada, así que sólo hay que cerrar. Si lo pidió un botón de la pantalla,
+ * primero se deshace esa entrada —y el propio historial vuelve acá— para que
+ * el historial no quede con pasos de más que después habría que apretar dos
+ * veces.
+ */
+async function cerrarFicha({ desdeHistorial = false } = {}) {
+  const abierta = LISTA_DE_FICHA.find(([clave]) => estado[clave]);
+  if (!abierta) return;
+
+  if (!desdeHistorial && fichaEnHistorial) {
+    history.back();
+    return;
+  }
+  fichaEnHistorial = false;
+
+  const [clave, vista] = abierta;
+  estado[clave] = null;
+  estado.vista = vista;
+  estado.editando = false;
+  $$('.nav-item').forEach((b) => b.classList.toggle('activo', b.dataset.vista === vista));
+  await pintar();
+}
+
+/* ------------------------------------------------------------------ */
 /* La cotización en PDF                                                */
 /* ------------------------------------------------------------------ */
 
@@ -1581,7 +1636,13 @@ async function pintar() {
       ]);
       $('#titulo-vista').textContent = 'Cotización';
       contenedor.innerHTML = detalleCotizacion(cot, filas, itemsResp.filas, itemsResp.totales);
-      $('#buscar-catalogo')?.focus();
+      // El buscador del catálogo está abajo del todo, y enfocarlo arrastraba
+      // la pantalla hasta él: la cotización se abría mostrando el final y
+      // había que subir a mano cada vez. En el computador el foco sirve —se
+      // empieza a escribir el producto de una— pero sin mover el scroll. En
+      // el celular no se enfoca: además de correr la pantalla, levantaba el
+      // teclado apenas se entraba a mirar una oferta.
+      if (!esCelular()) $('#buscar-catalogo')?.focus({ preventScroll: true });
     } catch (e) {
       contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
     }
@@ -2611,6 +2672,7 @@ $('#contenido').addEventListener('click', async (e) => {
     return;
   }
   if (accion === 'abrir-producto') {
+    anotarFichaEnHistorial();
     estado.productoAbierto = Number(id);
     estado.editando = false;
     await pintar();
@@ -2618,11 +2680,7 @@ $('#contenido').addEventListener('click', async (e) => {
     return;
   }
   if (accion === 'cerrar-producto') {
-    estado.productoAbierto = null;
-    estado.vista = 'productos';
-    estado.editando = false;
-    $$('.nav-item').forEach((b) => b.classList.toggle('activo', b.dataset.vista === 'productos'));
-    await pintar();
+    await cerrarFicha();
     return;
   }
   if (accion === 'cambiar-foto') {
@@ -2967,6 +3025,7 @@ $('#contenido').addEventListener('click', async (e) => {
     return;
   }
   if (accion === 'abrir-cliente') {
+    anotarFichaEnHistorial();
     estado.clienteAbierto = Number(id);
     estado.editando = false;
     estado.cotizacionAbierta = null;
@@ -2976,14 +3035,11 @@ $('#contenido').addEventListener('click', async (e) => {
     return;
   }
   if (accion === 'cerrar-cliente') {
-    estado.clienteAbierto = null;
-    estado.vista = 'clientes';
-    estado.editando = false;
-    $$('.nav-item').forEach((b) => b.classList.toggle('activo', b.dataset.vista === 'clientes'));
-    await pintar();
+    await cerrarFicha();
     return;
   }
   if (accion === 'abrir-cotizacion') {
+    anotarFichaEnHistorial();
     estado.cotizacionAbierta = Number(id);
     estado.editando = false;
     estado.clienteAbierto = null;
@@ -3041,11 +3097,7 @@ $('#contenido').addEventListener('click', async (e) => {
     return;
   }
   if (accion === 'cerrar-cotizacion') {
-    estado.cotizacionAbierta = null;
-    estado.vista = 'cotizaciones';
-    estado.editando = false;
-    $$('.nav-item').forEach((b) => b.classList.toggle('activo', b.dataset.vista === 'cotizaciones'));
-    await pintar();
+    await cerrarFicha();
     return;
   }
 
@@ -3745,7 +3797,13 @@ $('#contenido').addEventListener('toggle', (e) => {
 
 // El gesto de "atrás" del teléfono cierra el visor en vez de salir de la app.
 window.addEventListener('popstate', () => {
-  if (!$('#visor-pdf').hidden) cerrarVisorPdf({ desdeHistorial: true });
+  // El visor de PDF va encima de todo, así que el primer "atrás" lo cierra a
+  // él; el siguiente ya cierra la ficha.
+  if (!$('#visor-pdf').hidden) {
+    cerrarVisorPdf({ desdeHistorial: true });
+    return;
+  }
+  if (fichaEnHistorial) cerrarFicha({ desdeHistorial: true });
 });
 
 // Al girar el teléfono o pasar a escritorio, la hoja vuelve a su sitio.
