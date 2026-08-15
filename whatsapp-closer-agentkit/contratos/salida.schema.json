@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contratos/whatsapp-closer-agent/salida/1.json",
+  "title": "Salida del Cerrador de WhatsApp",
+  "description": "Conversación atendida, lead calificado con score, cita agendada, registro en el CRM y handoff a humano cuando aplica.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "estado", "contacto", "calificacion", "pasos"],
+  "properties": {
+    "version": { "const": "1" },
+    "estado": {
+      "enum": ["ok", "parcial", "escalado", "detenido"],
+      "description": "`parcial` cuando un paso destructivo no corrió por falta de confirmación o de credencial. `escalado` cuando se disparó el paso 6. `detenido` cuando el agente paró y preguntó."
+    },
+    "contacto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["numero"],
+      "properties": {
+        "numero": {
+          "type": "string",
+          "description": "El teléfono en formato internacional. Cuando el contacto escribe con nombre de usuario de WhatsApp y no expone el número, acá va `bsuid:<id>` en vez de un vacío o un número inventado. El prefijo es a propósito: lo que intente marcarlo falla fuerte en vez de marcar mal."
+        },
+        "id": {
+          "type": ["string", "null"],
+          "description": "El `businessScopedUserId`. Es el ancla de identidad y por acá se indexa todo lo guardado: el número puede faltar, esto no."
+        },
+        "nuevo": { "type": "boolean" },
+        "mensajes_previos": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "calificacion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score", "temperatura"],
+      "properties": {
+        "score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "0 a 100. Los cortes salen de `umbrales` en la entrada. Ver S03 en SUPUESTOS.md"
+        },
+        "temperatura": { "enum": ["caliente", "tibio", "frio"] },
+        "intencion": { "type": ["string", "null"] },
+        "presupuesto": {
+          "type": ["number", "null"],
+          "description": "Nulo cuando no lo dijeron y no se deduce. Nunca se inventa: el score se calcula sin ese factor."
+        },
+        "urgencia": { "enum": ["alta", "media", "baja", null] },
+        "motivo": {
+          "type": ["string", "null"],
+          "description": "Una línea. Por qué ese score y no otro."
+        }
+      }
+    },
+    "respuesta": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Nulo mientras el paso 3 no haya mandado. En modo borrador el texto queda acá con `enviado` en falso.",
+      "properties": {
+        "texto": { "type": "string" },
+        "enviado": { "type": "boolean" },
+        "objecion_detectada": { "type": ["string", "null"] },
+        "objecion_en_playbook": {
+          "type": "boolean",
+          "description": "En falso, el agente la nombró y no la respondió. Eso es material para el humano, no una falla."
+        },
+        "horarios_ofrecidos": {
+          "type": "array",
+          "items": { "type": "string", "format": "date-time" },
+          "description": "Salen de `disponibilidad` y de ningún otro lado. Uno que no esté en esa lista es fallo, aunque el mensaje esté perfecto."
+        },
+        "ventana_abierta": {
+          "type": ["boolean", "null"],
+          "description": "Si el contacto escribió dentro de las últimas 24 horas. En falso, WhatsApp solo deja mandar plantillas aprobadas y el envío libre no sale. Lo decide la plataforma, no el agente. Sale del `Resultado` de `enviar()` y no se pone a mano: nulo cuando el paso 3 no llegó a llamarlo, que es lo que pasa en un turno en borrador con `enviado` en falso."
+        }
+      }
+    },
+    "cita": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Nulo mientras el paso 4 no haya creado el evento. Para crearlo hacen falta dos cosas, no una: la confirmación explícita y un `mensaje.horario_elegido` que esté en `disponibilidad`. Falta cualquiera de las dos y esto es nulo, con el motivo en el paso 4. Hay `cita` si y sólo si el calendario devolvió el evento: el `evento_id` es el que trajo esa respuesta y nunca uno que el código se escriba a sí mismo.",
+      "properties": {
+        "evento_id": { "type": "string" },
+        "inicio": { "type": "string", "format": "date-time" },
+        "duracion_min": { "type": "integer" },
+        "confirmacion_enviada": { "type": "boolean" },
+        "recordatorio_programado": {
+          "type": "boolean",
+          "description": "24 horas antes, y sale por WhatsApp: una cuenta de servicio no puede invitar a nadie sin delegación de dominio, así que no hay invitación de calendario. Casi siempre cae fuera de la ventana de 24 horas, o sea que necesita una plantilla aprobada. Ver S05 en SUPUESTOS.md"
+        }
+      }
+    },
+    "crm": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "El default es una tabla `leads` en Supabase con estas columnas. Se reapunta a otra base cambiando dos variables. Nulo quiere decir «el paso 5 no corrió», y nada más: en un turno sin confirmar la fila viene armada acá con `escrito` en falso, para que se pueda ver y aprobar desde la bandeja. Ver S06 en SUPUESTOS.md y `blueprint/00-contrato.md` § 13",
+      "properties": {
+        "etapa": { "enum": ["nuevo", "calificado", "agendado", "cerrado", "perdido", "escalado"] },
+        "resumen": {
+          "type": "string",
+          "description": "Tres líneas: qué quería, qué se le respondió, qué falta. Nunca la conversación entera."
+        },
+        "proximo_paso": { "type": ["string", "null"] },
+        "proximo_paso_fecha": { "type": ["string", "null"], "format": "date" },
+        "escrito": { "type": "boolean" }
+      }
+    },
+    "handoff": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Nulo cuando no se disparó el paso 6.",
+      "properties": {
+        "motivo": { "enum": ["enojo", "precio_fuera_de_rango", "palabra_clave"] },
+        "disparador": {
+          "type": ["string", "null"],
+          "description": "Qué lo activó: la palabra encontrada, o el monto que quedó fuera del rango."
+        },
+        "avisado_en": {
+          "type": ["string", "null"],
+          "description": "Cuándo salió el aviso interno. Nulo si no hay canal configurado: la escalación ocurre igual, lo que se pierde es el aviso. Ver S09 en SUPUESTOS.md"
+        }
+      }
+    },
+    "pasos": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "description": "Uno por paso del proceso, en orden. Seis, siempre: es lo que permite ver dónde se cortó.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["n", "estado"],
+        "properties": {
+          "n": { "type": "integer", "minimum": 1, "maximum": 6 },
+          "estado": { "enum": ["hecho", "salteado", "fallado", "sin-confirmar"] },
+          "motivo": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "pregunta": {
+      "type": ["string", "null"],
+      "description": "Una sola, y solo cuando el estado es `detenido`. Se tiene que poder contestar en una línea."
+    },
+    "supuestos": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Identificadores de SUPUESTOS.md que se aplicaron en esta corrida."
+    }
+  }
+}

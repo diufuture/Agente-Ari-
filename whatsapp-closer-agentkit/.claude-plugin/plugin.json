@@ -1,0 +1,25 @@
+{
+  "name": "whatsapp-closer-agentkit",
+  "version": "1.0.0",
+  "description": "Repo blueprint para Claude Code: no trae la app, trae las instrucciones para construirla en tu máquina. Un agente que atiende cada chat de WhatsApp como setter y closer: califica, responde la objeción, agenda y escribe el CRM.",
+  "author": {
+    "name": "Hainrixz",
+    "url": "https://github.com/Hainrixz"
+  },
+  "homepage": "https://github.com/Hainrixz/whatsapp-closer-agentkit",
+  "repository": "https://github.com/Hainrixz/whatsapp-closer-agentkit.git",
+  "license": "MIT",
+  "keywords": [
+    "agent",
+    "blueprint",
+    "claude-code",
+    "la-forja",
+    "whatsapp",
+    "closer"
+  ],
+  "agents": [],
+  "skills": [],
+  "engines": {
+    "claude-code": ">=2.0.0"
+  }
+}
