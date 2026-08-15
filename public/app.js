@@ -172,32 +172,31 @@ async function pdfDeCotizacion(cot) {
 }
 
 /**
- * Guarda la cotización, o la manda por WhatsApp si el teléfono se puede usar.
+ * Deja la cotización en manos del dueño del teléfono.
  *
- * En el celular se usa el menú de compartir del sistema, que es el único
- * camino para adjuntar un archivo a WhatsApp: los enlaces de wa.me sólo saben
- * mandar texto. En el computador ese menú no existe (o no acepta archivos),
- * así que se baja el PDF y se abre WhatsApp Web con el mensaje escrito, para
- * arrastrar el archivo ahí.
+ * Hay un solo camino a propósito. Durante un rato hubo dos botones —"Guardar
+ * PDF" y "Enviar por WhatsApp"— y en el celular terminaban abriendo la misma
+ * pantalla: el menú de compartir del sistema ya deja elegir entre guardar el
+ * archivo o mandarlo por WhatsApp, así que el segundo botón no agregaba nada
+ * y sólo hacía dudar cuál apretar.
+ *
+ * Ese menú es además el único camino para adjuntar un archivo a WhatsApp: los
+ * enlaces de wa.me sólo saben mandar texto. Donde no existe (el computador),
+ * el PDF se baja como cualquier descarga.
  */
-async function compartirCotizacion(cot, { porWhatsapp = false } = {}) {
+async function guardarPdfDeCotizacion(cot) {
   const archivo = await pdfDeCotizacion(cot);
 
-  const saludo = `Hola${cot.cliente ? ` ${String(cot.cliente).split(' ')[0]}` : ''}, `
-    + `te comparto la cotización N.º ${cot.id}: ${cot.titulo}.`;
-
-  // El menú del sistema: adjunta el PDF de verdad y deja elegir WhatsApp.
   if (navigator.canShare?.({ files: [archivo] })) {
     try {
-      await navigator.share({ files: [archivo], title: archivo.name, text: porWhatsapp ? saludo : undefined });
+      await navigator.share({ files: [archivo], title: archivo.name });
       return { compartido: true };
     } catch (err) {
       // Cerrar el menú a propósito no es un error que haya que mostrar.
-      if (err?.name === 'AbortError') return { compartido: false, cancelado: true };
+      if (err?.name === 'AbortError') return { cancelado: true };
     }
   }
 
-  // Sin menú de compartir: se baja el archivo.
   const url = URL.createObjectURL(archivo);
   const a = document.createElement('a');
   a.href = url;
@@ -206,18 +205,7 @@ async function compartirCotizacion(cot, { porWhatsapp = false } = {}) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
-
-  if (porWhatsapp) {
-    const tel = String(cot.cliente_telefono || '').replace(/[^\d]/g, '');
-    const conPais = tel && tel.length === 10 ? `57${tel}` : tel;
-    window.open(
-      conPais ? `https://wa.me/${conPais}?text=${encodeURIComponent(saludo)}`
-        : `https://wa.me/?text=${encodeURIComponent(saludo)}`,
-      '_blank', 'noopener',
-    );
-    return { compartido: false, bajado: true, whatsappAbierto: true };
-  }
-  return { compartido: false, bajado: true };
+  return { bajado: true };
 }
 
 function abrirVisorPdf(url, titulo = 'Documento') {
@@ -770,7 +758,6 @@ function detalleCotizacion(cot, abonos, items = [], totales = null) {
                   data-titulo="${escapar(cot.archivo_nombre || cot.titulo)}">Ver el PDF</a>`
             : ''}
           <button class="mini${cot.archivo ? '' : ' destacado'}" data-accion="guardar-pdf">Guardar PDF</button>
-          <button class="mini" data-accion="whatsapp-pdf">Enviar por WhatsApp</button>
           <a class="mini" href="/imprimir/cotizacion/${cot.id}" target="_blank" rel="noopener">Ver</a>
           <button class="mini destacado" data-accion="editar">Editar</button>
         </div>
@@ -2527,9 +2514,8 @@ $('#contenido').addEventListener('click', async (e) => {
     return;
   }
 
-  if (accion === 'guardar-pdf' || accion === 'whatsapp-pdf') {
+  if (accion === 'guardar-pdf') {
     if (!estado.cotizacionAbierta) return;
-    const porWhatsapp = accion === 'whatsapp-pdf';
     const rotulo = boton.textContent;
     boton.disabled = true;
     boton.textContent = 'Armando el PDF…';
@@ -2537,11 +2523,13 @@ $('#contenido').addEventListener('click', async (e) => {
       // Se relee la cotización en vez de guardarla al pintar: así el PDF sale
       // con lo último, aunque se hayan tocado renglones desde que se abrió.
       const cot = await api(`/cotizaciones/${estado.cotizacionAbierta}`);
-      const r = await compartirCotizacion(cot, { porWhatsapp });
-      if (r.cancelado) avisar('Listo, no se envió nada.');
-      else if (r.compartido) avisar('PDF enviado ✓');
-      else if (r.whatsappAbierto) avisar('PDF guardado. Adjuntalo en la ventana de WhatsApp que se abrió.');
-      else avisar('PDF guardado ✓');
+      const r = await guardarPdfDeCotizacion(cot);
+      // Cuando abre el menú del sistema no se sabe qué eligió: guardar,
+      // mandar por WhatsApp, o nada. Por eso el aviso no promete ninguna
+      // de las tres.
+      if (r.cancelado) avisar('Listo, no se hizo nada.');
+      else if (r.bajado) avisar('PDF guardado ✓');
+      else avisar('Listo ✓');
     } catch (err) {
       avisar(err.message, true);
     } finally {
