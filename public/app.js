@@ -735,8 +735,10 @@ function tablaItems(cot, items) {
 }
 
 /** Subtotal, servicio, IVA y total, con los porcentajes editables. */
+const NOMBRE_NIVEL = { canal: 'Canal', constructor: 'Constructor', cliente: 'Cliente final' };
+
 function totalesYAjustes(cot, totales) {
-  const NIVELES = [['canal', 'Canal'], ['constructor', 'Constructor'], ['cliente', 'Cliente final']];
+  const nivel = cot.nivel_precio || 'cliente';
   return `
     <div class="tarjeta">
       <form class="form-totales" id="form-totales" data-id="${cot.id}">
@@ -744,12 +746,16 @@ function totalesYAjustes(cot, totales) {
           <input name="porcentaje_servicio" type="number" min="0" step="0.1" value="${escapar(cot.porcentaje_servicio ?? 0)}" /></label>
         <label><span>IVA %</span>
           <input name="porcentaje_iva" type="number" min="0" step="0.1" value="${escapar(cot.porcentaje_iva ?? 0)}" /></label>
-        <label><span>Precios que se usan</span>
-          <select name="nivel_precio">
-            ${NIVELES.map(([v, e]) => `<option value="${v}"${(cot.nivel_precio || 'cliente') === v ? ' selected' : ''}>${e}</option>`).join('')}
-          </select></label>
         <button type="submit">Aplicar</button>
       </form>
+
+      ${/* El selector de precios no va acá sino en Editar: tenerlo en dos
+            lugares hacía dudar cuál manda. Se deja dicho cuál está en uso, con
+            el camino para cambiarlo. */ ''}
+      <p class="ayuda" style="margin:12px 0 0">
+        Armada con precios de <b>${escapar(NOMBRE_NIVEL[nivel] || nivel)}</b>.
+        Para cambiarlos, <b>Editar</b> → «Precios que se usan».
+      </p>
 
       <div class="resumen-totales">
         <div><span>Subtotal</span><b>${fmtDinero(totales.subtotal, cot.moneda)}</b></div>
@@ -933,6 +939,13 @@ const CAMPOS = {
     { n: 'monto', e: 'Valor', tipo: 'number' },
     { n: 'vence_en', e: 'Vence', tipo: 'date' },
     { n: 'estado', e: 'Estado', opciones: ['pendiente', 'aprobada', 'rechazada'] },
+    // Con qué lista de precios está armada. Cambiarla vuelve a ponerle precio
+    // a los renglones que ya están, así que una oferta hecha a cliente final
+    // pasa a constructor sin rehacerla. Va acá, en el formulario de edición,
+    // porque es donde uno la busca: antes vivía al final de la tarjeta de
+    // totales, después de toda la tabla de renglones, y no se encontraba.
+    { n: 'nivel_precio', e: 'Precios que se usan',
+      opciones: [['cliente', 'Cliente final'], ['constructor', 'Constructor'], ['canal', 'Canal']] },
     { n: 'moneda', e: 'Moneda' },
     { n: 'validez', e: 'Validez de la oferta' },
     // Si quedan vacíos se imprime el representante de los datos de la empresa.
@@ -977,9 +990,14 @@ function formularioEdicion(entidad, fila) {
       }
       return casilla;
     }
+    // Una opción puede ser el valor a secas, o el par [valor, cómo se lee]:
+    // "cliente" a secas no dice mucho, "Cliente final" sí.
     const control = c.opciones
       ? `<select name="${c.n}">${c.opciones
-          .map((o) => `<option value="${o}"${o === valor ? ' selected' : ''}>${o}</option>`).join('')}</select>`
+          .map((o) => {
+            const [v, e] = Array.isArray(o) ? o : [o, o];
+            return `<option value="${escapar(v)}"${String(v) === String(valor) ? ' selected' : ''}>${escapar(e)}</option>`;
+          }).join('')}</select>`
       : c.area
         ? `<textarea name="${c.n}" rows="${c.filas || 2}">${escapar(valor)}</textarea>`
         : `<input name="${c.n}" type="${c.tipo || 'text'}" value="${escapar(valor)}"${
@@ -3193,7 +3211,7 @@ $('#contenido').addEventListener('submit', async (e) => {
       else if (k === 'monto') datos[k] = Number(datos[k]);
     }
     try {
-      await api(`/${entidad}/${id}`, { method: 'PATCH', body: datos });
+      const guardado = await api(`/${entidad}/${id}`, { method: 'PATCH', body: datos });
 
       if (entidad === 'productos' && datos.maneja_inventario && objetivo !== null && objetivo !== undefined && objetivo !== '') {
         const actual = Number((await api(`/productos/${id}`)).stock) || 0;
@@ -3208,7 +3226,22 @@ $('#contenido').addEventListener('submit', async (e) => {
       estado.editando = false;
       estado.citaEditando = null;
       estado.recordatorioEditando = null;
-      avisar('Datos actualizados ✓');
+
+      // Cambiar la lista de precios vuelve a ponerle precio a los renglones que
+      // ya estaban: se dice cuántos cambiaron, y sobre todo cuáles NO, para que
+      // un precio tocado a mano no parezca un olvido.
+      const respetados = guardado?.renglonesRespetados ?? [];
+      if (guardado?.renglonesActualizados) {
+        avisar(`${guardado.renglonesActualizados} renglón(es) con el precio nuevo ✓`
+          + (respetados.length
+            ? ` · ${respetados.length} quedó(aron) como estaba(n): les habías tocado el precio`
+            : ''));
+      } else if (respetados.length) {
+        avisar(`Guardado, pero no cambié precios: a esos ${respetados.length} renglón(es) se los habías tocado a mano.`);
+      } else {
+        avisar('Datos actualizados ✓');
+      }
+
       await refrescarResumen();
       await pintar();
     } catch (err) {
@@ -3308,7 +3341,6 @@ $('#contenido').addEventListener('submit', async (e) => {
         body: {
           porcentaje_servicio: Number(d.porcentaje_servicio) || 0,
           porcentaje_iva: Number(d.porcentaje_iva) || 0,
-          nivel_precio: d.nivel_precio,
         },
       });
       // Cambiar de lista de precios vuelve a poner precio a los renglones: hay

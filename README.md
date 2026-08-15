@@ -629,8 +629,10 @@ propio representante si esa oferta la firma otra persona.
 
 ## Cambiar de lista de precios, y borrar una cotización
 
-En la tarjeta de totales de cada cotización está **Precios que se usan**:
-canal, constructor o cliente final. Por defecto se cotiza al cliente final.
+En **Editar**, dentro de la cotización, está **Precios que se usan**: cliente
+final (el de siempre), constructor o canal. La tarjeta de totales deja dicho
+cuál está en uso, pero el selector vive en Editar y en un solo lugar: tenerlo
+en dos hacía dudar cuál manda.
 
 Cambiarlo **vuelve a ponerle precio a los renglones que ya estaban**, no sólo
 a los que se agreguen después: la misma oferta pasa de un cliente final a un
