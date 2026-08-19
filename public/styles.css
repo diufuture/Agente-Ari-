@@ -1303,15 +1303,47 @@ body.con-visor { overflow: hidden; }
 /* ─────────── Cotizaciones en renglones cortos ─────────── */
 
 .lista-cot {
+  /* Ancho del cajón de acciones, repartido entre sus botones. Está acá y no
+     regado por el archivo porque el guion también lo mide de acá. */
+  --cajon: 168px;
   background: var(--panel); border: 1px solid var(--borde);
   border-radius: var(--radio); overflow: hidden;
 }
-.cot-fila {
-  display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+/* Cada renglón va sobre un cajón de acciones que asoma al deslizarlo con el
+   dedo, como en el correo del teléfono. El renglón es el que se mueve; el
+   cajón está quieto abajo, y el recorte del contenedor lo tapa mientras el
+   renglón está en su lugar. */
+.cot-item {
+  position: relative; overflow: hidden;
   border-bottom: 1px solid color-mix(in srgb, var(--borde) 55%, transparent);
-  cursor: pointer; transition: background .12s;
 }
-.cot-fila:last-child { border-bottom: none; }
+.cot-item:last-child { border-bottom: none; }
+
+.cot-cajon { position: absolute; inset: 0 0 0 auto; display: flex; }
+.cajon-btn {
+  width: calc(var(--cajon) / 2); border: 0; color: #fff; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; font-weight: 600; letter-spacing: .2px;
+}
+/* Los colores del tema son claros —están pensados para texto sobre fondo
+   oscuro, no para fondo de un botón—: acá van oscurecidos, si no el rótulo
+   blanco encima no se alcanza a leer. */
+.cajon-btn.editar { background: color-mix(in srgb, var(--acento) 52%, #04121f); }
+.cajon-btn.borrar { background: color-mix(in srgb, var(--alerta) 62%, #2a0510); }
+.cajon-btn:active { filter: brightness(1.12); }
+.cajon-btn:focus-visible { outline: 2px solid var(--texto); outline-offset: -3px; }
+
+.cot-fila {
+  position: relative;
+  display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+  background: var(--panel);
+  cursor: pointer; transition: background .12s, transform .18s ease;
+  /* El navegador se queda con el desplazamiento vertical y a nosotros nos
+     deja el horizontal: así deslizar no pelea con recorrer la lista. */
+  touch-action: pan-y;
+}
+/* Mientras el dedo está encima manda el dedo, no la animación. */
+.cot-item.arrastrando .cot-fila { transition: none; }
+.cot-item.abierto .cot-fila { transform: translateX(calc(-1 * var(--cajon))); }
 .cot-fila:hover { background: var(--panel-alto); }
 .cot-fila:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; }
 

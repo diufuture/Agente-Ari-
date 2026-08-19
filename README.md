@@ -655,8 +655,16 @@ Dos cosas que no toca:
 - **Los renglones libres** ("Mano de obra", "Obra civil"): no salieron del
   catálogo, así que no tienen precio de canal ni de constructor.
 
-Para **borrar** una cotización: **Editar → Eliminar cotización**. Antes de
-preguntar dice qué se lleva puesto —los renglones, y los abonos si los tiene,
+Para **borrar** una cotización hay dos caminos, y los dos preguntan lo mismo:
+
+- **Desde la lista**, deslizando el renglón hacia la izquierda con el dedo,
+  como en el correo del teléfono: atrás asoman **Editar** y **Eliminar**.
+  Deslizar otro cierra el anterior, tocar el renglón abierto lo cierra, y un
+  empujoncito corto se devuelve solo. Con teclado se llega con el tabulador,
+  o con las flechas ← y → sobre el renglón.
+- **Adentro de la cotización**, en **Editar → Eliminar cotización**.
+
+Antes de preguntar dice qué se lleva puesto —los renglones, y los abonos si los tiene,
 con su valor—. Si estaba aprobada, lo que había salido de bodega vuelve al
 inventario: si no, la bodega quedaría descontada por una oferta que ya no
 existe y no habría forma de averiguar por qué.

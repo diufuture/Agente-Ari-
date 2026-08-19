@@ -2010,35 +2010,46 @@ function listaCotizaciones(filas) {
   return `<div class="lista-cot">${filas.map((q) => {
     const saldado = Number(q.saldo) <= 0;
     const aprobada = q.estado === 'aprobada';
-    return `<div class="cot-fila" data-accion="abrir-cotizacion" data-id="${q.id}" role="button" tabindex="0">
-      <div class="cot-texto">
-        <strong class="es-cliente">${escapar(q.cliente || 'Sin cliente')}</strong>
-        <span>${escapar(q.titulo)}</span>
+    // Detrás del renglón, a la derecha, quedan las acciones que se descubren
+    // deslizando con el dedo, como en el correo del teléfono. Van en el papel
+    // aunque no se vean: así se llega a ellas con el tabulador, sin dedo.
+    return `<div class="cot-item">
+      <div class="cot-cajon">
+        <button class="cajon-btn editar" data-accion="abrir-cotizacion" data-editar="1" data-id="${q.id}"
+                title="Abrir esta cotización para editarla">Editar</button>
+        <button class="cajon-btn borrar" data-accion="borrar-cot" data-id="${q.id}"
+                title="Eliminar esta cotización">Eliminar</button>
       </div>
-      <div class="cot-cifra">
-        <b class="total">${fmtDinero(q.monto, q.moneda)}</b>
-        <span>total</span>
-      </div>
-      <div class="cot-cifra">
-        <b class="${Number(q.abonado) > 0 ? 'ok' : 'nada'}">${
-          Number(q.abonado) > 0 ? fmtDinero(q.abonado, q.moneda) : '—'}</b>
-        <span>abonado</span>
-      </div>
-      <div class="cot-cifra">
-        <b class="${saldado ? 'ok' : ''}">${saldado ? '—' : fmtDinero(q.saldo, q.moneda)}</b>
-        <span>${saldado ? 'saldada' : 'por cobrar'}</span>
-      </div>
-      <div class="cot-botones">
-        <button class="pastilla ${escapar(q.estado)} cambia" data-accion="alternar-estado-cot" data-id="${q.id}"
-                title="Tocá para ${aprobada ? 'volverla a pendiente' : 'marcarla aprobada'}">${escapar(q.estado)} ⇄</button>
-        ${q.archivo
-          ? `<a class="mini pdf" href="${escapar(q.archivo)}" target="_blank" rel="noopener"
-                data-titulo="${escapar(q.titulo)}">📄</a>`
-          : ''}
-        ${q.archivada
-          ? `<button class="mini" data-accion="reabrir-cot" data-id="${q.id}">Reabrir</button>`
-          : `<button class="mini${saldado && aprobada ? ' destacado' : ''}" data-accion="cerrar-cot" data-id="${q.id}"
-                     title="${saldado ? 'Sacarla de la lista y dejarla en el historial' : 'Todavía falta cobrarla'}">Cerrar</button>`}
+      <div class="cot-fila" data-accion="abrir-cotizacion" data-id="${q.id}" role="button" tabindex="0">
+        <div class="cot-texto">
+          <strong class="es-cliente">${escapar(q.cliente || 'Sin cliente')}</strong>
+          <span>${escapar(q.titulo)}</span>
+        </div>
+        <div class="cot-cifra">
+          <b class="total">${fmtDinero(q.monto, q.moneda)}</b>
+          <span>total</span>
+        </div>
+        <div class="cot-cifra">
+          <b class="${Number(q.abonado) > 0 ? 'ok' : 'nada'}">${
+            Number(q.abonado) > 0 ? fmtDinero(q.abonado, q.moneda) : '—'}</b>
+          <span>abonado</span>
+        </div>
+        <div class="cot-cifra">
+          <b class="${saldado ? 'ok' : ''}">${saldado ? '—' : fmtDinero(q.saldo, q.moneda)}</b>
+          <span>${saldado ? 'saldada' : 'por cobrar'}</span>
+        </div>
+        <div class="cot-botones">
+          <button class="pastilla ${escapar(q.estado)} cambia" data-accion="alternar-estado-cot" data-id="${q.id}"
+                  title="Tocá para ${aprobada ? 'volverla a pendiente' : 'marcarla aprobada'}">${escapar(q.estado)} ⇄</button>
+          ${q.archivo
+            ? `<a class="mini pdf" href="${escapar(q.archivo)}" target="_blank" rel="noopener"
+                  data-titulo="${escapar(q.titulo)}">📄</a>`
+            : ''}
+          ${q.archivada
+            ? `<button class="mini" data-accion="reabrir-cot" data-id="${q.id}">Reabrir</button>`
+            : `<button class="mini${saldado && aprobada ? ' destacado' : ''}" data-accion="cerrar-cot" data-id="${q.id}"
+                       title="${saldado ? 'Sacarla de la lista y dejarla en el historial' : 'Todavía falta cobrarla'}">Cerrar</button>`}
+        </div>
       </div>
     </div>`;
   }).join('')}</div>`;
@@ -2645,12 +2656,154 @@ $('#nav').addEventListener('click', (e) => {
   $('#contenido').scrollTop = 0;
 });
 
+/* ─────────── Deslizar un renglón de cotización ─────────── */
+/*
+ * En el teléfono no queda lugar para más botones en el renglón: ya están la
+ * pastilla del estado, el PDF y Cerrar. Las demás acciones —editar, eliminar—
+ * viven en un cajón detrás del renglón, que asoma al deslizarlo hacia la
+ * izquierda, igual que en el correo. Eliminar estaba sólo adentro de la ficha,
+ * en Editar, y ahí nadie la encontraba.
+ *
+ * El renglón es lo único que se mueve. El cajón está quieto debajo y lo tapa
+ * el recorte del contenedor mientras el renglón está en su lugar.
+ */
+let deslizando = null;
+// Un arrastre no puede además abrir la cotización al levantar el dedo.
+let recienArrastrado = null;
+
+const anchoCajon = (item) => item.querySelector('.cot-cajon')?.offsetWidth || 0;
+
+function cerrarCajones(menos = null) {
+  $$('.cot-item.abierto').forEach((item) => {
+    if (item !== menos) item.classList.remove('abierto');
+  });
+}
+
+$('#contenido').addEventListener('pointerdown', (e) => {
+  if (e.button > 0) return;                       // botón secundario del mouse
+  // Un toque sobre el cajón abierto es para sus botones: si acá se cerrara,
+  // el renglón volvería encima justo antes del clic y se lo llevaría puesto.
+  if (e.target.closest('.cot-cajon')) return;
+
+  const fila = e.target.closest('.cot-fila');
+  if (!fila) { cerrarCajones(); return; }
+
+  const item = fila.parentElement;
+  deslizando = {
+    fila, item, puntero: e.pointerId, x0: e.clientX, y0: e.clientY,
+    base: item.classList.contains('abierto') ? -anchoCajon(item) : 0,
+    decidido: false,
+  };
+});
+
+$('#contenido').addEventListener('pointermove', (e) => {
+  if (!deslizando || e.pointerId !== deslizando.puntero) return;
+  const dx = e.clientX - deslizando.x0;
+  const dy = e.clientY - deslizando.y0;
+
+  // Hasta no saber para dónde va el dedo no se mueve nada: si va vertical, es
+  // que está recorriendo la lista y acá no pasó nada.
+  if (!deslizando.decidido) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    if (Math.abs(dx) <= Math.abs(dy)) { deslizando = null; return; }
+    deslizando.decidido = true;
+    deslizando.item.classList.add('arrastrando');
+    cerrarCajones(deslizando.item);
+    try { deslizando.fila.setPointerCapture(e.pointerId); } catch { /* sin captura igual anda */ }
+  }
+
+  const tope = anchoCajon(deslizando.item);
+  const x = Math.max(-tope, Math.min(0, deslizando.base + dx));
+  deslizando.fila.style.transform = `translateX(${x}px)`;
+});
+
+function soltarDeslizado(e) {
+  if (!deslizando || e.pointerId !== deslizando.puntero) return;
+  const { fila, item, base, x0, decidido } = deslizando;
+  deslizando = null;
+
+  fila.style.transform = '';
+  item.classList.remove('arrastrando');
+  if (!decidido) return;
+
+  const tope = anchoCajon(item);
+  const x = Math.max(-tope, Math.min(0, base + (e.clientX - x0)));
+  // Pasada la tercera parte queda abierto; antes de eso se devuelve solo.
+  item.classList.toggle('abierto', x < -tope / 3);
+
+  recienArrastrado = item;
+  setTimeout(() => { if (recienArrastrado === item) recienArrastrado = null; }, 400);
+}
+
+$('#contenido').addEventListener('pointerup', soltarDeslizado);
+$('#contenido').addEventListener('pointercancel', soltarDeslizado);
+
+// Con el tabulador se llega a los botones del cajón aunque esté cerrado: si
+// alguno recibe el foco, se abre, para que se vea dónde está parado.
+$('#contenido').addEventListener('focusin', (e) => {
+  const item = e.target.closest('.cajon-btn') ? e.target.closest('.cot-item') : null;
+  cerrarCajones(item);
+  if (item) item.classList.add('abierto');
+});
+
+// Sin dedo: las flechas abren y cierran el cajón del renglón que tenga el foco.
+$('#contenido').addEventListener('keydown', (e) => {
+  const fila = e.target.closest?.('.cot-fila');
+  if (!fila) return;
+  if (e.key === 'ArrowLeft') { cerrarCajones(fila.parentElement); fila.parentElement.classList.add('abierto'); }
+  else if (e.key === 'ArrowRight' || e.key === 'Escape') fila.parentElement.classList.remove('abierto');
+  else return;
+  e.preventDefault();
+});
+
+// Al recorrer la lista se cierra lo que haya quedado abierto.
+$('#contenido').addEventListener('scroll', () => { if (!deslizando) cerrarCajones(); }, { passive: true });
+
+/**
+ * Pregunta y elimina una cotización, diciendo antes qué se lleva puesto.
+ * La usan el botón de la ficha y el del cajón: es la misma decisión y no puede
+ * avisar distinto según desde dónde se pida.
+ */
+async function eliminarCotizacionConAviso(id) {
+  const cot = await api(`/cotizaciones/${id}`);
+
+  // Se dice qué se lleva puesto ANTES de preguntar. Los abonos son plata
+  // registrada: borrarlos sin nombrarlos sería lo peor que podría pasar acá.
+  const abonos = Number(cot.abonado) || 0;
+  const aviso = [
+    `¿Eliminar la cotización #${cot.id} "${cot.titulo}"?`,
+    cot.n_items ? `Se van sus ${cot.n_items} renglón(es).` : '',
+    abonos > 0
+      ? `⚠ Tiene ${fmtDinero(abonos, cot.moneda)} en abonos registrados, que también se borran.`
+      : '',
+    cot.estado === 'aprobada' ? 'Lo que había salido de bodega por esta oferta vuelve al inventario.' : '',
+    'Esto no se puede deshacer.',
+  ].filter(Boolean).join('\n\n');
+
+  if (!confirm(aviso)) return false;
+
+  const r = await api(`/cotizaciones/${cot.id}`, { method: 'DELETE' });
+  avisar(r.devueltosAlInventario
+    ? 'Cotización eliminada ✓ · el inventario volvió a su lugar'
+    : 'Cotización eliminada ✓');
+  return true;
+}
+
 $('#contenido').addEventListener('click', async (e) => {
   // Un enlace adentro de un renglón que también es botón —el PDF dentro de la
   // cotización— hace lo suyo y no abre el renglón. Se mira acá y no con
   // stopPropagation en el enlace, porque eso también le cortaría el paso al
   // visor de PDF, que escucha en el documento.
   if (e.target.closest('a[href]')) return;
+
+  const filaCot = e.target.closest('.cot-fila');
+  if (filaCot) {
+    // El toque con el que se termina de deslizar no es un toque sobre el
+    // renglón: si lo fuera, abrir el cajón abriría también la cotización.
+    if (recienArrastrado === filaCot.parentElement) { recienArrastrado = null; return; }
+    // Con el cajón abierto, tocar el renglón lo cierra. Es lo que uno intenta.
+    if (filaCot.parentElement.classList.contains('abierto')) { cerrarCajones(); return; }
+  }
 
   const boton = e.target.closest('[data-accion]');
   if (!boton) return;
@@ -2672,32 +2825,26 @@ $('#contenido').addEventListener('click', async (e) => {
 
   if (accion === 'eliminar-cotizacion') {
     if (!estado.cotizacionAbierta) return;
-    const cot = await api(`/cotizaciones/${estado.cotizacionAbierta}`);
-
-    // Se dice qué se lleva puesto ANTES de preguntar. Los abonos son plata
-    // registrada: borrarlos sin nombrarlos sería lo peor que podría pasar acá.
-    const abonos = Number(cot.abonado) || 0;
-    const aviso = [
-      `¿Eliminar la cotización #${cot.id} "${cot.titulo}"?`,
-      cot.n_items ? `Se van sus ${cot.n_items} renglón(es).` : '',
-      abonos > 0
-        ? `⚠ Tiene ${fmtDinero(abonos, cot.moneda)} en abonos registrados, que también se borran.`
-        : '',
-      cot.estado === 'aprobada' ? 'Lo que había salido de bodega por esta oferta vuelve al inventario.' : '',
-      'Esto no se puede deshacer.',
-    ].filter(Boolean).join('\n\n');
-
-    if (!confirm(aviso)) return;
     try {
-      const r = await api(`/cotizaciones/${cot.id}`, { method: 'DELETE' });
-      avisar(r.devueltosAlInventario
-        ? 'Cotización eliminada ✓ · el inventario volvió a su lugar'
-        : 'Cotización eliminada ✓');
+      if (!await eliminarCotizacionConAviso(estado.cotizacionAbierta)) return;
+      // La ficha que se estaba mirando ya no existe: hay que volver a la lista.
       fichaEnHistorial = false;
       estado.cotizacionAbierta = null;
       estado.vista = 'cotizaciones';
       estado.editando = false;
       $$('.nav-item').forEach((b) => b.classList.toggle('activo', b.dataset.vista === 'cotizaciones'));
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+
+  // La misma acción desde el cajón de la lista, sin entrar a la cotización.
+  if (accion === 'borrar-cot') {
+    try {
+      if (!await eliminarCotizacionConAviso(Number(id))) { cerrarCajones(); return; }
       await refrescarResumen();
       await pintar();
     } catch (err) {
@@ -3100,7 +3247,8 @@ $('#contenido').addEventListener('click', async (e) => {
   if (accion === 'abrir-cotizacion') {
     anotarFichaEnHistorial();
     estado.cotizacionAbierta = Number(id);
-    estado.editando = false;
+    // Desde el cajón se pidió editarla: se abre con el formulario ya desplegado.
+    estado.editando = boton.dataset.editar === '1';
     estado.clienteAbierto = null;
     estado.vistaAsistente = null;
     estado.buscarCatalogo = '';
