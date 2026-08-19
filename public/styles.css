@@ -1305,7 +1305,7 @@ body.con-visor { overflow: hidden; }
 .lista-cot {
   /* Ancho del cajón de acciones, repartido entre sus botones. Está acá y no
      regado por el archivo porque el guion también lo mide de acá. */
-  --cajon: 168px;
+  --cajon: 144px;
   background: var(--panel); border: 1px solid var(--borde);
   border-radius: var(--radio); overflow: hidden;
 }
@@ -1319,18 +1319,29 @@ body.con-visor { overflow: hidden; }
 }
 .cot-item:last-child { border-bottom: none; }
 
-.cot-cajon { position: absolute; inset: 0 0 0 auto; display: flex; }
-.cajon-btn {
-  width: calc(var(--cajon) / 2); border: 0; color: #fff; cursor: pointer;
-  font-family: inherit; font-size: 12.5px; font-weight: 600; letter-spacing: .2px;
+.cot-cajon {
+  position: absolute; inset: 0 0 0 auto; width: var(--cajon);
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
 }
+/* Botones redondeados con su dibujo y su rótulo chiquito debajo, no dos
+   bloques cuadrados de color: ocupan lo mismo pero pesan mucho menos a la
+   vista, y la caneca se reconoce sin leer. */
+.cajon-btn {
+  flex: 1; border: 0; border-radius: 14px; cursor: pointer; color: #fff;
+  /* Alto de pastilla, no de bloque: en un renglón alto el botón no tiene por
+     qué estirarse de arriba abajo. */
+  height: min(100%, 82px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  font-family: inherit; font-size: 10.5px; font-weight: 600; letter-spacing: .2px;
+}
+.cajon-btn svg { width: 21px; height: 21px; fill: currentColor; }
 /* Los colores del tema son claros —están pensados para texto sobre fondo
    oscuro, no para fondo de un botón—: acá van oscurecidos, si no el rótulo
    blanco encima no se alcanza a leer. */
 .cajon-btn.editar { background: color-mix(in srgb, var(--acento) 52%, #04121f); }
 .cajon-btn.borrar { background: color-mix(in srgb, var(--alerta) 62%, #2a0510); }
 .cajon-btn:active { filter: brightness(1.12); }
-.cajon-btn:focus-visible { outline: 2px solid var(--texto); outline-offset: -3px; }
+.cajon-btn:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
 
 .cot-fila {
   position: relative;

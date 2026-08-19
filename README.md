@@ -658,7 +658,8 @@ Dos cosas que no toca:
 Para **borrar** una cotización hay dos caminos, y los dos preguntan lo mismo:
 
 - **Desde la lista**, deslizando el renglón hacia la izquierda con el dedo,
-  como en el correo del teléfono: atrás asoman **Editar** y **Eliminar**.
+  como en el correo del teléfono: atrás asoman **Editar** (lápiz) y
+  **Eliminar** (caneca), en botones redondeados con su dibujo.
   Deslizar otro cierra el anterior, tocar el renglón abierto lo cierra, y un
   empujoncito corto se devuelve solo. Con teclado se llega con el tabulador,
   o con las flechas ← y → sobre el renglón.

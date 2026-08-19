@@ -1990,6 +1990,12 @@ function vistaCobros(pendientes, total, cerrados) {
  * El atajo para las ofertas que se arman por fuera: se sube el PDF ya hecho y
  * queda registrada, sin pasar por el armado renglón por renglón.
  */
+/* El lápiz y la caneca del cajón que asoma al deslizar un renglón. Van
+   dibujados acá y no como archivos aparte para no pedirle dos imágenes más al
+   servidor por cada pantalla. */
+const ICONO_LAPIZ = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm17.71-9.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>`;
+const ICONO_CANECA = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z"/></svg>`;
+
 /**
  * Las cotizaciones, una por renglón corto.
  *
@@ -2016,9 +2022,9 @@ function listaCotizaciones(filas) {
     return `<div class="cot-item">
       <div class="cot-cajon">
         <button class="cajon-btn editar" data-accion="abrir-cotizacion" data-editar="1" data-id="${q.id}"
-                title="Abrir esta cotización para editarla">Editar</button>
+                title="Abrir esta cotización para editarla">${ICONO_LAPIZ}<span>Editar</span></button>
         <button class="cajon-btn borrar" data-accion="borrar-cot" data-id="${q.id}"
-                title="Eliminar esta cotización">Eliminar</button>
+                title="Eliminar esta cotización">${ICONO_CANECA}<span>Eliminar</span></button>
       </div>
       <div class="cot-fila" data-accion="abrir-cotizacion" data-id="${q.id}" role="button" tabindex="0">
         <div class="cot-texto">
