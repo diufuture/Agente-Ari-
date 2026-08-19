@@ -3,7 +3,7 @@
 
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { mkdirSync, writeFileSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, statSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,6 +63,18 @@ mkdirSync(CARPETA_FICHAS, { recursive: true });
  * siempre. Una dirección que el navegador nunca vio no la puede tener
  * guardada, así que se actualiza sola.
  */
+/*
+ * El número que se anuncia al actualizar. La VERSION de acá abajo se calcula
+ * sola con las fechas de los archivos, así que sirve para que el navegador no
+ * se quede con lo viejo, pero no se puede nombrar de antemano: nadie puede
+ * decir "tiene que quedar en tal número". Éste sí, porque está escrito en
+ * package.json, y es el que se mira para saber si la actualización entró.
+ */
+const COMPILADO = (() => {
+  try { return JSON.parse(readFileSync(join(RAIZ, 'package.json'), 'utf8')).version || ''; }
+  catch { return ''; }
+})();
+
 const VERSION = (() => {
   const h = createHash('sha1');
   for (const f of ['app.js', 'foto.js', 'styles.css', 'index.html']) {
@@ -417,6 +429,7 @@ async function api(req, res, url) {
       // Para poder ver de un vistazo si la pantalla quedó al día después de
       // actualizar el servidor, sin tener que adivinar.
       version: VERSION,
+      compilado: COMPILADO,
       // Si se extrajo una versión nueva pero no se reinició Node.
       servidorViejo: servidorDesactualizado(),
     });

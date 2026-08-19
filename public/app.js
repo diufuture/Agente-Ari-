@@ -1352,7 +1352,8 @@ function vistaAjustes(aj) {
           corriendo. Después de subir una actualización es el dato que dice si
           el servidor la tomó o se quedó con la anterior. */ ''}
     <p class="ayuda" style="margin:22px 0 0; text-align:center">
-      Versión ${escapar(VERSION.interfaz || '—')}${
+      Versión <b>${escapar(VERSION.compilado || '—')}</b>${
+        VERSION.interfaz ? ` · archivos ${escapar(VERSION.interfaz)}` : ''}${
         VERSION.modelo ? ` · modelo ${escapar(VERSION.modelo)}` : ''}
     </p>`;
 }
@@ -2003,7 +2004,7 @@ function vistaCobros(pendientes, total, cerrados) {
    dibujados acá y no como archivos aparte para no pedirle dos imágenes más al
    servidor por cada pantalla. */
 /* Lo que devuelve /api/estado al arrancar, para poder mostrarlo en ajustes. */
-const VERSION = { interfaz: '', modelo: '' };
+const VERSION = { compilado: '', interfaz: '', modelo: '' };
 
 const ICONO_LAPIZ = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm17.71-9.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>`;
 const ICONO_CANECA = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z"/></svg>`;
@@ -4146,6 +4147,7 @@ window.addEventListener('resize', () => { if (!esCelular()) cerrarHoja(); });
     const s = await api('/estado');
     // La versión de la interfaz al lado del modelo: si después de actualizar
     // el servidor este número no cambió, la pantalla se quedó con la anterior.
+    VERSION.compilado = s.compilado || '';
     VERSION.interfaz = s.version || '';
     VERSION.modelo = s.modelo || '';
     $('#estado-modelo').textContent = `modelo · ${s.modelo}${s.version ? `\nversión · ${s.version}` : ''}`;

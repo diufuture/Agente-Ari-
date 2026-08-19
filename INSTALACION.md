@@ -449,6 +449,12 @@ a esa carpeta**, seleccioná todo lo de adentro (Cmd+A), clic derecho →
 **Comprimir**. Eso genera un `Archive.zip` con los archivos sueltos, que es lo
 que entiende cPanel.
 
+> Si el ZIP te llegó armado (no bajado de GitHub), fijate **antes de subirlo**
+> que al abrirlo se vean `server`, `public`, `package.json`… sueltos. Si en vez
+> de eso se ve **una sola carpeta**, y lo extraés así en cPanel, los archivos
+> quedan un piso más abajo: la aplicación sigue corriendo los viejos y parece
+> que la actualización no hizo nada.
+
 > Es el mismo paso que la primera vez: cPanel no sabe subir carpetas, sólo
 > archivos, y el ZIP tiene que traer los archivos en la raíz.
 
@@ -467,6 +473,13 @@ que queda intacta.
 ### 5 · Reiniciar
 
 En **Setup Node.js App** → tu aplicación → **RESTART**.
+
+### 6 · Confirmar que entró
+
+Abrí la aplicación, tocá el **piñón ⚙** y bajá hasta el final: ahí dice qué
+versión está corriendo. Si es la que subiste, listo. Si sigue siendo la
+anterior, los archivos no se reemplazaron —lo más común es que hayan quedado
+adentro de una carpeta al extraer el ZIP— o falta el RESTART.
 
 Si la versión nueva trae dependencias nuevas (te lo vamos a avisar), antes de
 reiniciar hacé **Run NPM Install**.
