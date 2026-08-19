@@ -1338,8 +1338,10 @@ body.con-visor { overflow: hidden; }
 /* Los colores del tema son claros —están pensados para texto sobre fondo
    oscuro, no para fondo de un botón—: acá van oscurecidos, si no el rótulo
    blanco encima no se alcanza a leer. */
-.cajon-btn.editar { background: color-mix(in srgb, var(--acento) 52%, #04121f); }
-.cajon-btn.borrar { background: color-mix(in srgb, var(--alerta) 62%, #2a0510); }
+/* El color plano va primero por si el navegador es viejo y no entiende
+   color-mix: sin él, el botón quedaría sin fondo y no se vería. */
+.cajon-btn.editar { background: #33718d; background: color-mix(in srgb, var(--acento) 52%, #04121f); }
+.cajon-btn.borrar { background: #ae4759; background: color-mix(in srgb, var(--alerta) 62%, #2a0510); }
 .cajon-btn:active { filter: brightness(1.12); }
 .cajon-btn:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
 
@@ -1378,6 +1380,10 @@ body.con-visor { overflow: hidden; }
    depender de pasar el mouse por encima, que en el teléfono no existe. */
 .pastilla.cambia { cursor: pointer; transition: .13s; border-style: dashed; }
 .pastilla.cambia:hover, .pastilla.cambia:active { filter: brightness(1.3); border-style: solid; }
+/* Los tres puntos abren el mismo cajón que el deslizado. El gesto no se ve, y
+   quien no lo conozca —o al que el teléfono no se lo tome— tiene que poder
+   llegar igual a editar y a eliminar. */
+.cot-fila .mas { flex-shrink: 0; padding: 6px 10px; line-height: 1; font-size: 15px; letter-spacing: 1px; }
 .cot-fila .mini.pdf { flex-shrink: 0; text-decoration: none; padding: 5px 9px; }
 .cot-fila .sin-pdf { width: 30px; flex-shrink: 0; }
 

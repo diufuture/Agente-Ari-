@@ -657,12 +657,19 @@ Dos cosas que no toca:
 
 Para **borrar** una cotización hay dos caminos, y los dos preguntan lo mismo:
 
-- **Desde la lista**, deslizando el renglón hacia la izquierda con el dedo,
-  como en el correo del teléfono: atrás asoman **Editar** (lápiz) y
-  **Eliminar** (caneca), en botones redondeados con su dibujo.
-  Deslizar otro cierra el anterior, tocar el renglón abierto lo cierra, y un
-  empujoncito corto se devuelve solo. Con teclado se llega con el tabulador,
-  o con las flechas ← y → sobre el renglón.
+- **Desde la lista**, con el botón **⋯** del renglón, o deslizándolo hacia la
+  izquierda con el dedo como en el correo del teléfono: atrás asoman
+  **Editar** (lápiz) y **Eliminar** (caneca), en botones redondeados con su
+  dibujo. Deslizar otro cierra el anterior, tocar el renglón abierto lo
+  cierra, y un empujoncito corto se devuelve solo. Con teclado se llega con el
+  tabulador, o con las flechas ← y → sobre el renglón.
+
+  El gesto se escucha con los eventos del dedo (`touchstart`/`touchmove`) y no
+  con los de puntero. Con los de puntero andaba en el computador pero no en el
+  iPhone: adentro de una lista que se desplaza, Safari se queda con el gesto
+  apenas el dedo se mueve y le manda `pointercancel` a la página, así que el
+  renglón nunca alcanzaba a correrse. El botón **⋯** está por la misma razón:
+  un gesto no se ve, y hay que poder llegar igual.
 - **Adentro de la cotización**, en **Editar → Eliminar cotización**.
 
 Antes de preguntar dice qué se lleva puesto —los renglones, y los abonos si los tiene,

@@ -1345,7 +1345,16 @@ function vistaAjustes(aj) {
           ${campos}
           <div class="form-acciones"><button type="submit">Guardar</button></div>
         </form>
-      </div>`)}`;
+      </div>`)}
+
+    ${/* En el computador esto se ve abajo a la izquierda; en el celular no hay
+          barra lateral, y era el único lugar donde decía qué versión está
+          corriendo. Después de subir una actualización es el dato que dice si
+          el servidor la tomó o se quedó con la anterior. */ ''}
+    <p class="ayuda" style="margin:22px 0 0; text-align:center">
+      Versión ${escapar(VERSION.interfaz || '—')}${
+        VERSION.modelo ? ` · modelo ${escapar(VERSION.modelo)}` : ''}
+    </p>`;
 }
 
 /* ─────────── Importar lista de precios ─────────── */
@@ -1993,6 +2002,9 @@ function vistaCobros(pendientes, total, cerrados) {
 /* El lápiz y la caneca del cajón que asoma al deslizar un renglón. Van
    dibujados acá y no como archivos aparte para no pedirle dos imágenes más al
    servidor por cada pantalla. */
+/* Lo que devuelve /api/estado al arrancar, para poder mostrarlo en ajustes. */
+const VERSION = { interfaz: '', modelo: '' };
+
 const ICONO_LAPIZ = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm17.71-9.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>`;
 const ICONO_CANECA = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z"/></svg>`;
 
@@ -2055,6 +2067,8 @@ function listaCotizaciones(filas) {
             ? `<button class="mini" data-accion="reabrir-cot" data-id="${q.id}">Reabrir</button>`
             : `<button class="mini${saldado && aprobada ? ' destacado' : ''}" data-accion="cerrar-cot" data-id="${q.id}"
                        title="${saldado ? 'Sacarla de la lista y dejarla en el historial' : 'Todavía falta cobrarla'}">Cerrar</button>`}
+          <button class="mini mas" data-accion="mas-cot" title="Editar o eliminar esta cotización"
+                  aria-label="Más opciones">⋯</button>
         </div>
       </div>
     </div>`;
@@ -2672,6 +2686,16 @@ $('#nav').addEventListener('click', (e) => {
  *
  * El renglón es lo único que se mueve. El cajón está quieto debajo y lo tapa
  * el recorte del contenedor mientras el renglón está en su lugar.
+ *
+ * El gesto se escucha con los eventos del DEDO (touchstart/touchmove) y no con
+ * los de puntero. Los de puntero andaban en el computador pero no en el
+ * iPhone: adentro de una lista que se desplaza, Safari se queda con el gesto
+ * apenas el dedo se mueve y le manda `pointercancel` a la página, así que el
+ * renglón nunca alcanzaba a correrse. Con touchmove —y escuchándolo en modo no
+ * pasivo— se le puede decir al navegador «este de acá es mío» en el momento
+ * justo en que se sabe que el dedo va horizontal.
+ *
+ * El ratón sigue por eventos de puntero, que para eso sí sirven.
  */
 let deslizando = null;
 // Un arrastre no puede además abrir la cotización al levantar el dedo.
@@ -2685,46 +2709,51 @@ function cerrarCajones(menos = null) {
   });
 }
 
-$('#contenido').addEventListener('pointerdown', (e) => {
-  if (e.button > 0) return;                       // botón secundario del mouse
+/** Arranca el seguimiento. Devuelve false si ahí no había nada que deslizar. */
+function empezarDeslizado(objetivo, x, y) {
   // Un toque sobre el cajón abierto es para sus botones: si acá se cerrara,
   // el renglón volvería encima justo antes del clic y se lo llevaría puesto.
-  if (e.target.closest('.cot-cajon')) return;
+  if (objetivo.closest?.('.cot-cajon')) { deslizando = null; return false; }
 
-  const fila = e.target.closest('.cot-fila');
-  if (!fila) { cerrarCajones(); return; }
+  const fila = objetivo.closest?.('.cot-fila');
+  if (!fila) { deslizando = null; cerrarCajones(); return false; }
 
   const item = fila.parentElement;
   deslizando = {
-    fila, item, puntero: e.pointerId, x0: e.clientX, y0: e.clientY,
+    fila, item, x0: x, y0: y,
     base: item.classList.contains('abierto') ? -anchoCajon(item) : 0,
-    decidido: false,
+    decidido: false, abandonado: false,
   };
-});
+  return true;
+}
 
-$('#contenido').addEventListener('pointermove', (e) => {
-  if (!deslizando || e.pointerId !== deslizando.puntero) return;
-  const dx = e.clientX - deslizando.x0;
-  const dy = e.clientY - deslizando.y0;
+/**
+ * Sigue el dedo. Devuelve true cuando el gesto ya se dio por horizontal, que es
+ * la señal para que quien llama frene lo que iba a hacer el navegador.
+ */
+function moverDeslizado(x, y) {
+  if (!deslizando || deslizando.abandonado) return false;
+  const dx = x - deslizando.x0;
+  const dy = y - deslizando.y0;
 
   // Hasta no saber para dónde va el dedo no se mueve nada: si va vertical, es
-  // que está recorriendo la lista y acá no pasó nada.
+  // que está recorriendo la lista y acá no pasó nada. Y una vez que se decidió
+  // que era vertical no se vuelve a mirar, para no arrancar a la mitad.
   if (!deslizando.decidido) {
-    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-    if (Math.abs(dx) <= Math.abs(dy)) { deslizando = null; return; }
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return false;
+    if (Math.abs(dx) <= Math.abs(dy)) { deslizando.abandonado = true; return false; }
     deslizando.decidido = true;
     deslizando.item.classList.add('arrastrando');
     cerrarCajones(deslizando.item);
-    try { deslizando.fila.setPointerCapture(e.pointerId); } catch { /* sin captura igual anda */ }
   }
 
   const tope = anchoCajon(deslizando.item);
-  const x = Math.max(-tope, Math.min(0, deslizando.base + dx));
-  deslizando.fila.style.transform = `translateX(${x}px)`;
-});
+  deslizando.fila.style.transform = `translateX(${Math.max(-tope, Math.min(0, deslizando.base + dx))}px)`;
+  return true;
+}
 
-function soltarDeslizado(e) {
-  if (!deslizando || e.pointerId !== deslizando.puntero) return;
+function soltarDeslizado(x) {
+  if (!deslizando) return;
   const { fila, item, base, x0, decidido } = deslizando;
   deslizando = null;
 
@@ -2733,27 +2762,75 @@ function soltarDeslizado(e) {
   if (!decidido) return;
 
   const tope = anchoCajon(item);
-  const x = Math.max(-tope, Math.min(0, base + (e.clientX - x0)));
+  const donde = Math.max(-tope, Math.min(0, base + (x - x0)));
   // Pasada la tercera parte queda abierto; antes de eso se devuelve solo.
-  item.classList.toggle('abierto', x < -tope / 3);
+  item.classList.toggle('abierto', donde < -tope / 3);
 
   recienArrastrado = item;
   setTimeout(() => { if (recienArrastrado === item) recienArrastrado = null; }, 400);
 }
 
-$('#contenido').addEventListener('pointerup', soltarDeslizado);
-$('#contenido').addEventListener('pointercancel', soltarDeslizado);
+/* Con el dedo */
+const contenido = $('#contenido');
+
+contenido.addEventListener('touchstart', (e) => {
+  // Con dos dedos encima no es un deslizado: es un zoom, y no es nuestro.
+  if (e.touches.length !== 1) { deslizando = null; return; }
+  const t = e.touches[0];
+  empezarDeslizado(e.target, t.clientX, t.clientY);
+}, { passive: true });
+
+contenido.addEventListener('touchmove', (e) => {
+  if (!deslizando || e.touches.length !== 1) return;
+  const t = e.touches[0];
+  // Si es nuestro, se le corta el paso al navegador para que no aproveche el
+  // mismo movimiento para desplazar la lista. Por eso este oyente NO es pasivo.
+  if (moverDeslizado(t.clientX, t.clientY) && e.cancelable) e.preventDefault();
+}, { passive: false });
+
+contenido.addEventListener('touchend', (e) => {
+  soltarDeslizado(e.changedTouches[0]?.clientX ?? 0);
+}, { passive: true });
+
+contenido.addEventListener('touchcancel', () => {
+  // Una llamada entrante, el centro de control… el gesto se corta: se devuelve
+  // el renglón a su sitio sin abrir nada.
+  if (deslizando) { deslizando.fila.style.transform = ''; deslizando.item.classList.remove('arrastrando'); }
+  deslizando = null;
+}, { passive: true });
+
+/* Con el ratón */
+contenido.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'touch') return;   // el dedo va por el camino de arriba
+  if (e.button > 0) return;                // botón secundario
+  if (empezarDeslizado(e.target, e.clientX, e.clientY)) deslizando.puntero = e.pointerId;
+});
+
+contenido.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'touch' || !deslizando || e.pointerId !== deslizando.puntero) return;
+  const arranco = !deslizando.decidido;
+  if (moverDeslizado(e.clientX, e.clientY) && arranco) {
+    try { deslizando.fila.setPointerCapture(e.pointerId); } catch { /* sin captura igual anda */ }
+  }
+});
+
+const soltarConRaton = (e) => {
+  if (e.pointerType === 'touch' || !deslizando || e.pointerId !== deslizando.puntero) return;
+  soltarDeslizado(e.clientX);
+};
+contenido.addEventListener('pointerup', soltarConRaton);
+contenido.addEventListener('pointercancel', soltarConRaton);
 
 // Con el tabulador se llega a los botones del cajón aunque esté cerrado: si
 // alguno recibe el foco, se abre, para que se vea dónde está parado.
-$('#contenido').addEventListener('focusin', (e) => {
+contenido.addEventListener('focusin', (e) => {
   const item = e.target.closest('.cajon-btn') ? e.target.closest('.cot-item') : null;
   cerrarCajones(item);
   if (item) item.classList.add('abierto');
 });
 
 // Sin dedo: las flechas abren y cierran el cajón del renglón que tenga el foco.
-$('#contenido').addEventListener('keydown', (e) => {
+contenido.addEventListener('keydown', (e) => {
   const fila = e.target.closest?.('.cot-fila');
   if (!fila) return;
   if (e.key === 'ArrowLeft') { cerrarCajones(fila.parentElement); fila.parentElement.classList.add('abierto'); }
@@ -2763,7 +2840,7 @@ $('#contenido').addEventListener('keydown', (e) => {
 });
 
 // Al recorrer la lista se cierra lo que haya quedado abierto.
-$('#contenido').addEventListener('scroll', () => { if (!deslizando) cerrarCajones(); }, { passive: true });
+contenido.addEventListener('scroll', () => { if (!deslizando) cerrarCajones(); }, { passive: true });
 
 /**
  * Pregunta y elimina una cotización, diciendo antes qué se lleva puesto.
@@ -2844,6 +2921,16 @@ $('#contenido').addEventListener('click', async (e) => {
     } catch (err) {
       avisar(err.message, true);
     }
+    return;
+  }
+
+  // Los tres puntos abren el mismo cajón que el deslizado, para el que no
+  // conoce el gesto o el teléfono no se lo toma.
+  if (accion === 'mas-cot') {
+    const item = boton.closest('.cot-item');
+    const estaba = item.classList.contains('abierto');
+    cerrarCajones();
+    item.classList.toggle('abierto', !estaba);
     return;
   }
 
@@ -4059,6 +4146,8 @@ window.addEventListener('resize', () => { if (!esCelular()) cerrarHoja(); });
     const s = await api('/estado');
     // La versión de la interfaz al lado del modelo: si después de actualizar
     // el servidor este número no cambió, la pantalla se quedó con la anterior.
+    VERSION.interfaz = s.version || '';
+    VERSION.modelo = s.modelo || '';
     $('#estado-modelo').textContent = `modelo · ${s.modelo}${s.version ? `\nversión · ${s.version}` : ''}`;
     $('#estado-modelo').style.whiteSpace = 'pre-line';
 
