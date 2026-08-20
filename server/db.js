@@ -442,7 +442,20 @@ function selectConCliente(tabla) {
               - COALESCE((SELECT SUM(a.monto) FROM abonos a
                             JOIN cotizaciones q ON q.id = a.cotizacion_id
                            WHERE q.cliente_id = t.id AND q.estado <> 'rechazada'), 0) AS saldo,
-              (SELECT COUNT(*) FROM cotizaciones q WHERE q.cliente_id = t.id) AS n_cotizaciones
+              (SELECT COUNT(*) FROM cotizaciones q WHERE q.cliente_id = t.id) AS n_cotizaciones,
+              -- Distinto del saldo de arriba: ahí es lo que falta de TODAS las
+              -- cotizaciones en negociación, aprobadas o no. Esto es lo que el
+              -- cliente ya se comprometió a pagar —los cobros sueltos, más el
+              -- saldo de sus cotizaciones APROBADAS—, igual que en Cobros. No
+              -- se duplica: una vez aprobada, esa plata sale de "saldo" en el
+              -- sentido de "todavía en negociación" y entra acá.
+              COALESCE((SELECT SUM(k.monto) FROM cobros k
+                         WHERE k.cliente_id = t.id AND k.estado = 'pendiente'), 0)
+              + COALESCE((SELECT SUM(q.monto - (SELECT COALESCE(SUM(a.monto), 0) FROM abonos a WHERE a.cotizacion_id = q.id))
+                           FROM cotizaciones q
+                          WHERE q.cliente_id = t.id AND q.estado = 'aprobada'
+                            AND q.monto > (SELECT COALESCE(SUM(a.monto), 0) FROM abonos a WHERE a.cotizacion_id = q.id)), 0)
+              AS por_cobrar
             FROM clientes t`;
   }
   if (tabla === 'productos') return `SELECT t.*, ${SUMA_STOCK} AS stock FROM productos t`;

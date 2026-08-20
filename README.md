@@ -375,6 +375,14 @@ saldo que quedaría vieja apenas se registre un abono. Se calcula en el momento,
 así que un abono sobre la cotización baja el «por cobrar» enseguida, y cuando
 queda saldada desaparece sola de la lista.
 
+Esta misma cuenta —cobros sueltos más el saldo de las cotizaciones
+aprobadas— aparece también en la **lista de clientes**, al lado de total
+cotizado, total abonado y saldo total, y en cada renglón de esa lista. Antes se
+calculaba distinto en cada pantalla y sólo miraba los cobros sueltos: una
+cotización aprobada sin un cobro registrado aparte no contaba como "por
+cobrar" en ningún lado salvo en Cobros. Ahora es un solo cálculo, en el
+servidor, y las pantallas lo usan igual.
+
 ## Ficha del cliente
 
 Al tocar un cliente en la lista se abre su ficha, que reúne todo lo suyo en una
@@ -390,6 +398,10 @@ sola pantalla:
 
 La ficha de la cotización funciona igual: cifras, barra de avance, lista de
 abonos, formulario para agregar uno más y botón de editar.
+
+En la **lista de clientes**, cada renglón trae además cuántas cotizaciones
+tiene ese cliente —el mismo número que dice "Cotizaciones (N)" adentro de la
+ficha—, para no tener que entrar a averiguarlo.
 
 ## Catálogo de productos
 
@@ -727,6 +739,16 @@ pantalla. El servidor no podría sin arrastrar una librería de imágenes entera
 El generador (`server/pdf.js`) está escrito a mano, sin dependencias: las
 librerías de PDF habituales manejan un navegador entero por dentro y en un
 hosting compartido se quedan sin memoria.
+
+### Ver el PDF sin entrar a la cotización
+
+En la **lista de cotizaciones**, el ícono 📄 al lado de "Cerrar" abre la oferta
+en PDF sin tener que entrar a la ficha. La mayoría de las cotizaciones no
+tienen un PDF guardado —se arman con renglones, no se suben ya hechas—, así
+que el ícono la arma al vuelo con lo que tiene hoy y la muestra en el mismo
+visor de siempre. No la guarda ni la sube a ningún lado: es sólo para mirar.
+Si la cotización no tiene renglones tampoco hay ícono, porque no hay nada que
+mostrar todavía.
 
 ## Agendamientos que llegan de la web
 

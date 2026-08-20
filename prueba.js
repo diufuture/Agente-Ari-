@@ -524,6 +524,26 @@ comprobar('suma los abonos de todas', d.abonado, 500000);
 comprobar('y el saldo es la resta', d.saldo, 4500000);
 comprobar('cuenta cuántas tiene, rechazadas incluidas', d.n_cotizaciones, 3);
 
+// "Por cobrar" no es lo mismo que el saldo: el saldo cuenta TODO lo que sigue
+// en negociación (la Wi-Fi, que está pendiente); por cobrar es lo que el
+// cliente ya se comprometió a pagar —cobros sueltos, más el saldo de las
+// cotizaciones YA APROBADAS—, la CCTV en este caso. Antes esto se calculaba
+// aparte en cada pantalla y sólo miraba los cobros sueltos, así que una
+// cotización aprobada sin cobro registrado no aparecía como "por cobrar" en
+// ningún lado salvo en la pantalla de Cobros: la CCTV, aprobada y sin abonos,
+// ya cuenta acá aunque nadie haya registrado un cobro sobre ella.
+comprobar('la aprobada sin abonos ya cuenta como por cobrar, sin necesitar un cobro aparte',
+  conCotizaciones('Hotel Dammai').por_cobrar, 3000000);
+comprobar('la Wi-Fi, pendiente, no suma acá aunque sí sume en el saldo', d.saldo, 4500000);
+
+db.insertar('cobros', { cliente_id: nuevo.id, concepto: 'Anticipo', monto: 200000, estado: 'pendiente' });
+comprobar('un cobro suelto se suma al lado de la aprobada',
+  conCotizaciones('Hotel Dammai').por_cobrar, 3000000 + 200000);
+
+db.insertar('abonos', { cotizacion_id: db.consultar('cotizaciones', { cliente_id: nuevo.id, texto: 'CCTV' })[0].id, monto: 1000000 });
+comprobar('un abono sobre la aprobada baja el por cobrar al toque',
+  conCotizaciones('Hotel Dammai').por_cobrar, 2000000 + 200000);
+
 /* 8b · Cómo Excel ancla las fotos ----------------------------------- */
 // Cuatro switches, cuatro maneras de pegar la foto en la misma hoja. Es
 // exactamente lo que pasa cuando alguien arma la lista a mano.

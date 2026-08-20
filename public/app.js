@@ -268,10 +268,22 @@ async function guardarPdfDeCotizacion(cot) {
   return { bajado: true };
 }
 
-function abrirVisorPdf(url, titulo = 'Documento') {
+// Cuando el visor abre un PDF armado al vuelo (no uno guardado en el
+// servidor), la dirección es un blob: propio de esta pestaña. Hay que
+// soltarlo al cerrar el visor, o la memoria se va quedando con cada PDF que
+// se miró y nunca se liberó.
+let urlDeVisorPropia = null;
+
+function abrirVisorPdf(url, titulo = 'Documento', { propia = false } = {}) {
+  if (urlDeVisorPropia) URL.revokeObjectURL(urlDeVisorPropia);
+  urlDeVisorPropia = propia ? url : null;
+
   const visor = $('#visor-pdf');
   $('#visor-titulo').textContent = titulo;
-  $('#visor-aparte').href = url;
+  // "Abrir aparte" de un PDF armado al vuelo no tiene a dónde apuntar una vez
+  // cerrado el visor —el blob se suelta—, así que ese botón no aplica acá.
+  $('#visor-aparte').hidden = propia;
+  $('#visor-aparte').href = propia ? '#' : url;
   $('#visor-marco').src = url;
   visor.hidden = false;
   document.body.classList.add('con-visor');
@@ -289,6 +301,10 @@ function cerrarVisorPdf({ desdeHistorial = false } = {}) {
   // puede seguir sonando si el PDF trae algo incrustado.
   $('#visor-marco').src = 'about:blank';
   document.body.classList.remove('con-visor');
+  if (urlDeVisorPropia) {
+    URL.revokeObjectURL(urlDeVisorPropia);
+    urlDeVisorPropia = null;
+  }
   if (desdeHistorial) {
     visorEnHistorial = false;
   } else if (visorEnHistorial) {
@@ -375,6 +391,7 @@ const ENCABEZADOS = {
   precio_constructor: 'P. constructor', proveedor: 'Proveedor', stock: 'Stock',
   cantidad: 'Cantidad', motivo: 'Motivo', producto: 'Producto',
   cotizado: 'Cotizado', notas: 'Detalle', foto: '', tipo: 'Tipo',
+  n_cotizaciones: 'Ofertas', por_cobrar: 'Por cobrar',
 };
 
 /** Columnas de plata: van alineadas a la derecha, con los números en columna. */
@@ -440,6 +457,16 @@ function celda(columna, fila) {
       return `<span style="color:${saldado ? 'var(--verde)' : 'var(--ambar)'};font-weight:600">${
         saldado ? 'saldada' : fmtDinero(v, fila.moneda)}</span>`;
     }
+    // Cuántas ofertas tiene un cliente, a la vista en la lista: antes había
+    // que abrir el cajón y entrar a "Ofertas" para enterarse de un número.
+    case 'n_cotizaciones':
+      return v
+        ? `<span class="cont-ofertas">${escapar(v)}</span>`
+        : '<span style="color:var(--texto-3)">—</span>';
+    case 'por_cobrar':
+      return Number(v) > 0
+        ? `<span style="color:var(--ambar);font-weight:600">${fmtDinero(v, fila.moneda)}</span>`
+        : '<span style="color:var(--texto-3)">—</span>';
     case 'fecha':
       return escapar(fmtFecha(v));
     case 'estado':
@@ -475,10 +502,19 @@ function accionesDeFila(entidad, f) {
 
   // La oferta en PDF, a un toque desde la lista: estando con el cliente
   // enfrente no se puede andar entrando a la ficha para llegar al archivo.
+  // La mayoría de las cotizaciones no tienen un PDF guardado —se arman con
+  // renglones, no se suben ya hechas—, así que sin este segundo camino la
+  // lista casi nunca mostraba nada: había que entrar a cada una para verla.
   if (entidad === 'cotizaciones' && f.archivo) {
     acciones.push({
       accion: 'ver-pdf', rotulo: '📄 PDF', corto: 'PDF', icono: ICONO_DOC, tono: 'editar',
       clase: 'pdf', href: f.archivo, titulo: 'Abrir la oferta en PDF',
+      datos: { titulo: f.titulo || 'Cotización' },
+    });
+  } else if (entidad === 'cotizaciones' && Number(f.n_items) > 0) {
+    acciones.push({
+      accion: 'ver-pdf-cot', rotulo: '📄 PDF', corto: 'PDF', icono: ICONO_DOC, tono: 'editar',
+      clase: 'pdf', titulo: 'Ver la oferta en PDF',
       datos: { titulo: f.titulo || 'Cotización' },
     });
   }
@@ -573,7 +609,8 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
 
     const acciones = `<td class="num acciones">
       <div class="acciones-fila">${
-        (compacta ? lista.filter((a) => a.accion === 'ver-pdf') : lista).map((a) => botonDeAccion(a)).join('')}</div>
+        (compacta ? lista.filter((a) => a.accion === 'ver-pdf' || a.accion === 'ver-pdf-cot') : lista)
+          .map((a) => botonDeAccion(a)).join('')}</div>
       ${!compacta && lista.length
         ? `<button class="mini mas solo-angosto" data-accion="mas-opciones" aria-label="Más opciones">⋯</button>`
         : ''}
@@ -664,27 +701,41 @@ function vistaAgenda(citas) {
       return `<div class="cita-ficha editando">${formularioEdicion('citas', c)}</div>`;
     }
 
-    return `<div class="cita-ficha${esHoy ? ' es-hoy' : ''}">
-      <div class="cita-cuando">
-        <strong>${escapar(esHoy ? 'Hoy' : fmtFecha(dia))}</strong>
-        <span>${escapar(hora)}</span>
-      </div>
-      <div class="cita-cuerpo">
-        <h3>${escapar(c.titulo)}</h3>
-        <p class="cita-quien">${c.cliente ? `<span class="es-cliente">${escapar(c.cliente)}</span>` : ''}${
-          c.cliente && c.lugar ? ' · ' : ''}${escapar(c.lugar || '')}${
-          !c.cliente && !c.lugar ? 'Sin cliente ni lugar' : ''}</p>
-        ${c.notas
-          ? `<div class="cita-detalle">${escapar(c.notas)}</div>`
-          : '<p class="cita-sin-detalle">Sin detalle. Decile a Ari «agregale a esta reunión que…» o tocá Editar.</p>'}
-      </div>
-      <div class="cita-acciones">
-        <span class="pastilla ${escapar(c.estado)}">${escapar(c.estado)}</span>
-        <button class="mini destacado" data-accion="editar-cita" data-id="${c.id}">Editar</button>
-        ${c.estado === 'pendiente'
-          ? `<button class="mini" data-accion="estado" data-entidad="citas" data-id="${c.id}" data-estado="completada">Listo</button>`
-          : ''}
-        <button class="mini peligro" data-accion="borrar" data-entidad="citas" data-id="${c.id}">Borrar</button>
+    // Editar y Borrar vivían siempre a la vista, dos botones más entre las
+    // citas del día. Ahora quedan en el mismo cajón que el resto de las
+    // listas: se llega deslizando la ficha hacia la izquierda, o con ⋯.
+    const acciones = [
+      { accion: 'editar-cita', corto: 'Editar', icono: ICONO_LAPIZ, tono: 'editar', id: c.id,
+        titulo: 'Editar esta cita' },
+    ];
+    if (c.estado === 'pendiente') {
+      acciones.push({ accion: 'estado', corto: 'Listo', icono: ICONO_CHECK, tono: 'ok', id: c.id,
+        titulo: 'Marcarla como hecha', datos: { entidad: 'citas', estado: 'completada' } });
+    }
+    acciones.push({ accion: 'borrar', corto: 'Borrar', icono: ICONO_CANECA, tono: 'borrar', id: c.id,
+      titulo: 'Borrar esta cita', datos: { entidad: 'citas' } });
+
+    return `<div class="cita-item deslizable" style="--cajon:${anchoDeCajon(acciones)}px">
+      ${cajonDeAcciones(acciones)}
+      <div class="cita-ficha${esHoy ? ' es-hoy' : ''}">
+        <div class="cita-cuando">
+          <strong>${escapar(esHoy ? 'Hoy' : fmtFecha(dia))}</strong>
+          <span>${escapar(hora)}</span>
+        </div>
+        <div class="cita-cuerpo">
+          <h3>${escapar(c.titulo)}</h3>
+          <p class="cita-quien">${c.cliente ? `<span class="es-cliente">${escapar(c.cliente)}</span>` : ''}${
+            c.cliente && c.lugar ? ' · ' : ''}${escapar(c.lugar || '')}${
+            !c.cliente && !c.lugar ? 'Sin cliente ni lugar' : ''}</p>
+          ${c.notas
+            ? `<div class="cita-detalle">${escapar(c.notas)}</div>`
+            : '<p class="cita-sin-detalle">Sin detalle. Decile a Ari «agregale a esta reunión que…» o deslizá para editar.</p>'}
+        </div>
+        <div class="cita-acciones">
+          <span class="pastilla ${escapar(c.estado)}">${escapar(c.estado)}</span>
+          <button class="mini mas" data-accion="mas-opciones" title="Editar o borrar esta cita"
+                  aria-label="Más opciones">⋯</button>
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -1105,7 +1156,10 @@ function detalleCliente(c, { cotizaciones, abonos, cobros, citas, notas }) {
   const cotizado = suma(cotizaciones, 'monto');
   const abonado = suma(abonos, 'monto');
   const saldo = cotizaciones.reduce((t, q) => t + Math.max(0, Number(q.saldo) || 0), 0);
-  const porCobrar = suma(cobros.filter((x) => x.estado === 'pendiente'), 'monto');
+  // No se suma acá: "por cobrar" no es sólo los cobros sueltos de este
+  // cliente, también lleva el saldo de sus cotizaciones aprobadas —igual que
+  // en la pantalla de Cobros—, y eso ya viene calculado desde el servidor.
+  const porCobrar = Number(c.por_cobrar) || 0;
 
   const contacto = [
     c.empresa && `<span>${escapar(c.empresa)}</span>`,
@@ -1879,7 +1933,7 @@ async function pintar() {
 
   const CONSULTAS = {
     agenda: { entidad: 'citas', filtros: 'rango=proximos', columnas: ['inicio', 'titulo', 'cliente', 'lugar', 'notas', 'estado'] },
-    clientes: { entidad: 'clientes', filtros: '', columnas: ['nombre', 'telefono', 'email', 'cotizado', 'abonado', 'saldo'] },
+    clientes: { entidad: 'clientes', filtros: '', columnas: ['nombre', 'telefono', 'email', 'n_cotizaciones', 'cotizado', 'abonado', 'saldo'] },
     cotizaciones: { entidad: 'cotizaciones', filtros: '', columnas: ['creado_en', 'titulo', 'cliente', 'monto', 'abonado', 'saldo', 'estado'] },
     cobros: { entidad: 'cobros', filtros: '', columnas: ['vence_en', 'concepto', 'cliente', 'monto', 'estado'] },
     recordatorios: { entidad: 'recordatorios', filtros: '', columnas: ['vence_en', 'texto', 'cliente', 'prioridad', 'estado'] },
@@ -2019,7 +2073,14 @@ function barraClientes(filas) {
       ${metrica(fmtDinero(suma('cotizado')), 'Total cotizado', 'dinero')}
       ${metrica(fmtDinero(suma('abonado')), 'Total abonado', 'dinero')}
       ${metrica(fmtDinero(suma('saldo')), 'Saldo total', 'dinero')}
-    </div>` : ''}`;
+      ${metrica(fmtDinero(suma('por_cobrar')), 'Por cobrar', 'dinero')}
+    </div>
+    <p class="ayuda" style="margin:2px 0 16px">
+      <b>Saldo total</b> es lo que falta de las cotizaciones —el precio menos lo
+      abonado—. <b>Por cobrar</b> es lo registrado aparte en Cobros, que suele
+      salir de una oferta ya aprobada: por eso los dos números no tienen por qué
+      coincidir.
+    </p>` : ''}`;
 }
 
 /** Lo que está por cobrar, venga de un cobro suelto o de una oferta aprobada. */
@@ -2142,8 +2203,11 @@ function listaCotizaciones(filas) {
                   title="Tocá para ${aprobada ? 'volverla a pendiente' : 'marcarla aprobada'}">${escapar(q.estado)} ⇄</button>
           ${q.archivo
             ? `<a class="mini pdf" href="${escapar(q.archivo)}" target="_blank" rel="noopener"
-                  data-titulo="${escapar(q.titulo)}">📄</a>`
-            : ''}
+                  data-titulo="${escapar(q.titulo)}" title="Abrir la oferta en PDF">📄</a>`
+            : Number(q.n_items) > 0
+              ? `<button class="mini pdf" data-accion="ver-pdf-cot" data-id="${q.id}"
+                    data-titulo="${escapar(q.titulo)}" title="Ver la oferta en PDF">📄</button>`
+              : ''}
           ${q.archivada
             ? `<button class="mini" data-accion="reabrir-cot" data-id="${q.id}">Reabrir</button>`
             : `<button class="mini${saldado && aprobada ? ' destacado' : ''}" data-accion="cerrar-cot" data-id="${q.id}"
@@ -3036,6 +3100,10 @@ $('#contenido').addEventListener('click', async (e) => {
 
   if (accion === 'editar' || accion === 'cancelar-edicion') {
     estado.editando = accion === 'editar';
+    // El formulario de una cita se abre por cita, no con el mismo interruptor
+    // que el resto de las fichas: sin esto, Cancelar en la agenda no cerraba
+    // nada y el formulario se quedaba ahí.
+    if (accion === 'cancelar-edicion') estado.citaEditando = null;
     await pintar();
     return;
   }
@@ -3083,6 +3151,26 @@ $('#contenido').addEventListener('click', async (e) => {
       await pintar();
     } catch (err) {
       avisar(err.message, true);
+    }
+    return;
+  }
+
+  // Ver la oferta sin entrar a la cotización: la arma al vuelo con lo que
+  // tiene hoy y la abre en el visor. No la guarda ni la manda a ningún
+  // lado —para eso está "Guardar PDF" adentro de la ficha—, sólo mira.
+  if (accion === 'ver-pdf-cot') {
+    const original = boton.innerHTML;
+    boton.disabled = true;
+    boton.innerHTML = '…';
+    try {
+      const archivo = await pdfDeCotizacion({ id: Number(id) });
+      const url = URL.createObjectURL(archivo);
+      abrirVisorPdf(url, boton.dataset.titulo || 'Cotización', { propia: true });
+    } catch (err) {
+      avisar(err.message, true);
+    } finally {
+      boton.disabled = false;
+      boton.innerHTML = original;
     }
     return;
   }

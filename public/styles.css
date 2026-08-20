@@ -1248,10 +1248,24 @@ td.vencido { color: var(--alerta); font-weight: 600; }
 
 /* ─────────── Agenda: cada cita, una ficha ─────────── */
 
+/* Cada cita va sobre el mismo cajón deslizable que cotizaciones, clientes y
+   productos: la ficha entera es lo que se mueve, y el cajón entra desde su
+   borde derecho. margin-bottom se corrió del todo a este envoltorio, porque
+   overflow:hidden en la ficha se comería el margen si se quedara adentro. */
+.cita-item {
+  position: relative; overflow: hidden; margin-bottom: 12px;
+}
+.cita-item > .cita-ficha {
+  transform: translateX(var(--x));
+  transition: transform .18s ease;
+  touch-action: pan-y;
+}
+.cita-item.arrastrando > .cita-ficha { transition: none; }
+
 .cita-ficha {
   display: flex; gap: 18px; align-items: flex-start;
   background: var(--panel); border: 1px solid var(--borde);
-  border-radius: var(--radio); padding: 16px 18px; margin-bottom: 12px;
+  border-radius: var(--radio); padding: 16px 18px; margin-bottom: 0;
 }
 .cita-ficha.es-hoy { border-color: color-mix(in srgb, var(--acento) 45%, var(--borde)); }
 .cita-ficha.editando { display: block; padding: 0; }
@@ -1285,7 +1299,7 @@ td.vencido { color: var(--alerta); font-weight: 600; }
   .cita-ficha { flex-wrap: wrap; gap: 12px; }
   .cita-cuando { width: auto; display: flex; gap: 8px; align-items: baseline; padding: 6px 12px; }
   .cita-cuerpo { flex-basis: 100%; order: 3; }
-  .cita-acciones { flex-direction: row; flex-wrap: wrap; margin-left: auto; }
+  .cita-acciones { flex-direction: row; flex-wrap: wrap; align-items: center; margin-left: auto; }
 }
 .chip.agrupar { border-style: dashed; color: var(--ambar); border-color: color-mix(in srgb, var(--ambar) 45%, var(--borde)); }
 .chip.agrupar:hover { border-color: var(--ambar); color: var(--ambar); }
