@@ -1911,6 +1911,7 @@ async function pintar() {
       const barra = `<div class="barra-productos">
         <input type="search" id="buscar-productos" placeholder="Buscar por referencia, descripción, tipo…" value="${escapar(estado.buscarProductos)}" />
         <button class="mini" data-accion="importar-lista">Importar lista de precios</button>
+        <button class="mini" data-accion="importar-fichas">Importar fichas técnicas</button>
         <button class="mini" data-accion="ver-listas">Listas en línea</button>
         <button class="mini" data-accion="alternar-nuevo-producto">${estado.nuevoProducto ? 'Cancelar' : '+ Agregar producto'}</button>
         ${descontinuados ? `<button class="mini${estado.verDescontinuados ? ' destacado' : ''}" data-accion="alternar-descontinuados">${
@@ -3475,6 +3476,10 @@ $('#contenido').addEventListener('click', async (e) => {
     $('#input-excel').click();
     return;
   }
+  if (accion === 'importar-fichas') {
+    $('#input-fichas').click();
+    return;
+  }
   if (accion === 'cancelar-importacion') {
     estado.importacion = null;
     await pintar();
@@ -4199,6 +4204,33 @@ $('#input-ficha').addEventListener('change', async (e) => {
       body: { archivo_base64: await aDataUrl(archivo), nombre: archivo.name },
     });
     avisar('Ficha técnica cargada ✓');
+    await pintar();
+  } catch (err) {
+    avisar(err.message, true);
+  }
+});
+
+// Muchas fichas de una: cada archivo se empareja con su producto por el
+// nombre —sin la extensión—, que tiene que ser la referencia tal como está
+// en el catálogo. Sirve para cargar de una vez lo que se armó por fuera.
+$('#input-fichas').addEventListener('change', async (e) => {
+  const archivos = [...e.target.files];
+  e.target.value = '';
+  if (!archivos.length) return;
+
+  avisar(`Subiendo ${archivos.length} ficha(s)…`);
+  try {
+    const cuerpos = await Promise.all(archivos.map(async (archivo) => ({
+      referencia: archivo.name.replace(/\.pdf$/i, ''),
+      nombre: archivo.name,
+      archivo_base64: await aDataUrl(archivo),
+    })));
+    const r = await api('/productos/fichas/lote', { method: 'POST', body: { archivos: cuerpos } });
+    avisar(r.sinCoincidencia.length
+      ? `${r.adjuntadas.length} pegada(s) ✓ · ${r.sinCoincidencia.length} sin producto que coincida: ${
+          r.sinCoincidencia.join(', ')}`
+      : `${r.adjuntadas.length} ficha(s) técnica(s) pegada(s) ✓`,
+      Boolean(r.sinCoincidencia.length));
     await pintar();
   } catch (err) {
     avisar(err.message, true);

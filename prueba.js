@@ -1126,6 +1126,30 @@ comprobar('los ajustes cambian sin esperar el vencimiento de la caché',
 comprobar('y de verdad cambiaron (no es que ya tuvieran ese valor)',
   empresaAntes === 'Otro nombre de prueba', false);
 
+/* 9 · Fichas técnicas ------------------------------------------------ */
+// No se prueba el contenido —eso lo revisa una persona—, sino que el
+// generador no se caiga con ninguna de las fichas reales del catálogo: un
+// campo mal escrito ahí rompería la importación en lote para todo el mundo.
+{
+  const { pdfDeFichaTecnica } = await import('./server/ficha-tecnica-pdf.js');
+  const { FICHAS } = await import('./server/fichas-contenido.js');
+  const referencias = Object.keys(FICHAS);
+  comprobar('hay fichas técnicas de contenido cargadas', referencias.length > 0, true);
+
+  let todasArmaron = true;
+  let todasEmpiezanComoPdf = true;
+  for (const [referencia, datos] of Object.entries(FICHAS)) {
+    try {
+      const pdf = pdfDeFichaTecnica({ ...datos, referencia: datos.referencia ?? referencia });
+      if (pdf.subarray(0, 5).toString('latin1') !== '%PDF-') todasEmpiezanComoPdf = false;
+    } catch {
+      todasArmaron = false;
+    }
+  }
+  comprobar('todas las fichas del catálogo arman su PDF sin romperse', todasArmaron, true);
+  comprobar('y lo que arman es de verdad un PDF', todasEmpiezanComoPdf, true);
+}
+
 /* ------------------------------------------------------------------ */
 
 db.db.close();

@@ -838,6 +838,61 @@ async function api(req, res, url) {
     }
   }
 
+  // POST /api/productos/fichas/lote -> pega muchas fichas técnicas de una,
+  // emparejando cada una con su producto por la referencia. Cargarlas una por
+  // una —lo que ya existía— no alcanza cuando son decenas: acá se manda todo
+  // el lote junto y se dice cuáles quedaron pegadas y cuáles no encontraron
+  // con qué producto emparejar, para poder corregir el nombre y reintentar
+  // sólo esas.
+  if (recurso === 'productos' && partes[1] === 'fichas' && partes[2] === 'lote' && req.method === 'POST') {
+    let cuerpo;
+    try {
+      cuerpo = await leerJson(req, 200_000_000);
+    } catch {
+      return json(res, 413, { error: 'El lote pesa demasiado.' });
+    }
+    const archivos = Array.isArray(cuerpo.archivos) ? cuerpo.archivos : [];
+    if (!archivos.length) return json(res, 400, { error: 'No llegó ningún archivo.' });
+
+    // Comparar "CLICK ST1" contra "click-st1.pdf" a las bravas no calza: se
+    // ignoran espacios, guiones y mayúsculas de los dos lados antes de mirar
+    // si son la misma referencia.
+    const normalizar = (t) => String(t ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const productos = db.consultar('productos', { limite: 5000, incluir_inactivos: true });
+    const porReferencia = new Map();
+    for (const p of productos) {
+      if (p.referencia) porReferencia.set(normalizar(p.referencia), p);
+    }
+
+    const adjuntadas = [];
+    const sinCoincidencia = [];
+    for (const item of archivos) {
+      const producto = porReferencia.get(normalizar(item.referencia));
+      if (!producto) { sinCoincidencia.push(item.referencia); continue; }
+
+      let buffer;
+      try {
+        buffer = decodificarBase64(item.archivo_base64);
+      } catch {
+        sinCoincidencia.push(item.referencia);
+        continue;
+      }
+      if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-' || buffer.length > PESO_MAXIMO_PDF) {
+        sinCoincidencia.push(item.referencia);
+        continue;
+      }
+
+      writeFileSync(join(CARPETA_FICHAS, `${producto.id}.pdf`), buffer);
+      db.actualizar('productos', producto.id, {
+        ficha: `/uploads/fichas/${producto.id}.pdf?v=${Date.now()}`,
+        ficha_nombre: String(item.nombre || '').slice(0, 120) || 'ficha.pdf',
+      });
+      adjuntadas.push({ id: producto.id, referencia: producto.referencia, descripcion: producto.descripcion });
+    }
+
+    return json(res, 200, { adjuntadas, sinCoincidencia });
+  }
+
   // POST /api/productos/:id/foto -> pone la foto de un producto. Acepta la
   // imagen en sí (archivo o pegada del portapapeles) o su dirección en la web,
   // que es lo cómodo cuando la lista del proveedor vino sin fotos.

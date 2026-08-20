@@ -608,6 +608,45 @@ se optó por un lector mínimo (`server/xlsx.js`) hecho a medida para lo que
 hace falta acá: texto y números de cada celda. Sigue habiendo una sola
 dependencia en todo el proyecto.
 
+### Fichas técnicas
+
+Cada producto puede llevar la ficha técnica del fabricante en PDF, adjunta
+desde su ficha (**Subir la ficha**). Aparece un botón de descarga junto al
+producto, en cualquier lugar donde se lo mencione.
+
+Para cargar muchas de una: **Productos → Importar fichas técnicas**. Se elige
+más de un PDF a la vez y cada uno se empareja con su producto por el
+**nombre del archivo, sin la extensión**, que tiene que ser igual a la
+referencia del catálogo (`CLICK DM2.pdf` para el producto con referencia
+`CLICK DM2`; espacios, mayúsculas y guiones no importan). Al final dice
+cuántas quedaron pegadas y, si alguna no encontró con qué producto
+emparejar, cuáles fueron —para corregir el nombre y volver a intentar sólo
+ésas—.
+
+El contenido de una ficha no lo escribe el sistema por su cuenta. Vive en
+`server/fichas-contenido.js`, un objeto por referencia con lo que confirmó
+el fabricante o la propia descripción del producto en la lista de precios
+—la fuente más confiable, porque es lo que la empresa ya dice de lo suyo—.
+Cuando hace falta completar algo que ninguna de las dos dice, se usa el
+parámetro típico de ese tipo de dispositivo (protocolo ZigBee a 2.4 GHz, por
+ejemplo), nunca un número inventado para ese modelo puntual como un amperaje
+o una certificación que nadie confirmó: eso es justo lo que un instalador
+necesita que sea cierto. Cada ficha lleva un campo `confianza`
+(`'confirmado'` o `'estandar'`); las de `'estandar'` avisan al pie del PDF
+que conviene verificar el dato con el fabricante antes de una instalación
+donde eso importe.
+
+Para agregar o corregir un producto, se edita ese archivo y se corre:
+
+```bash
+node scripts/generar-fichas.mjs
+```
+
+Arma el PDF de todas las fichas del catálogo, con el nombre de archivo igual
+a la referencia —listos para subirlos por **Importar fichas técnicas**—, en
+`dist-fichas/`. El generador (`server/ficha-tecnica-pdf.js`) es del mismo
+motor sin dependencias que arma las cotizaciones (`server/pdf.js`).
+
 ## Logo
 
 El de las **cotizaciones impresas** se sube desde ⚙ **Datos de la empresa →
