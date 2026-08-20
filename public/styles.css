@@ -548,8 +548,12 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
   .metricas { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
 }
 
-/* ── Pantallas angostas: las tablas se vuelven fichas apiladas ── */
-@media (max-width: 640px) {
+/* ── Pantallas angostas: las tablas se vuelven fichas apiladas ──
+   Mismo umbral que el renglón de cotizaciones: por debajo de ~1300px el
+   panel de Ari no deja sitio para las columnas de Clientes, Cobros o
+   Productos, y antes obligaba a desplazarse de lado para llegar a los
+   botones. Así se apilan en vez de recortarse. */
+@media (max-width: 1300px) {
   .tabla-envoltura { overflow-x: visible; }
   table { min-width: 0; display: block; }
   thead { display: none; }
@@ -578,7 +582,9 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
   td.acciones::before { content: none; }
   .acciones-fila { width: 100%; justify-content: flex-start; }
   .mini { padding: 9px 16px; font-size: 12.5px; border-radius: 9px; }
+}
 
+@media (max-width: 640px) {
   .evento { grid-template-columns: 46px minmax(0, 1fr) auto; gap: 10px; padding: 13px 15px; }
   .evento .hora { font-size: 14px; }
   .evento .acciones-fila .mini { padding: 8px 12px; }
@@ -1431,7 +1437,10 @@ a.cajon-btn { text-decoration: none; }
   display: block; font-size: 14px; font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.cot-texto span { display: block; font-size: 12.5px; color: var(--texto-2); margin-top: 1px; }
+.cot-texto span {
+  display: block; font-size: 12.5px; color: var(--texto-2); margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .cot-cifra { text-align: right; flex-shrink: 0; min-width: 88px; }
 .cot-cifra b { display: block; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--ambar); }
@@ -1453,7 +1462,10 @@ a.cajon-btn { text-decoration: none; }
 .cot-fila .mini.pdf { flex-shrink: 0; text-decoration: none; padding: 5px 9px; }
 .cot-fila .sin-pdf { width: 30px; flex-shrink: 0; }
 
-@media (max-width: 640px) {
+/* El panel de Ari a la derecha deja poco sitio para el renglón desde el
+   escritorio angosto (~1300px) hacia abajo: sin esto el texto se aprieta
+   contra las cifras y los botones del costado quedan recortados. */
+@media (max-width: 1300px) {
   .cot-fila { flex-wrap: wrap; gap: 8px 10px; }
   .cot-texto { flex-basis: 100%; }
   .cot-cifra { text-align: left; margin-right: auto; }
@@ -1498,7 +1510,7 @@ details.plegable .cuantos {
 }
 /* El cliente es por lo que uno busca todo: resaltado en todas las pantallas. */
 .es-cliente { color: var(--ambar); font-weight: 600; }
-@media (max-width: 640px) {
+@media (max-width: 1300px) {
   .cot-botones { flex-basis: 100%; justify-content: flex-end; }
 }
 .filtro-cliente { font-size: 12.5px; color: var(--texto-2); align-self: center; }

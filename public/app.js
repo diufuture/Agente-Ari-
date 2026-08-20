@@ -414,7 +414,7 @@ const ENCABEZADOS = {
 };
 
 /** Columnas de plata: van alineadas a la derecha, con los números en columna. */
-const COLUMNAS_DINERO = new Set(['monto', 'cotizado', 'abonado', 'saldo']);
+const COLUMNAS_DINERO = new Set(['monto', 'cotizado', 'abonado', 'saldo', 'precio_canal', 'precio_constructor', 'precio_cliente']);
 
 /** Cómo se pinta cada columna. */
 function celda(columna, fila) {
@@ -552,6 +552,12 @@ function accionesDeFila(entidad, f) {
   if (entidad === 'productos') {
     acciones.push({ accion: 'abrir-producto', rotulo: 'Ver', corto: 'Ver',
       icono: ICONO_OJO, tono: 'editar', clase: 'destacado' });
+    // La ficha técnica, a un toque desde la lista: si ya está cargada, no hay
+    // que entrar al producto para llegar a ella.
+    if (f.ficha) {
+      acciones.push({ accion: 'ver-pdf', rotulo: '📄 Ficha', corto: 'Ficha', icono: ICONO_DOC, tono: 'editar',
+        clase: 'pdf', href: f.ficha, titulo: 'Abrir la ficha técnica', datos: { titulo: f.ficha_nombre || 'Ficha técnica' } });
+    }
   }
   if (entidad in NUEVO_ESTADO && f.estado === 'pendiente') {
     const rotulo = dinero[entidad] || 'Listo';
@@ -1250,6 +1256,27 @@ function detalleCliente(c, { cotizaciones, abonos, cobros, citas, notas }) {
 }
 
 /** Ficha de un producto del catálogo: sus datos, sus tres precios, su foto y —si es propio— su inventario. */
+/**
+ * Un nombre corto para encabezar la ficha de un producto.
+ *
+ * En este catálogo la descripción es un párrafo entero —"Cámara Wi-Fi
+ * Inteligente 2MP: vigila tu hogar o negocio…"—, no un nombre corto más una
+ * ficha técnica aparte. Puesta entera como título (`<h2>`) se volvía una
+ * pared de letra grande y en negrita que ocupaba toda la pantalla. Acá se
+ * corta en el primer punto o dos puntos que aparezca en un largo razonable
+ * —que suele ser justo donde termina el nombre y empieza la explicación—, o
+ * si no hay ninguno, en el primer tramo que entre en un título. La
+ * descripción completa se sigue mostrando, una sola vez, más abajo y a
+ * tamaño de párrafo.
+ */
+function nombreCortoDeProducto(descripcion, limite = 70) {
+  const texto = String(descripcion ?? '').trim();
+  const corte = texto.search(/[:.]\s|\s[-—]\s/);
+  if (corte > 0 && corte <= limite) return texto.slice(0, corte);
+  if (texto.length <= limite) return texto;
+  return `${texto.slice(0, limite).trim()}…`;
+}
+
 function detalleProducto(p, movimientos = []) {
   const stockBajo = p.maneja_inventario && Number(p.stock) <= 0;
 
@@ -1277,13 +1304,19 @@ function detalleProducto(p, movimientos = []) {
             <button class="mini" data-accion="buscar-foto" data-id="${p.id}">Buscar en la web</button>
           </div>
           <div>
-            <h2>${escapar(p.descripcion)}</h2>
+            <h2>${escapar(nombreCortoDeProducto(p.descripcion))}</h2>
             <p>${p.tipo ? `<span class="etiqueta-tipo">${escapar(p.tipo)}</span> ` : ''}${
               [p.categoria, p.referencia, p.marca].filter(Boolean).map(escapar).join(' · ') || 'Sin categoría'}
               ${p.maneja_inventario ? '<span class="pastilla propio">propio</span>' : '<span class="pastilla">catálogo proveedor</span>'}</p>
           </div>
         </div>
-        <button class="mini destacado" data-accion="editar">Editar datos</button>
+        <div class="ficha-acciones">
+          ${p.ficha
+            ? `<a class="mini destacado" href="${escapar(p.ficha)}" target="_blank" rel="noopener"
+                  data-titulo="${escapar(p.ficha_nombre || 'Ficha técnica')}">📄 Ficha técnica</a>`
+            : ''}
+          <button class="mini destacado" data-accion="editar">Editar datos</button>
+        </div>
       </div>
 
       <div class="ficha-cifras ${p.maneja_inventario ? 'cuatro' : 'tres'}">
@@ -1293,6 +1326,7 @@ function detalleProducto(p, movimientos = []) {
         ${p.maneja_inventario ? `<div><span>Stock</span><strong class="${stockBajo ? 'alerta' : 'ok'}">${p.stock}</strong></div>` : ''}
       </div>
 
+      <p class="ficha-desc">${escapar(p.descripcion)}</p>
       <p class="ficha-desc">Unidad: ${escapar(p.unidad || 'UND')}${p.proveedor ? ` · Proveedor: ${escapar(p.proveedor)}` : ''}</p>
       ${p.notas ? `<p class="ficha-desc">${escapar(p.notas)}</p>` : ''}
     </div>
@@ -1780,7 +1814,7 @@ async function pintar() {
       const id = estado.productoAbierto;
       const p = await api(`/productos/${id}`);
       const movimientos = p.maneja_inventario ? (await api(`/movimientos_stock?producto_id=${id}`)).filas : [];
-      $('#titulo-vista').textContent = p.descripcion;
+      $('#titulo-vista').textContent = nombreCortoDeProducto(p.descripcion);
       contenedor.innerHTML = detalleProducto(p, movimientos);
     } catch (e) {
       contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
@@ -1937,7 +1971,7 @@ async function pintar() {
         + (estado.verDescontinuados
           ? '<p class="ayuda">Los descontinuados son los que dejaron de venir en la lista del proveedor. Siguen guardados con su historial; para volver a usarlos, abrilos y marcá «Disponible en el catálogo».</p>'
           : '')
-        + tabla('productos', ['foto', 'tipo', 'referencia', 'descripcion', 'stock', 'precio_cliente'], filas,
+        + tabla('productos', ['foto', 'tipo', 'referencia', 'descripcion', 'stock', 'precio_canal', 'precio_constructor', 'precio_cliente'], filas,
           { vacio: 'Todavía no hay productos en el catálogo. Importá una lista de precios o agregá uno a mano.' });
       $('#buscar-productos')?.focus();
 
@@ -2526,6 +2560,12 @@ let vigilante = null;
 // Detecta la sesión que abre pero no oye: dice "Escuchando" y no llega audio.
 let centinelaAudio = null;
 let reintentoSordo = 0;
+// Una vez que sí entró audio se apaga el aviso de arriba, pero puede pasar
+// que ahí en adelante el navegador se cuelgue: la sesión queda "viva" para
+// siempre, sin transcribir y sin avisar que terminó. Sin este techo, eso
+// dejaba el micrófono grabando de mentiras hasta cerrar la aplicación.
+let centinelaLargo = null;
+const TECHO_SESION_MS = 20_000;
 // Cuánto se le da a una sesión para que entre audio antes de darla por sorda.
 // Si se abrió justo después de cortarle la voz a Ari, el teléfono venía
 // reproduciendo y le cuesta más cambiar a grabar: ahí nacer sorda es lo
@@ -2596,6 +2636,23 @@ function crearReconocedor() {
     acumulado = '';
     marcarGrabando(true);
     $('#pista').textContent = 'Escuchando… hablá con naturalidad.';
+
+    // El techo largo: si esta sesión no terminó por su cuenta —ni con
+    // resultado, ni con error, ni cerrándose— en veinte segundos, se corta a
+    // la fuerza. Sin esto, una sesión que el navegador abandona a medio
+    // camino se queda "escuchando" en la pantalla para siempre, y ningún
+    // toque posterior lograba nada porque `reconocedor` seguía apuntando a
+    // esa sesión muerta. Va contra `r` y no contra la variable de más
+    // arriba, para no cortar una sesión más nueva si ésta ya se reemplazó.
+    clearTimeout(centinelaLargo);
+    centinelaLargo = setTimeout(() => {
+      if (reconocedor !== r) return;
+      escuchando = false;
+      arrancando = false;
+      marcarGrabando(false);
+      soltarMicrofono();
+      $('#pista').textContent = 'El micrófono se quedó pegado. Tocalo de nuevo para seguir.';
+    }, TECHO_SESION_MS);
 
     // Si el navegador dice que arrancó pero no abre el audio, la sesión nació
     // sorda: se queda ahí para siempre, sin transcribir y sin cerrarse. Se le
@@ -2724,6 +2781,7 @@ function crearReconocedor() {
  * vieja que todavía dispare eventos pisaría el estado de la nueva.
  */
 function soltarMicrofono() {
+  clearTimeout(centinelaLargo);
   if (!reconocedor) return;
   const viejo = reconocedor;
   reconocedor = null;
@@ -2836,8 +2894,18 @@ function empezarAEscuchar(intento = 0) {
 
 /** Cierra la sesión de dictado, y se asegura de que cierre de verdad. */
 function detenerMicrofono() {
-  if (!reconocedor) return;
   clearTimeout(centinelaAudio);
+  // Si no hay sesión pero igual se cree "escuchando" —el navegador abandonó
+  // el reconocedor sin avisar con onend ni onerror, algo que pasa de verdad—
+  // no hay nada que detener, pero tampoco hay que dejar el botón mudo para
+  // siempre: se destraba acá mismo, ya, sin esperar ningún aviso que no va a
+  // llegar.
+  if (!reconocedor) {
+    escuchando = false;
+    arrancando = false;
+    marcarGrabando(false);
+    return;
+  }
   try { reconocedor.stop(); } catch { /* ya estaba detenido */ }
   // Hay navegadores que no llegan a avisar que terminaron. Si en medio
   // segundo no avisó, se corta a la fuerza para que el botón vuelva a andar.
@@ -4301,6 +4369,14 @@ $('#en-curso').addEventListener('click', async (e) => {
 });
 
 $('#mic').addEventListener('click', alternarMicrofono);
+
+// Marcar "manos libres" sin estar ya en una conversación no hacía nada por sí
+// solo: sólo se usaba la próxima vez que el micrófono se abriera a mano.
+// Quien lo prende espera que empiece a escuchar ya, como si hubiera tocado
+// el micrófono — así que lo hace.
+$('#manos-libres').addEventListener('change', () => {
+  if (manosLibres() && VOZ_DISPONIBLE && !escuchando && !arrancando) alternarMicrofono();
+});
 
 // Botones flotantes de celular
 $('#fab-mic').addEventListener('click', () => { abrirHoja(); alternarMicrofono(); });
