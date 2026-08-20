@@ -21,6 +21,15 @@
   --alerta:       #ff7085;
   --ambar:        #ffb454;
   --verde:        #45d99a;
+  /* Un color por sección de la barra. Son los mismos en los dos temas salvo
+     los que sobre fondo blanco quedaban lavados, más abajo. */
+  --c-inicio:       #4aa8ff;
+  --c-agenda:       #ffa63d;
+  --c-clientes:     #34d399;
+  --c-productos:    #a78bfa;
+  --c-cotizaciones: #22d3ee;
+  --c-cobros:       #fbbf24;
+  --c-pendientes:   #fb7185;
   --radio:        16px;
   --sombra:       0 10px 40px rgba(0, 0, 0, .45);
   --tipo:         'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -44,6 +53,11 @@
   --acento:     #1a9fd4;
   --acento-2:   #10b48f;
   --sombra:     0 10px 30px rgba(23, 32, 58, .10);
+  /* Sobre blanco, el amarillo y el cian se pierden: van un tono más abajo. */
+  --c-agenda:       #e07c0a;
+  --c-clientes:     #0f9d6b;
+  --c-cotizaciones: #0a9fbb;
+  --c-cobros:       #d19100;
   color-scheme: light;
 }
 
@@ -109,7 +123,20 @@ button { cursor: pointer; border: none; background: none; }
   color: var(--texto);
   box-shadow: inset 2px 0 0 var(--acento);
 }
-.nav-item .ico { width: 16px; text-align: center; opacity: .85; }
+/* Cada sección con su color. En una barra de siete botones iguales, el color
+   es lo que se reconoce de reojo; el rótulo se lee después. */
+.nav-item .ico { width: 18px; height: 18px; display: grid; place-items: center; }
+.nav-item .ico svg { width: 100%; height: 100%; fill: currentColor; }
+.nav-item[data-vista="inicio"]        .ico { color: var(--c-inicio); }
+.nav-item[data-vista="agenda"]        .ico { color: var(--c-agenda); }
+.nav-item[data-vista="clientes"]      .ico { color: var(--c-clientes); }
+.nav-item[data-vista="productos"]     .ico { color: var(--c-productos); }
+.nav-item[data-vista="cotizaciones"]  .ico { color: var(--c-cotizaciones); }
+.nav-item[data-vista="cobros"]        .ico { color: var(--c-cobros); }
+.nav-item[data-vista="recordatorios"] .ico { color: var(--c-pendientes); }
+/* Sin tocar, un poco apagados; el de la sección donde uno está, a full. */
+.nav-item .ico { opacity: .72; transition: opacity .15s; }
+.nav-item.activo .ico, .nav-item:hover .ico { opacity: 1; }
 .badge {
   margin-left: auto; font-style: normal; font-size: 11px; font-weight: 700;
   min-width: 20px; padding: 2px 6px; border-radius: 20px; text-align: center;
@@ -415,7 +442,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
     font-size: 10px; font-weight: 600; text-align: center;
     position: relative; width: auto;
   }
-  .nav-item .ico { font-size: 17px; width: auto; opacity: 1; }
+  .nav-item .ico { width: 22px; height: 22px; opacity: .8; }
   .nav-item .etiqueta { display: block; white-space: nowrap; }
   .nav-item.activo { box-shadow: none; }
   .nav-item:hover { background: none; }
@@ -775,7 +802,9 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
 
 /* ─────────── Formulario de edición manual ─────────── */
 
-.ficha-acciones { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+/* Que envuelvan antes que salirse: un botón cortado contra el borde de la
+   pantalla no se ve que existe, y no hay cómo llegar a él. */
+.ficha-acciones { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
 
 .form-editar {
   display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 20px;
@@ -1303,9 +1332,6 @@ body.con-visor { overflow: hidden; }
 /* ─────────── Cotizaciones en renglones cortos ─────────── */
 
 .lista-cot {
-  /* Ancho del cajón de acciones, repartido entre sus botones. Está acá y no
-     regado por el archivo porque el guion también lo mide de acá. */
-  --cajon: 144px;
   background: var(--panel); border: 1px solid var(--borde);
   border-radius: var(--radio); overflow: hidden;
 }
@@ -1314,15 +1340,31 @@ body.con-visor { overflow: hidden; }
    cajón está quieto abajo, y el recorte del contenedor lo tapa mientras el
    renglón está en su lugar. */
 .cot-item {
-  position: relative; overflow: hidden;
+  overflow: hidden;
   border-bottom: 1px solid color-mix(in srgb, var(--borde) 55%, transparent);
 }
 .cot-item:last-child { border-bottom: none; }
 
+/* Lo que se mueve al deslizar lo dice cada lista; el contenedor sólo lleva la
+   cuenta de cuánto, en --x, y el CSS de abajo se lo aplica a lo que
+   corresponda. Así el mismo gesto sirve para el renglón de cotizaciones y para
+   una fila de tabla, que por dentro no se parecen en nada. */
+.deslizable { --x: 0px; position: relative; }
+.deslizable.abierto { --x: calc(-1 * var(--cajon)); }
+
+/* El cajón vive FUERA del renglón, pegado a su borde derecho, y entra
+   corriéndose junto con él. Antes estaba quieto debajo y el renglón le pasaba
+   por encima: eso obliga a que lo de arriba sea opaco y a que tape hasta el
+   último rincón —si no, el cajón se asoma por los bordes— y además le robaba
+   el toque al renglón, porque un elemento posicionado se dibuja por encima.
+   Así no hay nada que tapar: cuando está cerrado, sencillamente no está. */
 .cot-cajon {
-  position: absolute; inset: 0 0 0 auto; width: var(--cajon);
+  position: absolute; top: 0; bottom: 0; left: 100%; width: var(--cajon);
   display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  transform: translateX(var(--x));
+  transition: transform .18s ease;
 }
+.arrastrando .cot-cajon { transition: none; }
 /* Botones redondeados con su dibujo y su rótulo chiquito debajo, no dos
    bloques cuadrados de color: ocupan lo mismo pero pesan mucho menos a la
    vista, y la caneca se reconoce sin leer. */
@@ -1342,6 +1384,8 @@ body.con-visor { overflow: hidden; }
    color-mix: sin él, el botón quedaría sin fondo y no se vería. */
 .cajon-btn.editar { background: #33718d; background: color-mix(in srgb, var(--acento) 52%, #04121f); }
 .cajon-btn.borrar { background: #ae4759; background: color-mix(in srgb, var(--alerta) 62%, #2a0510); }
+.cajon-btn.ok     { background: #22795a; background: color-mix(in srgb, var(--verde) 52%, #01180f); }
+a.cajon-btn { text-decoration: none; }
 .cajon-btn:active { filter: brightness(1.12); }
 .cajon-btn:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
 
@@ -1356,7 +1400,8 @@ body.con-visor { overflow: hidden; }
 }
 /* Mientras el dedo está encima manda el dedo, no la animación. */
 .cot-item.arrastrando .cot-fila { transition: none; }
-.cot-item.abierto .cot-fila { transform: translateX(calc(-1 * var(--cajon))); }
+.cot-item > .cot-fila { transform: translateX(var(--x)); }
+.cot-item { overflow: hidden; }
 .cot-fila:hover { background: var(--panel-alto); }
 .cot-fila:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; }
 
@@ -1391,6 +1436,31 @@ body.con-visor { overflow: hidden; }
   .cot-fila { flex-wrap: wrap; gap: 8px 10px; }
   .cot-texto { flex-basis: 100%; }
   .cot-cifra { text-align: left; margin-right: auto; }
+}
+
+/* El cajón dentro de una tabla. En el computador no aparece: ahí la fila
+   tiene sitio de sobra para la hilera de botones, y nadie desliza con el
+   mouse. En el celular es al revés, y por eso se cambian de lugar. */
+.td-cajon, .solo-angosto { display: none; }
+
+@media (max-width: 640px) {
+  /* Igual que en el renglón de cotizaciones: el navegador se queda con lo
+     vertical y a nosotros nos deja lo horizontal. Sin esto el gesto no llega. */
+  tbody tr.deslizable { overflow: hidden; touch-action: pan-y; }
+  /* Al abrir un cajón, el botón que se tocó queda fuera de la fila y el
+     navegador quiere seguirlo: sin esto, arrastra la pantalla de costado. */
+  #contenido { overflow-x: hidden; }
+  tbody tr.deslizable > td:not(.td-cajon) { transform: translateX(var(--x)); }
+  tbody tr.deslizable.arrastrando > td { transition: none; }
+  tbody tr.deslizable > td { transition: transform .18s ease; }
+
+  .td-cajon { display: block; padding: 0; }
+  /* La fila entera queda de fondo del cajón, para que al correrse no se vea a
+     través de ella lo que hay debajo. */
+  tbody tr.deslizable { background: var(--panel); }
+  tbody tr.deslizable .acciones-fila { display: none; }
+  .solo-angosto { display: inline-flex; }
+  td.acciones { display: flex; justify-content: flex-end; }
 }
 
 /* ─────────── Bloques que se pliegan ─────────── */

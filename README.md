@@ -664,6 +664,13 @@ Para **borrar** una cotización hay dos caminos, y los dos preguntan lo mismo:
   cierra, y un empujoncito corto se devuelve solo. Con teclado se llega con el
   tabulador, o con las flechas ← y → sobre el renglón.
 
+  Lo mismo en **clientes, productos, agenda, cobros y pendientes**: en el
+  celular las acciones de cada renglón viven en ese cajón y no en una hilera de
+  botones debajo de los datos. Las dos formas salen de la misma lista escrita
+  una sola vez, así que no pueden terminar ofreciendo cosas distintas; en el
+  computador, donde hay ancho de sobra y nadie desliza, se siguen viendo los
+  botones al costado.
+
   El gesto se escucha con los eventos del dedo (`touchstart`/`touchmove`) y no
   con los de puntero. Con los de puntero andaba en el computador pero no en el
   iPhone: adentro de una lista que se desplaza, Safari se queda con el gesto

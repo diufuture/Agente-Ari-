@@ -461,6 +461,91 @@ const NUEVO_ESTADO = {
   cobros: 'pagado',
 };
 
+/**
+ * Qué se puede hacer con una fila de una lista.
+ *
+ * Se arma una sola vez y se pinta de dos maneras: como hilera de botones al
+ * costado —que es lo que cabe en el computador— y como cajón que asoma al
+ * deslizar el renglón, que es lo que sirve en el celular. Tenerlo escrito una
+ * sola vez es lo que evita que las dos terminen ofreciendo cosas distintas.
+ */
+function accionesDeFila(entidad, f) {
+  const acciones = [];
+  const dinero = { cobros: 'Pagado' };
+
+  // La oferta en PDF, a un toque desde la lista: estando con el cliente
+  // enfrente no se puede andar entrando a la ficha para llegar al archivo.
+  if (entidad === 'cotizaciones' && f.archivo) {
+    acciones.push({
+      accion: 'ver-pdf', rotulo: '📄 PDF', corto: 'PDF', icono: ICONO_DOC, tono: 'editar',
+      clase: 'pdf', href: f.archivo, titulo: 'Abrir la oferta en PDF',
+      datos: { titulo: f.titulo || 'Cotización' },
+    });
+  }
+  if (entidad === 'cotizaciones') {
+    acciones.push({ accion: 'abrir-cotizacion', rotulo: 'Abrir y editar', corto: 'Abrir',
+      icono: ICONO_LAPIZ, tono: 'editar', clase: 'destacado' });
+  }
+  if (entidad === 'clientes') {
+    acciones.push({ accion: 'abrir-cliente', rotulo: 'Ver ficha', corto: 'Ficha',
+      icono: ICONO_OJO, tono: 'editar', clase: 'destacado' });
+    if (f.n_cotizaciones) {
+      acciones.push({ accion: 'cotizaciones-de', rotulo: `Cotizaciones (${f.n_cotizaciones})`,
+        corto: 'Ofertas', icono: ICONO_DOC, tono: 'editar', datos: { nombre: f.nombre } });
+    }
+  }
+  if (entidad === 'productos') {
+    acciones.push({ accion: 'abrir-producto', rotulo: 'Ver', corto: 'Ver',
+      icono: ICONO_OJO, tono: 'editar', clase: 'destacado' });
+  }
+  if (entidad in NUEVO_ESTADO && f.estado === 'pendiente') {
+    const rotulo = dinero[entidad] || 'Listo';
+    acciones.push({ accion: 'estado', rotulo, corto: rotulo, icono: ICONO_CHECK, tono: 'ok',
+      datos: { entidad, estado: NUEVO_ESTADO[entidad] } });
+  }
+  // En un pendiente, lo que falta es poder corregirlo; "Listo" ya lo saca de la
+  // lista, así que borrar sólo tiene sentido entre los que ya se hicieron.
+  if (entidad === 'recordatorios') {
+    acciones.push({ accion: 'editar-recordatorio', rotulo: 'Editar', corto: 'Editar',
+      icono: ICONO_LAPIZ, tono: 'editar', clase: 'destacado' });
+  }
+  if (!(entidad === 'recordatorios' && f.estado === 'pendiente')) {
+    acciones.push({ accion: 'borrar', rotulo: 'Borrar', corto: 'Borrar', icono: ICONO_CANECA,
+      tono: 'borrar', clase: 'peligro', datos: { entidad } });
+  }
+  return acciones.map((a) => ({ ...a, id: f.id }));
+}
+
+const datosDeAccion = (a, id) => [`data-accion="${a.accion}"`, `data-id="${id}"`]
+  .concat(Object.entries(a.datos || {}).map(([k, v]) => `data-${k}="${escapar(v)}"`))
+  .join(' ');
+
+/** Un botón de la hilera del costado. */
+function botonDeAccion(a) {
+  const clases = `mini${a.clase ? ` ${a.clase}` : ''}`;
+  const titulo = a.titulo ? ` title="${escapar(a.titulo)}"` : '';
+  return a.href
+    ? `<a class="${clases}" href="${escapar(a.href)}" target="_blank" rel="noopener" ${
+        datosDeAccion(a, a.id)}${titulo}>${a.rotulo}</a>`
+    : `<button class="${clases}" ${datosDeAccion(a, a.id)}${titulo}>${escapar(a.rotulo)}</button>`;
+}
+
+/** Las mismas acciones, en el cajón que asoma al deslizar. */
+function cajonDeAcciones(lista) {
+  return `<div class="cot-cajon">${lista.map((a) => {
+    const dentro = `${a.icono}<span>${escapar(a.corto)}</span>`;
+    const atributos = `${datosDeAccion(a, a.id)}${a.titulo ? ` title="${escapar(a.titulo)}"` : ''}`;
+    return a.href
+      ? `<a class="cajon-btn ${a.tono}" href="${escapar(a.href)}" target="_blank" rel="noopener" ${atributos}>${dentro}</a>`
+      : `<button class="cajon-btn ${a.tono}" ${atributos}>${dentro}</button>`;
+  }).join('')}</div>`;
+}
+
+// Ancho del cajón: cada botón mide 66 y el marco suma 12. El número tiene que
+// salir de acá y no del CSS, porque el guion también lo mide para saber hasta
+// dónde corre el renglón.
+const anchoDeCajon = (lista) => lista.length * 66 + 12;
+
 function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
   if (!filas.length) {
     return `<div class="tarjeta"><div class="vacio">
@@ -468,7 +553,6 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
     </div></div>`;
   }
 
-  const accionable = entidad in NUEVO_ESTADO;
   const cabeceras = columnas.map((c) =>
     `<th${COLUMNAS_DINERO.has(c) ? ' class="num"' : ''}>${ENCABEZADOS[c] ?? c}</th>`).join('');
 
@@ -482,47 +566,25 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
       return `<td${clases ? ` class="${clases}"` : ''} data-rotulo="${ENCABEZADOS[c] ?? c}">${celda(c, f)}</td>`;
     }).join('');
 
-    const listo = accionable && f.estado !== 'pendiente';
     // La oferta en PDF, a un toque desde la lista: estando con el cliente
     // enfrente no se puede andar entrando a la ficha para llegar al archivo.
     // Sólo aparece si esa cotización tiene uno cargado.
-    const verPdf = entidad === 'cotizaciones' && f.archivo
-      ? `<a class="mini pdf" href="${escapar(f.archivo)}" target="_blank" rel="noopener"
-            data-titulo="${escapar(f.titulo || 'Cotización')}" title="Abrir la oferta en PDF">📄 PDF</a>`
-      : '';
+    const lista = accionesDeFila(entidad, f);
 
-    const acciones = `<td class="num acciones"><div class="acciones-fila">
-      ${compacta ? verPdf : `
-      ${verPdf}
-      ${entidad === 'cotizaciones'
-        ? `<button class="mini destacado" data-accion="abrir-cotizacion" data-id="${f.id}">Abrir y editar</button>`
+    const acciones = `<td class="num acciones">
+      <div class="acciones-fila">${
+        (compacta ? lista.filter((a) => a.accion === 'ver-pdf') : lista).map((a) => botonDeAccion(a)).join('')}</div>
+      ${!compacta && lista.length
+        ? `<button class="mini mas solo-angosto" data-accion="mas-opciones" aria-label="Más opciones">⋯</button>`
         : ''}
-      ${entidad === 'clientes'
-        ? `<button class="mini destacado" data-accion="abrir-cliente" data-id="${f.id}">Ver ficha</button>
-           ${f.n_cotizaciones
-             ? `<button class="mini" data-accion="cotizaciones-de" data-id="${f.id}"
-                        data-nombre="${escapar(f.nombre)}">Cotizaciones (${f.n_cotizaciones})</button>`
-             : ''}`
-        : ''}
-      ${entidad === 'productos'
-        ? `<button class="mini destacado" data-accion="abrir-producto" data-id="${f.id}">Ver</button>`
-        : ''}
-      ${accionable && !listo
-        ? `<button class="mini" data-accion="estado" data-entidad="${entidad}" data-id="${f.id}" data-estado="${NUEVO_ESTADO[entidad]}">${
-            entidad === 'cobros' ? 'Pagado' : 'Listo'}</button>`
-        : ''}
-      ${entidad === 'recordatorios'
-        // En un pendiente, lo que falta es poder corregirlo; "Listo" ya lo saca
-        // de la lista, así que el botón de borrar sólo tiene sentido entre los
-        // que ya se hicieron.
-        ? `<button class="mini destacado" data-accion="editar-recordatorio" data-id="${f.id}">Editar</button>
-           ${f.estado !== 'pendiente'
-             ? `<button class="mini peligro" data-accion="borrar" data-entidad="recordatorios" data-id="${f.id}">Borrar</button>`
-             : ''}`
-        : `<button class="mini peligro" data-accion="borrar" data-entidad="${entidad}" data-id="${f.id}">Borrar</button>`}`}
-    </div></td>`;
+    </td>`;
 
-    return `<tr>${celdas}${acciones}</tr>`;
+    // El mismo puñado de acciones, del otro lado del renglón, para llegar a
+    // ellas deslizando en el celular en vez de con una hilera de botones.
+    const cajon = compacta || !lista.length ? '' : `<td class="td-cajon">${cajonDeAcciones(lista)}</td>`;
+
+    return `<tr${cajon ? ` class="deslizable" style="--cajon:${anchoDeCajon(lista)}px"` : ''}>${
+      celdas}${acciones}${cajon}</tr>`;
   }).join('');
 
   return `<div class="tarjeta"><div class="tabla-envoltura"><table>
@@ -817,14 +879,27 @@ function detalleCotizacion(cot, abonos, items = [], totales = null) {
           <h2>${escapar(cot.titulo)}</h2>
           <p>${escapar(cot.cliente || 'Sin cliente')} · creada ${escapar(fmtFecha(String(cot.creado_en || '').slice(0, 10)))}</p>
         </div>
+        ${/* Cuatro botones no caben en un teléfono: el último quedaba cortado
+              contra el borde, y justo era Editar. Ahora son dos —el PDF y
+              Editar—, y cuál es el del PDF depende de la oferta:
+
+              · Con un PDF cargado aparece «Ver el PDF», que es lo que hace
+                falta con una oferta que se armó por fuera.
+              · «Guardar PDF» sólo si hay renglones que poner adentro. Sin
+                renglones armaba una oferta en blanco, que es justo el caso de
+                las que llegan con el PDF ya hecho.
+
+              La página imprimible («Ver») se fue: hace lo mismo que Guardar
+              PDF pero peor, y en el celular instalado no abre nada. */ ''}
         <div class="ficha-acciones">
           <span class="pastilla ${escapar(cot.estado)}">${escapar(cot.estado)}</span>
           ${cot.archivo
             ? `<a class="mini destacado" href="${escapar(cot.archivo)}" target="_blank" rel="noopener"
                   data-titulo="${escapar(cot.archivo_nombre || cot.titulo)}">Ver el PDF</a>`
             : ''}
-          <button class="mini${cot.archivo ? '' : ' destacado'}" data-accion="guardar-pdf">Guardar PDF</button>
-          <a class="mini" href="/imprimir/cotizacion/${cot.id}" target="_blank" rel="noopener">Ver</a>
+          ${items.length
+            ? `<button class="mini${cot.archivo ? '' : ' destacado'}" data-accion="guardar-pdf">Guardar PDF</button>`
+            : ''}
           <button class="mini destacado" data-accion="editar">Editar</button>
         </div>
       </div>
@@ -1597,6 +1672,7 @@ function vistaListas(listas, prueba) {
 async function pintar() {
   const contenedor = $('#contenido');
   const v = estado.vista;
+  anotarDondeEstoy();
 
   // Revisión de un Excel recién analizado, antes de importarlo
   if (estado.importacion) {
@@ -2008,6 +2084,9 @@ const VERSION = { compilado: '', interfaz: '', modelo: '' };
 
 const ICONO_LAPIZ = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm17.71-9.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"/></svg>`;
 const ICONO_CANECA = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z"/></svg>`;
+const ICONO_OJO = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5C6.5 5 2.7 9.1 1.5 12c1.2 2.9 5 7 10.5 7s9.3-4.1 10.5-7c-1.2-2.9-5-7-10.5-7Zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-2.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/></svg>`;
+const ICONO_CHECK = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z"/></svg>`;
+const ICONO_DOC = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm2 16H8v-2h8v2Zm0-4H8v-2h8v2Zm-3-5V3.5L18.5 9H13Z"/></svg>`;
 
 /**
  * Las cotizaciones, una por renglón corto.
@@ -2032,13 +2111,14 @@ function listaCotizaciones(filas) {
     // Detrás del renglón, a la derecha, quedan las acciones que se descubren
     // deslizando con el dedo, como en el correo del teléfono. Van en el papel
     // aunque no se vean: así se llega a ellas con el tabulador, sin dedo.
-    return `<div class="cot-item">
-      <div class="cot-cajon">
-        <button class="cajon-btn editar" data-accion="abrir-cotizacion" data-editar="1" data-id="${q.id}"
-                title="Abrir esta cotización para editarla">${ICONO_LAPIZ}<span>Editar</span></button>
-        <button class="cajon-btn borrar" data-accion="borrar-cot" data-id="${q.id}"
-                title="Eliminar esta cotización">${ICONO_CANECA}<span>Eliminar</span></button>
-      </div>
+    const acciones = [
+      { accion: 'abrir-cotizacion', corto: 'Editar', icono: ICONO_LAPIZ, tono: 'editar', id: q.id,
+        titulo: 'Abrir esta cotización para editarla', datos: { editar: '1' } },
+      { accion: 'borrar-cot', corto: 'Eliminar', icono: ICONO_CANECA, tono: 'borrar', id: q.id,
+        titulo: 'Eliminar esta cotización' },
+    ];
+    return `<div class="cot-item deslizable" style="--cajon:${anchoDeCajon(acciones)}px">
+      ${cajonDeAcciones(acciones)}
       <div class="cot-fila" data-accion="abrir-cotizacion" data-id="${q.id}" role="button" tabindex="0">
         <div class="cot-texto">
           <strong class="es-cliente">${escapar(q.cliente || 'Sin cliente')}</strong>
@@ -2068,7 +2148,7 @@ function listaCotizaciones(filas) {
             ? `<button class="mini" data-accion="reabrir-cot" data-id="${q.id}">Reabrir</button>`
             : `<button class="mini${saldado && aprobada ? ' destacado' : ''}" data-accion="cerrar-cot" data-id="${q.id}"
                        title="${saldado ? 'Sacarla de la lista y dejarla en el historial' : 'Todavía falta cobrarla'}">Cerrar</button>`}
-          <button class="mini mas" data-accion="mas-cot" title="Editar o eliminar esta cotización"
+          <button class="mini mas" data-accion="mas-opciones" title="Editar o eliminar esta cotización"
                   aria-label="Más opciones">⋯</button>
         </div>
       </div>
@@ -2705,9 +2785,21 @@ let recienArrastrado = null;
 const anchoCajon = (item) => item.querySelector('.cot-cajon')?.offsetWidth || 0;
 
 function cerrarCajones(menos = null) {
-  $$('.cot-item.abierto').forEach((item) => {
-    if (item !== menos) item.classList.remove('abierto');
+  $$('.deslizable.abierto').forEach((item) => {
+    if (item !== menos) { item.classList.remove('abierto'); item.style.removeProperty('--x'); }
   });
+}
+
+// Dónde estaba la lista cuando se abrió el último cajón. Recorrerla lo cierra,
+// pero abrirlo mueve el foco y eso solo ya dispara un scroll de un par de
+// píxeles: sin esta marca, el cajón se cerraba en el mismo instante en que se
+// abría.
+let scrollAlAbrir = 0;
+
+function abrirCajon(item) {
+  cerrarCajones(item);
+  item.classList.add('abierto');
+  scrollAlAbrir = $('#contenido').scrollTop;
 }
 
 /** Arranca el seguimiento. Devuelve false si ahí no había nada que deslizar. */
@@ -2716,12 +2808,11 @@ function empezarDeslizado(objetivo, x, y) {
   // el renglón volvería encima justo antes del clic y se lo llevaría puesto.
   if (objetivo.closest?.('.cot-cajon')) { deslizando = null; return false; }
 
-  const fila = objetivo.closest?.('.cot-fila');
-  if (!fila) { deslizando = null; cerrarCajones(); return false; }
+  const item = objetivo.closest?.('.deslizable');
+  if (!item) { deslizando = null; cerrarCajones(); return false; }
 
-  const item = fila.parentElement;
   deslizando = {
-    fila, item, x0: x, y0: y,
+    item, x0: x, y0: y,
     base: item.classList.contains('abierto') ? -anchoCajon(item) : 0,
     decidido: false, abandonado: false,
   };
@@ -2749,26 +2840,37 @@ function moverDeslizado(x, y) {
   }
 
   const tope = anchoCajon(deslizando.item);
-  deslizando.fila.style.transform = `translateX(${Math.max(-tope, Math.min(0, deslizando.base + dx))}px)`;
+  deslizando.item.style.setProperty('--x', `${Math.max(-tope, Math.min(0, deslizando.base + dx))}px`);
   return true;
 }
 
-function soltarDeslizado(x) {
+/**
+ * Suelta el renglón donde quedó: abierto o de vuelta en su sitio.
+ *
+ * `conRaton` existe porque arrastrar con el ratón termina en un clic —el mismo
+ * gesto abre el cajón y "toca" el renglón—, y ese clic hay que descartarlo. Con
+ * el dedo no pasa: al frenar el touchmove el navegador ya no sintetiza el clic,
+ * así que anotarlo dejaría al renglón sordo por un rato sin ninguna razón.
+ */
+function soltarDeslizado(x, conRaton = false) {
   if (!deslizando) return;
-  const { fila, item, base, x0, decidido } = deslizando;
+  const { item, base, x0, decidido } = deslizando;
   deslizando = null;
 
-  fila.style.transform = '';
+  item.style.removeProperty('--x');
   item.classList.remove('arrastrando');
   if (!decidido) return;
 
   const tope = anchoCajon(item);
   const donde = Math.max(-tope, Math.min(0, base + (x - x0)));
   // Pasada la tercera parte queda abierto; antes de eso se devuelve solo.
-  item.classList.toggle('abierto', donde < -tope / 3);
+  if (donde < -tope / 3) abrirCajon(item);
+  else item.classList.remove('abierto');
 
-  recienArrastrado = item;
-  setTimeout(() => { if (recienArrastrado === item) recienArrastrado = null; }, 400);
+  if (conRaton) {
+    recienArrastrado = item;
+    setTimeout(() => { if (recienArrastrado === item) recienArrastrado = null; }, 400);
+  }
 }
 
 /* Con el dedo */
@@ -2796,7 +2898,10 @@ contenido.addEventListener('touchend', (e) => {
 contenido.addEventListener('touchcancel', () => {
   // Una llamada entrante, el centro de control… el gesto se corta: se devuelve
   // el renglón a su sitio sin abrir nada.
-  if (deslizando) { deslizando.fila.style.transform = ''; deslizando.item.classList.remove('arrastrando'); }
+  if (deslizando) {
+    deslizando.item.style.removeProperty('--x');
+    deslizando.item.classList.remove('arrastrando');
+  }
   deslizando = null;
 }, { passive: true });
 
@@ -2811,13 +2916,13 @@ contenido.addEventListener('pointermove', (e) => {
   if (e.pointerType === 'touch' || !deslizando || e.pointerId !== deslizando.puntero) return;
   const arranco = !deslizando.decidido;
   if (moverDeslizado(e.clientX, e.clientY) && arranco) {
-    try { deslizando.fila.setPointerCapture(e.pointerId); } catch { /* sin captura igual anda */ }
+    try { deslizando.item.setPointerCapture(e.pointerId); } catch { /* sin captura igual anda */ }
   }
 });
 
 const soltarConRaton = (e) => {
   if (e.pointerType === 'touch' || !deslizando || e.pointerId !== deslizando.puntero) return;
-  soltarDeslizado(e.clientX);
+  soltarDeslizado(e.clientX, true);
 };
 contenido.addEventListener('pointerup', soltarConRaton);
 contenido.addEventListener('pointercancel', soltarConRaton);
@@ -2825,23 +2930,31 @@ contenido.addEventListener('pointercancel', soltarConRaton);
 // Con el tabulador se llega a los botones del cajón aunque esté cerrado: si
 // alguno recibe el foco, se abre, para que se vea dónde está parado.
 contenido.addEventListener('focusin', (e) => {
-  const item = e.target.closest('.cajon-btn') ? e.target.closest('.cot-item') : null;
-  cerrarCajones(item);
-  if (item) item.classList.add('abierto');
+  // Sólo cuando el foco cae DENTRO de un cajón. Antes también cerraba cuando
+  // caía en cualquier otro lado, y eso se llevaba puesto el cajón que el botón
+  // de al lado acababa de abrir: según el navegador, el foco llega después del
+  // clic, no antes.
+  const boton = e.target.closest('.cajon-btn');
+  if (!boton) return;
+  const item = boton.closest('.deslizable');
+  if (item) abrirCajon(item);
 });
 
 // Sin dedo: las flechas abren y cierran el cajón del renglón que tenga el foco.
 contenido.addEventListener('keydown', (e) => {
-  const fila = e.target.closest?.('.cot-fila');
-  if (!fila) return;
-  if (e.key === 'ArrowLeft') { cerrarCajones(fila.parentElement); fila.parentElement.classList.add('abierto'); }
-  else if (e.key === 'ArrowRight' || e.key === 'Escape') fila.parentElement.classList.remove('abierto');
+  const item = e.target.closest?.('.deslizable');
+  if (!item || e.target.closest('.cajon-btn')) return;
+  if (e.key === 'ArrowLeft') abrirCajon(item);
+  else if (e.key === 'ArrowRight' || e.key === 'Escape') item.classList.remove('abierto');
   else return;
   e.preventDefault();
 });
 
-// Al recorrer la lista se cierra lo que haya quedado abierto.
-contenido.addEventListener('scroll', () => { if (!deslizando) cerrarCajones(); }, { passive: true });
+// Al recorrer la lista se cierra lo que haya quedado abierto. Un movimiento
+// mínimo no cuenta: ése lo hace el navegador solo, acomodando el foco.
+contenido.addEventListener('scroll', () => {
+  if (!deslizando && Math.abs(contenido.scrollTop - scrollAlAbrir) > 8) cerrarCajones();
+}, { passive: true });
 
 /**
  * Pregunta y elimina una cotización, diciendo antes qué se lleva puesto.
@@ -2880,13 +2993,13 @@ $('#contenido').addEventListener('click', async (e) => {
   // visor de PDF, que escucha en el documento.
   if (e.target.closest('a[href]')) return;
 
-  const filaCot = e.target.closest('.cot-fila');
-  if (filaCot) {
+  const renglon = e.target.closest('.deslizable');
+  if (renglon && !e.target.closest('.cot-cajon')) {
     // El toque con el que se termina de deslizar no es un toque sobre el
     // renglón: si lo fuera, abrir el cajón abriría también la cotización.
-    if (recienArrastrado === filaCot.parentElement) { recienArrastrado = null; return; }
+    if (recienArrastrado === renglon) { recienArrastrado = null; return; }
     // Con el cajón abierto, tocar el renglón lo cierra. Es lo que uno intenta.
-    if (filaCot.parentElement.classList.contains('abierto')) { cerrarCajones(); return; }
+    if (renglon.classList.contains('abierto')) { cerrarCajones(); return; }
   }
 
   const boton = e.target.closest('[data-accion]');
@@ -2927,11 +3040,10 @@ $('#contenido').addEventListener('click', async (e) => {
 
   // Los tres puntos abren el mismo cajón que el deslizado, para el que no
   // conoce el gesto o el teléfono no se lo toma.
-  if (accion === 'mas-cot') {
-    const item = boton.closest('.cot-item');
-    const estaba = item.classList.contains('abierto');
-    cerrarCajones();
-    item.classList.toggle('abierto', !estaba);
+  if (accion === 'mas-opciones') {
+    const item = boton.closest('.deslizable');
+    if (item.classList.contains('abierto')) cerrarCajones();
+    else abrirCajon(item);
     return;
   }
 
@@ -4137,6 +4249,49 @@ window.addEventListener('popstate', () => {
 // Al girar el teléfono o pasar a escritorio, la hoja vuelve a su sitio.
 window.addEventListener('resize', () => { if (!esCelular()) cerrarHoja(); });
 
+/* ─────────── Dónde se estaba ─────────── */
+/*
+ * Salir a ver un PDF y volver dejaba la aplicación en el tablero: el celular
+ * descarga la pantalla mientras uno está afuera, y al volver la aplicación
+ * arranca de cero, como si recién se abriera. Había que entrar otra vez a la
+ * cotización, bajar y seguir. Se anota en qué se estaba —sólo en esta pestaña,
+ * con sessionStorage— y al arrancar se vuelve ahí.
+ */
+const DONDE = 'ari-donde';
+
+function anotarDondeEstoy() {
+  try {
+    sessionStorage.setItem(DONDE, JSON.stringify({
+      vista: estado.vista,
+      cotizacion: estado.cotizacionAbierta,
+      cliente: estado.clienteAbierto,
+      producto: estado.productoAbierto,
+    }));
+  } catch { /* en privado no deja escribir; no es grave */ }
+}
+
+/** Vuelve a donde estaba, si eso todavía existe. */
+async function volverDondeEstaba() {
+  let donde;
+  try { donde = JSON.parse(sessionStorage.getItem(DONDE) || 'null'); } catch { return false; }
+  if (!donde?.vista) return false;
+
+  // Lo abierto puede haberse borrado desde otro lado: si ya no está, se vuelve
+  // a la lista y no a una ficha en blanco.
+  const sigueAhi = async (que, id) => {
+    if (!id) return false;
+    try { return Boolean((await api(`/${que}/${id}`))?.id); } catch { return false; }
+  };
+
+  estado.vista = donde.vista;
+  if (await sigueAhi('cotizaciones', donde.cotizacion)) estado.cotizacionAbierta = donde.cotizacion;
+  else if (await sigueAhi('clientes', donde.cliente)) estado.clienteAbierto = donde.cliente;
+  else if (await sigueAhi('productos', donde.producto)) estado.productoAbierto = donde.producto;
+
+  $$('.nav-item').forEach((b) => b.classList.toggle('activo', b.dataset.vista === estado.vista));
+  return true;
+}
+
 /* ─────────── Arranque ─────────── */
 
 (async function arrancar() {
@@ -4167,6 +4322,7 @@ window.addEventListener('resize', () => { if (!esCelular()) cerrarHoja(); });
     }
   } catch { /* el servidor dirá */ }
 
+  await volverDondeEstaba();
   await refrescarTodo();
   setInterval(refrescarResumen, 60_000);
 })();
