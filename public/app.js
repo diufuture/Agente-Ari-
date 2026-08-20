@@ -268,22 +268,11 @@ async function guardarPdfDeCotizacion(cot) {
   return { bajado: true };
 }
 
-// Cuando el visor abre un PDF armado al vuelo (no uno guardado en el
-// servidor), la dirección es un blob: propio de esta pestaña. Hay que
-// soltarlo al cerrar el visor, o la memoria se va quedando con cada PDF que
-// se miró y nunca se liberó.
-let urlDeVisorPropia = null;
-
-function abrirVisorPdf(url, titulo = 'Documento', { propia = false } = {}) {
-  if (urlDeVisorPropia) URL.revokeObjectURL(urlDeVisorPropia);
-  urlDeVisorPropia = propia ? url : null;
-
+function abrirVisorPdf(url, titulo = 'Documento') {
   const visor = $('#visor-pdf');
   $('#visor-titulo').textContent = titulo;
-  // "Abrir aparte" de un PDF armado al vuelo no tiene a dónde apuntar una vez
-  // cerrado el visor —el blob se suelta—, así que ese botón no aplica acá.
-  $('#visor-aparte').hidden = propia;
-  $('#visor-aparte').href = propia ? '#' : url;
+  $('#visor-aparte').hidden = false;
+  $('#visor-aparte').href = url;
   $('#visor-marco').src = url;
   visor.hidden = false;
   document.body.classList.add('con-visor');
@@ -301,15 +290,45 @@ function cerrarVisorPdf({ desdeHistorial = false } = {}) {
   // puede seguir sonando si el PDF trae algo incrustado.
   $('#visor-marco').src = 'about:blank';
   document.body.classList.remove('con-visor');
-  if (urlDeVisorPropia) {
-    URL.revokeObjectURL(urlDeVisorPropia);
-    urlDeVisorPropia = null;
-  }
   if (desdeHistorial) {
     visorEnHistorial = false;
   } else if (visorEnHistorial) {
     visorEnHistorial = false;
     history.back();
+  }
+}
+
+/**
+ * Muestra un PDF armado al vuelo —no uno guardado en el servidor— en una
+ * pestaña de verdad, no en el visor propio.
+ *
+ * Adentro de un `<iframe>`, Safari en iPhone no pagina ni deja hacer scroll:
+ * muestra sólo la parte de arriba y ahí se corta, así que con una cotización
+ * de varios renglones no se ven ni los de más abajo ni el total. Fuera del
+ * marco, en su propia pestaña, el mismo Safari sí sabe mostrar un PDF entero
+ * con su lector nativo. Por eso este camino no reusa `abrirVisorPdf`.
+ *
+ * La pestaña se abre YA, en el mismo instante del toque —`window.open` sin
+ * esperar nada—: hacerlo después de un `await`, aunque sea corto, ya no
+ * cuenta como gesto del usuario y el navegador la bloquea como si fuera
+ * publicidad. Se le pone la dirección real recién cuando el PDF está listo.
+ */
+async function verPdfGenerado(cot, titulo) {
+  const ventana = window.open('', '_blank');
+  try {
+    const archivo = await pdfDeCotizacion(cot);
+    const url = URL.createObjectURL(archivo);
+    if (ventana) {
+      ventana.location = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } else {
+      // El navegador bloqueó la pestaña igual: queda el otro camino.
+      URL.revokeObjectURL(url);
+      throw new Error('El navegador bloqueó la ventana. Probá con «Guardar PDF».');
+    }
+  } catch (err) {
+    ventana?.close();
+    throw err;
   }
 }
 
@@ -930,23 +949,29 @@ function detalleCotizacion(cot, abonos, items = [], totales = null) {
           <h2>${escapar(cot.titulo)}</h2>
           <p>${escapar(cot.cliente || 'Sin cliente')} · creada ${escapar(fmtFecha(String(cot.creado_en || '').slice(0, 10)))}</p>
         </div>
-        ${/* Cuatro botones no caben en un teléfono: el último quedaba cortado
-              contra el borde, y justo era Editar. Ahora son dos —el PDF y
-              Editar—, y cuál es el del PDF depende de la oferta:
+        ${/* Cuál botón de PDF aparece depende de la oferta:
 
-              · Con un PDF cargado aparece «Ver el PDF», que es lo que hace
-                falta con una oferta que se armó por fuera.
-              · «Guardar PDF» sólo si hay renglones que poner adentro. Sin
-                renglones armaba una oferta en blanco, que es justo el caso de
-                las que llegan con el PDF ya hecho.
+              · Con un PDF cargado, «Ver el PDF» abre ese archivo. Es lo que
+                hace falta con una oferta que se armó por fuera.
+              · Sin uno cargado pero con renglones, «Ver» arma el PDF al
+                vuelo y lo muestra —sin guardarlo ni mandarlo a ningún
+                lado—, y junto va «Guardar PDF» para cuando sí hace falta
+                guardarlo o mandarlo por WhatsApp. Sin renglones no hay
+                nada que mostrar todavía, así que ninguno de los dos sale.
 
-              La página imprimible («Ver») se fue: hace lo mismo que Guardar
-              PDF pero peor, y en el celular instalado no abre nada. */ ''}
+              La página imprimible («Ver» de antes, la de /imprimir) se fue:
+              hacía lo mismo que Guardar PDF pero peor, y en el celular
+              instalado no abría nada. Este «Ver» es otro: no navega a
+              ningún lado, arma el PDF y lo enseña. */ ''}
         <div class="ficha-acciones">
           <span class="pastilla ${escapar(cot.estado)}">${escapar(cot.estado)}</span>
           ${cot.archivo
             ? `<a class="mini destacado" href="${escapar(cot.archivo)}" target="_blank" rel="noopener"
                   data-titulo="${escapar(cot.archivo_nombre || cot.titulo)}">Ver el PDF</a>`
+            : ''}
+          ${!cot.archivo && items.length
+            ? `<button class="mini" data-accion="ver-pdf-cot" data-id="${cot.id}"
+                  data-titulo="${escapar(cot.titulo)}">Ver</button>`
             : ''}
           ${items.length
             ? `<button class="mini${cot.archivo ? '' : ' destacado'}" data-accion="guardar-pdf">Guardar PDF</button>`
@@ -3156,16 +3181,14 @@ $('#contenido').addEventListener('click', async (e) => {
   }
 
   // Ver la oferta sin entrar a la cotización: la arma al vuelo con lo que
-  // tiene hoy y la abre en el visor. No la guarda ni la manda a ningún
-  // lado —para eso está "Guardar PDF" adentro de la ficha—, sólo mira.
+  // tiene hoy y la muestra en una pestaña de verdad. No la guarda ni la manda
+  // a ningún lado —para eso está "Guardar PDF"—, sólo mira.
   if (accion === 'ver-pdf-cot') {
     const original = boton.innerHTML;
     boton.disabled = true;
     boton.innerHTML = '…';
     try {
-      const archivo = await pdfDeCotizacion({ id: Number(id) });
-      const url = URL.createObjectURL(archivo);
-      abrirVisorPdf(url, boton.dataset.titulo || 'Cotización', { propia: true });
+      await verPdfGenerado({ id: Number(id) }, boton.dataset.titulo || 'Cotización');
     } catch (err) {
       avisar(err.message, true);
     } finally {

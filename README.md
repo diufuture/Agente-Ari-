@@ -743,12 +743,25 @@ hosting compartido se quedan sin memoria.
 ### Ver el PDF sin entrar a la cotización
 
 En la **lista de cotizaciones**, el ícono 📄 al lado de "Cerrar" abre la oferta
-en PDF sin tener que entrar a la ficha. La mayoría de las cotizaciones no
-tienen un PDF guardado —se arman con renglones, no se suben ya hechas—, así
-que el ícono la arma al vuelo con lo que tiene hoy y la muestra en el mismo
-visor de siempre. No la guarda ni la sube a ningún lado: es sólo para mirar.
-Si la cotización no tiene renglones tampoco hay ícono, porque no hay nada que
+en PDF sin tener que entrar a la ficha; adentro de la ficha está el botón
+**Ver**, al lado de Guardar PDF. La mayoría de las cotizaciones no tienen un
+PDF guardado —se arman con renglones, no se suben ya hechas—, así que este
+camino la arma al vuelo con lo que tiene hoy. No la guarda ni la sube a ningún
+lado: es sólo para mirar. Si la cotización no tiene renglones no hay nada que
 mostrar todavía.
+
+Se abre en una **pestaña nueva de verdad**, con el lector de PDF del propio
+navegador, no en el visor de la aplicación. Adentro de un `<iframe>` —que es
+lo que usa el visor para los PDF ya guardados— Safari en el iPhone no pagina
+ni deja hacer scroll dentro de un documento largo: se ve sólo la parte de
+arriba, y ahí se corta, sin llegar a los renglones de más abajo ni al total.
+Fuera del marco, en su propia pestaña, el mismo Safari sí muestra el
+documento entero.
+
+La pestaña se abre en el mismo instante del toque, antes de que el PDF esté
+armado, y recién después se le pone la dirección: abrirla más tarde —cuando
+ya terminó de armarse— ya no cuenta como algo que pidió la persona, y el
+navegador la bloquea como si fuera publicidad.
 
 ## Agendamientos que llegan de la web
 
