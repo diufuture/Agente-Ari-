@@ -230,6 +230,20 @@ cada respuesta el micrófono se reabre solo, así se puede seguir dictando sin
 tocar el teléfono. Tolera tres silencios seguidos —el tiempo de pasar de una
 pieza a otra— y después se apaga solo para no quedar grabando en el bolsillo.
 
+**Dos dictados seguidos.** En el celular, con la conversación abierta hay un
+micrófono adentro de la hoja, al lado de donde se escribe. El flotante queda
+detrás de la hoja, y antes el de adentro estaba escondido: no quedaba ninguno,
+así que después de dictar una orden había que esperar a que la hoja se cerrara
+sola para poder hablar otra vez.
+
+Además el micrófono se suelta apenas termina el dictado, y no al abrir el
+siguiente. Parece lo mismo y no lo es: soltándolo recién al abrir el siguiente,
+la sesión vieja se aborta y la nueva arranca en el mismo instante, el teléfono
+todavía no alcanzó a soltar el audio, y la nueva nace sorda —dice «Escuchando» y
+no le llega nada— hasta que el sistema se desocupa unos segundos después.
+Soltándolo al terminar, queda libre mientras Ari contesta y habla, que es justo
+el rato en que uno está esperando para volver a hablarle.
+
 Cuál es la cotización en curso se guarda en la base, no en el navegador: se
 puede empezar en el celular recorriendo la obra y terminarla en el computador.
 

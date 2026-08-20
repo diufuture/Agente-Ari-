@@ -2436,6 +2436,13 @@ let vigilante = null;
 // Detecta la sesión que abre pero no oye: dice "Escuchando" y no llega audio.
 let centinelaAudio = null;
 let reintentoSordo = 0;
+// Cuánto se le da a una sesión para que entre audio antes de darla por sorda.
+// Si se abrió justo después de cortarle la voz a Ari, el teléfono venía
+// reproduciendo y le cuesta más cambiar a grabar: ahí nacer sorda es lo
+// esperable y no tiene sentido esperar tanto para rehacerla.
+const MARGEN_SORDO = 4500;
+const MARGEN_SORDO_TRAS_HABLAR = 1800;
+let margenSordo = MARGEN_SORDO;
 
 // Manos libres: cuántos silencios seguidos se toleran antes de apagarlo solo.
 const MAX_SILENCIOS = 3;
@@ -2520,7 +2527,7 @@ function crearReconocedor() {
         $('#pista').textContent = 'El micrófono no está entregando audio. '
           + 'Cerrá y volvé a abrir la aplicación, o escribime acá abajo.';
       }
-    }, 4500);
+    }, margenSordo);
   };
 
   // Cualquiera de estas tres es señal de que el audio está entrando de verdad.
@@ -2574,6 +2581,17 @@ function crearReconocedor() {
     clearTimeout(vigilante);
     clearTimeout(centinelaAudio);
     marcarGrabando(false);
+
+    // El micrófono se suelta ACÁ, apenas termina el dictado, y no al abrir el
+    // siguiente. Soltarlo recién al abrir el siguiente parece lo mismo pero no
+    // lo es: se aborta la sesión vieja y se arranca la nueva en el mismo
+    // instante, y el teléfono todavía no alcanzó a soltar el audio, así que la
+    // nueva nace sorda —dice "Escuchando" y no le llega nada— hasta que el
+    // sistema se desocupa solo unos segundos después. Soltándolo acá, el
+    // micrófono queda libre mientras Ari contesta y habla, que es justo el rato
+    // en que uno está esperando para volver a hablarle.
+    if (reconocedor === r) setTimeout(soltarMicrofono, 0);
+
     const texto = $('#texto').value.trim();
 
     if (texto) {
@@ -2653,7 +2671,15 @@ function alternarMicrofono() {
     detenerMicrofono();
     return;
   }
-  if (arrancando) return; // ya se pidió; dos toques seguidos se abortan entre sí
+
+  // Tocarlo mientras está abriendo ya no se ignora. Ignorarlo dejaba el botón
+  // muerto hasta tres segundos cuando el arranque se colgaba —que es
+  // exactamente cuando uno lo vuelve a tocar—. Se tira ese intento y se abre
+  // uno nuevo, todavía adentro del toque, que es como el iPhone lo permite.
+  if (arrancando) {
+    arrancando = false;
+    soltarMicrofono();
+  }
 
   // Tocar el micrófono es empezar de nuevo: lo que haya fallado antes no
   // tiene por qué seguir estorbando.
@@ -2682,7 +2708,9 @@ function empezarAEscuchar(intento = 0) {
 
   // La voz de Ari y el micrófono se pelean el audio del teléfono: primero se
   // calla, después se graba.
+  const veniaHablando = 'speechSynthesis' in window && speechSynthesis.speaking;
   if ('speechSynthesis' in window) speechSynthesis.cancel();
+  margenSordo = veniaHablando ? MARGEN_SORDO_TRAS_HABLAR : MARGEN_SORDO;
 
   soltarMicrofono();          // suelta y tira la sesión anterior
   reconocedor = crearReconocedor();

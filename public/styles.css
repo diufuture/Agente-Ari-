@@ -493,7 +493,14 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
   .conversacion { padding: 12px 16px; max-height: 48dvh; }
   .burbuja { max-width: 88%; font-size: 14px; }
   .entrada { padding: 10px 16px 8px; }
-  .entrada .mic { display: none; }           /* en celular el micrófono es el botón flotante */
+  /* Con la hoja de la conversación abierta, el micrófono flotante queda
+     escondido detrás de ella. Si acá tampoco hay uno, no hay ninguno: había
+     que esperar a que la hoja se cerrara sola para poder volver a hablar, que
+     es justo lo que se sentía como "el micrófono no responde". Así que en el
+     celular el micrófono de la hoja SÍ se ve, un poco más chico, al lado de
+     donde se escribe. */
+  .entrada .mic { width: 46px; height: 46px; }
+  .entrada .mic svg { width: 20px; height: 20px; }
   .caja-texto { padding: 4px 4px 4px 14px; }
   .caja-texto input { font-size: 16px; }     /* 16px evita que iOS haga zoom al enfocar */
   .caja-texto button { width: 36px; height: 36px; }
