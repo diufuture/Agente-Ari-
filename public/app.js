@@ -1574,6 +1574,24 @@ function vistaAjustes(aj) {
         </form>
       </div>`)}
 
+    ${bloque('Limpieza', `
+      <div class="tarjeta">
+        <p class="ayuda" style="margin:0 0 10px">
+          Hasta hace poco, cada entrega agendada desde la web daba de alta un
+          <b>cliente</b> con el nombre del residente. Ya no lo hace —los datos
+          del residente quedan dentro de la cita, que es donde sirven—, pero
+          los que se crearon antes siguen en la lista.
+        </p>
+        <p class="ayuda" style="margin:0 0 12px">
+          Esto los saca. Sólo toca a los que no tienen nada más: ni
+          cotizaciones, ni cobros, ni pendientes, ni citas cargadas a mano.
+          <b>Las entregas no se pierden</b>: siguen en la agenda con el nombre,
+          el teléfono y el correo del residente.
+        </p>
+        <button class="mini destacado" data-accion="limpiar-clientes-formulario">
+          Revisar y quitar</button>
+      </div>`)}
+
     ${/* En el computador esto se ve abajo a la izquierda; en el celular no hay
           barra lateral, y era el único lugar donde decía qué versión está
           corriendo. Después de subir una actualización es el dato que dice si
@@ -3799,6 +3817,28 @@ $('#contenido').addEventListener('click', async (e) => {
   if (accion === 'alternar-historial-cot') {
     estado.verHistorialCot = !estado.verHistorialCot;
     await pintar();
+    return;
+  }
+  if (accion === 'limpiar-clientes-formulario') {
+    try {
+      const { candidatos } = await api('/clientes-del-formulario');
+      if (!candidatos.length) {
+        avisar('No hay ninguno para quitar: la lista ya está limpia.');
+        return;
+      }
+      // Se enumeran de verdad, no un "se van a borrar 8": ver los nombres es
+      // lo único que permite darse cuenta de que uno no debería estar ahí.
+      const nombres = candidatos.slice(0, 12).map((c) => `· ${c.nombre}`).join('\n');
+      const resto = candidatos.length > 12 ? `\n… y ${candidatos.length - 12} más` : '';
+      if (!confirm(`Se van a quitar ${candidatos.length} cliente(s) que había creado el formulario:\n\n${
+        nombres}${resto}\n\nSus entregas quedan en la agenda, con el nombre y los datos del residente.\n\n¿Seguimos?`)) return;
+
+      const r = await api('/clientes-del-formulario', { method: 'POST', body: {} });
+      avisar(`Listo: ${r.borrados} cliente(s) fuera de la lista ✓`);
+      await refrescarTodo();
+    } catch (err) {
+      avisar(err.message, true);
+    }
     return;
   }
   if (accion === 'cotizar-producto') {

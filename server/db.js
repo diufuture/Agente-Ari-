@@ -1380,6 +1380,64 @@ export function eliminarClienteYLoSuyo(id) {
   return { borrado: true, nombre: cliente.nombre, ...resumen, devueltosAlInventario };
 }
 
+/**
+ * Saca de Clientes a los residentes que había creado el formulario web.
+ *
+ * Antes, cada agendamiento de la web daba de alta un cliente. Una torre de
+ * cincuenta apartamentos dejaba cincuenta nombres con los que no se factura
+ * nada, tapando a los clientes de verdad —que es la constructora, la que
+ * tiene la cotización—. Eso ya no pasa, pero los que se crearon siguen ahí.
+ *
+ * Se borra sólo lo que con seguridad salió del formulario. Un cliente entra
+ * en la lista únicamente si cumple TODO esto:
+ *
+ *   · tiene al menos una cita venida de la web (las que llevan `origen`);
+ *   · no tiene NINGUNA cita cargada a mano —si la tiene, alguien lo trató
+ *     como cliente de verdad y no se toca—;
+ *   · no tiene cotizaciones, ni cobros, ni abonos, ni pendientes, ni notas.
+ *
+ * O sea: sólo los que no existirían si el formulario no los hubiera creado.
+ * Sus datos no se pierden: el nombre, el teléfono y el correo del residente
+ * ya viven dentro de la cita, que es donde sirven el día de la entrega.
+ *
+ * Con `simular` no borra nada y sólo devuelve a quiénes se llevaría, para
+ * poder mostrarlo antes de preguntar.
+ */
+export function limpiarClientesDelFormulario({ simular = false } = {}) {
+  if (!columnasReales('citas').has('origen')) return { candidatos: [], borrados: 0 };
+
+  const candidatos = all(`
+    SELECT c.id, c.nombre, c.email,
+           (SELECT COUNT(*) FROM citas a WHERE a.cliente_id = c.id AND a.origen IS NOT NULL) AS citas_web
+      FROM clientes c
+     WHERE (SELECT COUNT(*) FROM citas a WHERE a.cliente_id = c.id AND a.origen IS NOT NULL) > 0
+       AND (SELECT COUNT(*) FROM citas a WHERE a.cliente_id = c.id AND a.origen IS NULL) = 0
+       AND (SELECT COUNT(*) FROM cotizaciones q WHERE q.cliente_id = c.id) = 0
+       AND (SELECT COUNT(*) FROM cobros k WHERE k.cliente_id = c.id) = 0
+       AND (SELECT COUNT(*) FROM recordatorios r WHERE r.cliente_id = c.id) = 0
+       AND (SELECT COUNT(*) FROM notas n WHERE n.cliente_id = c.id) = 0
+     ORDER BY c.nombre COLLATE NOCASE`);
+
+  if (simular || !candidatos.length) return { candidatos, borrados: 0 };
+
+  // Primero se despegan las citas y recién después se borra el cliente. Al
+  // revés, el borrado en cascada se llevaría puestas las entregas, que es
+  // justamente lo único que hay que conservar.
+  db.exec('BEGIN');
+  try {
+    for (const c of candidatos) {
+      run('UPDATE citas SET cliente_id = NULL WHERE cliente_id = ? AND origen IS NOT NULL', [c.id]);
+      run('DELETE FROM clientes WHERE id = ?', [c.id]);
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+
+  return { candidatos, borrados: candidatos.length };
+}
+
 /** Si la que se borró era la que se estaba dictando, se deja de apuntar a ella. */
 function cerrarSiEsLaActiva(id) {
   const fila = one('SELECT valor FROM ajustes WHERE clave = ?', [CLAVE_ACTIVA]);
@@ -1641,54 +1699,6 @@ export function resolverRegistro(entidad, texto, clienteId = null) {
 /* Citas que llegan de afuera (el formulario de la web)                */
 /* ------------------------------------------------------------------ */
 
-/**
- * Encuentra al cliente de un agendamiento web, o lo crea.
- *
- * No se usa `resolverCliente` a propósito: esa está pensada para cuando hay
- * alguien escuchando y, ante la duda, contesta "hay varios que coinciden" y
- * espera que le aclaren. Acá no hay nadie: el formulario ya se envió, el
- * cliente ya recibió su confirmación, y quedarse sin agendar porque el nombre
- * se parecía a otro sería lo peor que podría pasar. Así que siempre decide.
- *
- * Busca en orden de qué tan confiable es cada dato para identificar a alguien:
- * el correo primero (es único de verdad), después el teléfono, y recién al
- * final el nombre exacto. Un "Isabella Ruiz" con otro correo es otra persona,
- * y va aparte; el mismo correo con el nombre escrito distinto es la misma, y
- * se le completan los datos que falten sin pisar los que ya tenía cargados.
- */
-function clienteDeAgendamiento({ nombre, telefono, correo }) {
-  const buscar = (columna, valor) => (valor
-    ? one(`SELECT * FROM clientes WHERE ${columna} = ? COLLATE NOCASE
-             AND ${columna} IS NOT NULL AND ${columna} <> '' ORDER BY id LIMIT 1`, [valor])
-    : null);
-
-  // Dos correos distintos son dos personas distintas, aunque compartan el
-  // teléfono o se llamen parecido. Pasa de verdad: el administrador del
-  // edificio agenda por varios apartamentos dejando siempre su número, y sin
-  // esto todas esas entregas terminarían colgadas del mismo cliente.
-  const otraPersona = (c) => Boolean(correo && c.email && c.email.toLowerCase() !== correo.toLowerCase());
-
-  const porCorreo = buscar('email', correo);
-  const porTelefono = porCorreo ? null : buscar('telefono', telefono);
-  const porNombre = porCorreo || porTelefono ? null : buscar('nombre', nombre);
-
-  const candidato = porCorreo ?? porTelefono ?? porNombre;
-  const encontrado = candidato && !otraPersona(candidato) ? candidato : null;
-
-  if (!encontrado) {
-    return crearCliente({ nombre, telefono: telefono || null, email: correo || null });
-  }
-
-  // Completar huecos, nunca reemplazar: si el dueño le corrigió el teléfono a
-  // mano, un formulario web no tiene por qué volver a ponerle el viejo.
-  const faltantes = {};
-  if (telefono && !encontrado.telefono) faltantes.telefono = telefono;
-  if (correo && !encontrado.email) faltantes.email = correo;
-  return Object.keys(faltantes).length
-    ? actualizar('clientes', encontrado.id, faltantes)
-    : encontrado;
-}
-
 /** '8:30' -> '08:30'. Sin esto una cita de las 8:30 se ordena después de las 10:00. */
 function horaDeDosDigitos(hora) {
   const m = String(hora ?? '').trim().match(/^(\d{1,2}):(\d{2})$/);
@@ -1736,7 +1746,15 @@ function revisarAgendamiento(datos = {}) {
       // Las franjas del formulario van de media hora.
       duracion_min: Number(datos.duracion_min) > 0 ? Number(datos.duracion_min) : 30,
       lugar: [proyecto, apto && `Apto ${apto}`].filter(Boolean).join(' · ') || null,
+      // El residente va acá adentro y no como cliente: quien agenda una
+      // entrega es el dueño de un apartamento, no un cliente de Clic Control
+      // —el cliente es la constructora, que es la que tiene la cotización—.
+      // Metiéndolos en Clientes, una torre de cincuenta apartamentos llenaba
+      // la lista de cincuenta nombres con los que no se factura nada y que
+      // tapaban a los clientes de verdad. Su nombre, teléfono y correo quedan
+      // en la cita, que es donde hacen falta el día de la entrega.
       notas: [
+        `Residente: ${nombre}`,
         telefono && `Teléfono: ${telefono}`,
         correo && `Correo: ${correo}`,
         'Agendado desde el formulario de la web.',
@@ -1750,8 +1768,10 @@ function revisarAgendamiento(datos = {}) {
 
 /** Guarda un agendamiento ya revisado, actualizando si ese turno ya existía. */
 function guardarAgendamiento(revisado) {
-  const cliente = clienteDeAgendamiento(revisado);
-  const cita = { ...revisado.cita, cliente_id: cliente.id, origen: revisado.clave };
+  // Sin cliente a propósito: ver la nota en revisarAgendamiento(). El
+  // `cliente_id: null` va explícito para que, si un turno cambia de dueño, la
+  // cita que ya existía se despegue del cliente que tenía de antes.
+  const cita = { ...revisado.cita, cliente_id: null, origen: revisado.clave };
 
   // Si la columna `origen` no llegó a crearse (su migración falló porque otro
   // proceso tenía la base tomada), se agenda igual: perder la protección

@@ -435,6 +435,18 @@ async function api(req, res, url) {
     });
   }
 
+  // GET|POST /api/clientes-del-formulario -> saca de Clientes a los residentes
+  // que el formulario web había dado de alta cuando todavía los creaba. Con
+  // GET sólo dice a quiénes se llevaría, para poder avisarlo antes.
+  if (recurso === 'clientes-del-formulario') {
+    if (req.method === 'GET') {
+      return json(res, 200, db.limpiarClientesDelFormulario({ simular: true }));
+    }
+    if (req.method === 'POST') {
+      return json(res, 200, db.limpiarClientesDelFormulario());
+    }
+  }
+
   // GET /api/resumen  -> tarjetas y listas del dashboard
   if (recurso === 'resumen' && req.method === 'GET') {
     return json(res, 200, db.resumen());

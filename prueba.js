@@ -965,9 +965,15 @@ comprobar('el agendamiento de la web entra como cita nueva', alta.creada, true);
 comprobar('la hora queda con dos dígitos para poder ordenarla', alta.cita.inicio, '2026-08-21T08:30');
 comprobar('el título dice qué es y en qué apartamento', alta.cita.titulo, 'Entrega domótica · Apto 318');
 comprobar('y el lugar junta proyecto y apartamento', alta.cita.lugar, 'Amazonía 96 · Apto 318');
-comprobar('se le creó el cliente con sus datos de contacto',
-  [db.obtenerCliente(alta.cita.cliente_id).nombre, db.obtenerCliente(alta.cita.cliente_id).telefono],
-  ['Isabella Ruiz', '3108706368']);
+// El residente NO entra como cliente: quien agenda una entrega es el dueño de
+// un apartamento, no un cliente de Clic Control —el cliente es la
+// constructora, la que tiene la cotización—. Una torre de cincuenta
+// apartamentos llenaba la lista de nombres con los que no se factura nada.
+// Sus datos viven en la cita, que es donde sirven el día de la entrega.
+comprobar('la entrega no cuelga de ningún cliente', alta.cita.cliente_id, null);
+comprobar('pero la cita guarda quién es el residente y cómo ubicarlo',
+  ['Residente: Isabella Ruiz', 'Teléfono: 3108706368', 'Correo: isabellaruizguarin2006@gmail.com']
+    .every((l) => alta.cita.notas.includes(l)), true);
 
 // Que la cita aparezca en la agenda de ese día es el punto de todo esto.
 comprobar('la cita se ve en la agenda de ese día',
@@ -980,26 +986,16 @@ const repetido = db.registrarCitaExterna(agendamiento);
 comprobar('un aviso repetido actualiza en vez de duplicar', repetido.creada, false);
 comprobar('y sigue habiendo una sola cita en esa franja',
   db.consultar('citas', { desde: '2026-08-21', hasta: '2026-08-21' }).length, 1);
-comprobar('y un solo cliente, no dos Isabellas',
-  db.consultar('clientes', { texto: 'Isabella Ruiz' }).length, 1);
+comprobar('y ninguna Isabella en la lista de clientes',
+  db.consultar('clientes', { texto: 'Isabella Ruiz' }).length, 0);
 
-// El mismo correo escrito con otro nombre es la misma persona.
-const conOtroNombre = db.registrarCitaExterna({
-  ...agendamiento, hora: '9:00', nombre: 'isabella ruiz guarin',
-});
-comprobar('el correo manda sobre el nombre para reconocer al cliente',
-  conOtroNombre.cita.cliente_id, alta.cita.cliente_id);
-
-// Y al revés: mismo teléfono pero otro correo son DOS personas. Pasa cuando
-// el administrador del edificio agenda por varios apartamentos dejando
-// siempre su número; sin esto, todas esas entregas quedarían colgadas del
-// mismo cliente y la cartera de cada uno saldría mezclada.
+// Dos entregas del mismo edificio son dos citas, y ninguna ensucia Clientes.
 const vecino = db.registrarCitaExterna({
   ...agendamiento, hora: '9:30', nombre: 'Andrés Peña', apto: '405',
-  correo: 'andres@ejemplo.com',   // el teléfono sigue siendo el mismo
+  correo: 'andres@ejemplo.com',
 });
-comprobar('mismo teléfono y otro correo son dos clientes distintos',
-  vecino.cita.cliente_id === alta.cita.cliente_id, false);
+comprobar('la entrega del vecino tampoco crea cliente', vecino.cita.cliente_id, null);
+comprobar('y se distingue por el apartamento', vecino.cita.titulo, 'Entrega domótica · Apto 405');
 
 // Si alguien libera su turno y lo toma otro, la cita pasa a ser del nuevo:
 // el turno es el mismo, no son dos entregas.

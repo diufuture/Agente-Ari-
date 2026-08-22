@@ -1018,6 +1018,35 @@ El aviso lo manda el Apps Script, no el navegador: así el token vive en el
 servidor de Google y no en el código de la página, donde cualquiera que mirara
 el fuente podría copiarlo y escribir en tu agenda.
 
+### El residente no es un cliente
+
+La entrega que llega del formulario **no da de alta un cliente**. El cliente
+de Clic Control es la constructora —la que tiene la cotización—; quien agenda
+una entrega es el dueño de un apartamento, y aparece una sola vez en su vida.
+
+Al principio sí se creaba, y el resultado fue el esperable: una torre de
+cincuenta apartamentos dejaba cincuenta nombres en Clientes con los que no se
+factura nada, tapando a los clientes de verdad y ensuciando los totales.
+
+Ahora el nombre, el teléfono y el correo del residente van **dentro de la
+cita**, que es donde hacen falta el día de la entrega:
+
+```
+Residente: Yaqueline Roa Leon
+Teléfono: 3134527262
+Correo: jackyroa@gmail.com
+Agendado desde el formulario de la web.
+```
+
+Para los que se hubieran creado antes de este cambio, **Ajustes → Limpieza**
+los saca. Es conservador a propósito: sólo toca a los que no existirían si no
+fuera por el formulario —sin cotizaciones, sin cobros, sin pendientes, sin
+notas y sin ninguna cita cargada a mano—, y enumera sus nombres antes de
+preguntar. Si un residente terminó comprando algo, tiene cotización y no se
+toca. Las entregas nunca se pierden: primero se despegan del cliente y recién
+después se borra el cliente, nunca al revés —al revés, el borrado en cascada
+se llevaría las citas—.
+
 ### Cancelaciones
 
 El formulario no tiene botón de cancelar: cuando alguien avisa que no puede,
