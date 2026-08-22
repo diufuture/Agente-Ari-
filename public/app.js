@@ -2524,6 +2524,9 @@ function hablar(texto, alTerminar) {
   const margen = 1500 + texto.length * 75;
   setTimeout(seguir, margen);
 
+  // Queda anotado que Ari usó el parlante. Si el próximo dictado abre y no
+  // oye, esto es lo que permite señalar a la voz en vez de andar adivinando.
+  ariHablo = true;
   speechSynthesis.speak(u);
 }
 
@@ -2573,6 +2576,38 @@ const TECHO_SESION_MS = 20_000;
 const MARGEN_SORDO = 4500;
 const MARGEN_SORDO_TRAS_HABLAR = 1800;
 let margenSordo = MARGEN_SORDO;
+
+// La sesión MUDA: el audio abrió —`onaudiostart` llegó— y aun así no
+// transcribe, no falla y no termina nunca. Es lo que hace el Safari del iPhone
+// cuando Ari acaba de contestar en voz alta: el teléfono le entrega el
+// micrófono al dictado sin haberle soltado el parlante a la voz, y lo que sale
+// es una sesión de adorno.
+//
+// Va aparte del centinela de arriba a propósito: que el audio abra NO prueba
+// que la sesión sirva, y dar por buena la sesión apenas llegaba
+// `onaudiostart` era justo lo que dejaba pasar este caso.
+let centinelaMudo = null;
+// Un dictado sano que nadie contesta se cierra solo mucho antes: el navegador
+// manda `no-speech` a los pocos segundos. Si a los nueve no llegó ni voz, ni
+// error, ni cierre, la sesión está muerta.
+const TECHO_MUDO_MS = 9_000;
+
+// Lo que tarda el teléfono en soltar el parlante después de que se le corta la
+// voz a Ari. Abrir el micrófono adentro de ese rato es lo que lo deja mudo.
+const ESPERA_TRAS_HABLAR = 350;
+// ¿Ari habló desde el último dictado que sí se oyó? Si el micrófono se muere
+// justo después, la culpable es la voz —y la voz se puede apagar—.
+let ariHablo = false;
+let avisoVozApagada = false;
+let avisoRecargar = false;
+// Sesiones mudas seguidas. Una puede ser mala suerte; dos con la voz ya
+// apagada quieren decir que el navegador quedó trabado y no hay nada que
+// tocar acá adentro que lo arregle.
+let sesionesMudasSeguidas = 0;
+// Cada pedido de micrófono lleva número. El arranque que espera a que Ari se
+// calle mira este número antes de abrir: si mientras tanto se volvió a tocar
+// el botón, el pedido viejo se descarta en vez de abrir una sesión de más.
+let fichaDeArranque = 0;
 
 // Manos libres: cuántos silencios seguidos se toleran antes de apagarlo solo.
 const MAX_SILENCIOS = 3;
@@ -2624,9 +2659,15 @@ function crearReconocedor() {
   r.maxAlternatives = 1;
 
   let acumulado = '';
-  const hayAudio = () => {
+  // Prueba de vida de verdad: entró voz, o entró texto. Sólo esto apaga los
+  // dos centinelas y da la sesión por buena —y de paso absuelve a la voz de
+  // Ari, porque si se está oyendo es que no estorbó—.
+  const daSenalesDeVida = () => {
     clearTimeout(centinelaAudio);
+    clearTimeout(centinelaMudo);
     reintentoSordo = 0;
+    sesionesMudasSeguidas = 0;
+    ariHablo = false;
   };
 
   r.onstart = () => {
@@ -2660,29 +2701,25 @@ function crearReconocedor() {
     clearTimeout(centinelaAudio);
     centinelaAudio = setTimeout(() => {
       if (!escuchando) return;
-      escuchando = false;
-      marcarGrabando(false);
-      soltarMicrofono();
-
-      if (reintentoSordo < 1) {
-        reintentoSordo += 1;
-        $('#pista').textContent = 'Reintentando abrir el micrófono…';
-        setTimeout(() => empezarAEscuchar(), 400);
-      } else {
-        reintentoSordo = 0;
-        abrirHoja();
-        $('#pista').textContent = 'El micrófono no está entregando audio. '
-          + 'Cerrá y volvé a abrir la aplicación, o escribime acá abajo.';
-      }
+      recuperarDeSesionMuerta();
     }, margenSordo);
   };
 
-  // Cualquiera de estas tres es señal de que el audio está entrando de verdad.
-  r.onaudiostart = hayAudio;
-  r.onspeechstart = hayAudio;
+  // Que el audio abra sólo descarta la sesión SORDA; todavía puede salir muda.
+  // Por eso acá no se levanta la vigilancia: se cambia una por la otra.
+  r.onaudiostart = () => {
+    clearTimeout(centinelaAudio);
+    clearTimeout(centinelaMudo);
+    centinelaMudo = setTimeout(() => {
+      if (reconocedor !== r) return;
+      recuperarDeSesionMuerta();
+    }, TECHO_MUDO_MS);
+  };
+  // Esto sí: que el navegador oiga voz es prueba de que la sesión sirve.
+  r.onspeechstart = daSenalesDeVida;
 
   r.onresult = (e) => {
-    hayAudio();
+    daSenalesDeVida();
     let parcial = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const t = e.results[i][0].transcript;
@@ -2694,6 +2731,7 @@ function crearReconocedor() {
 
   r.onerror = (e) => {
     clearTimeout(centinelaAudio);
+    clearTimeout(centinelaMudo);
     // Un silencio en manos libres es normal —se está caminando de una pieza a
     // otra—, así que no interrumpe ni abre la hoja: se sigue escuchando.
     if (e.error === 'no-speech' && manosLibres()) return;
@@ -2727,6 +2765,7 @@ function crearReconocedor() {
     arrancando = false;
     clearTimeout(vigilante);
     clearTimeout(centinelaAudio);
+    clearTimeout(centinelaMudo);
     marcarGrabando(false);
 
     // El micrófono se suelta ACÁ, apenas termina el dictado, y no al abrir el
@@ -2780,8 +2819,75 @@ function crearReconocedor() {
  * puede no soltar nunca. Además se le quitan los manejadores: una instancia
  * vieja que todavía dispare eventos pisaría el estado de la nueva.
  */
+/**
+ * El micrófono abrió y no sirvió: ni oyó, ni falló, ni cerró.
+ *
+ * Lo primero es devolver el botón. Quedarse en rojo diciendo "Escuchando" es
+ * lo peor que puede pasar, porque no hay nada que tocar que lo arregle y la
+ * aplicación parece rota.
+ *
+ * Después, la causa. Si Ari acababa de hablar, en el iPhone la culpa es de la
+ * voz casi siempre: el teléfono no alcanza a soltar el parlante, y de ahí en
+ * adelante todos los dictados abren sin oír nada —que es por qué sólo tomaba
+ * UNA orden y había que cerrar y volver a abrir el programa—. Apagarle la voz
+ * es feo, pero es lo único que hace volver el micrófono, y se dice por qué:
+ * un ajuste que se apaga solo y en silencio es peor que la falla.
+ */
+function recuperarDeSesionMuerta() {
+  escuchando = false;
+  arrancando = false;
+  marcarGrabando(false);
+  soltarMicrofono();
+  sesionesMudasSeguidas += 1;
+
+  if (ariHablo && $('#tts').checked) {
+    $('#tts').checked = false;
+    ariHablo = false;
+    reintentoSordo = 0;
+    abrirHoja();
+    $('#pista').textContent = 'Apagué la voz de Ari para poder seguir oyéndote. Tocá el micrófono y seguí.';
+    if (!avisoVozApagada) {
+      avisoVozApagada = true;
+      burbuja('ari aviso-voz', `<p><b>Apagué la voz de Ari.</b></p>
+        <p>En el iPhone, cuando Ari contesta en voz alta, el teléfono se queda
+        con el audio y el micrófono abre sin oír nada. Por eso te tomaba una
+        sola orden y después había que cerrar y volver a abrir la aplicación.</p>
+        <p>Sin la voz podés dictarle una orden atrás de otra. Si la querés de
+        vuelta, prendé <b>voz</b> acá arriba.</p>`);
+    }
+    return;
+  }
+
+  // Una sola sesión muda puede ser mala suerte: se rehace una vez sola.
+  if (sesionesMudasSeguidas < 2 && reintentoSordo < 1) {
+    reintentoSordo += 1;
+    $('#pista').textContent = 'Reintentando abrir el micrófono…';
+    setTimeout(() => empezarAEscuchar(), 400);
+    return;
+  }
+
+  reintentoSordo = 0;
+  abrirHoja();
+  $('#pista').textContent = 'El micrófono abrió pero no entregó audio. '
+    + 'Tocalo otra vez, o escribime acá abajo.';
+
+  // Ya se le apagó la voz y el micrófono sigue sin oír: el navegador se quedó
+  // con el audio trabado, y desde adentro de la página no hay nada más que
+  // hacer. Recargar lo destraba —es lo mismo que cerrar y volver a abrir la
+  // aplicación, que es lo que había que hacer a mano hasta ahora—.
+  if (!avisoRecargar) {
+    avisoRecargar = true;
+    burbuja('ari aviso-voz', `<p><b>El micrófono sigue sin oír.</b></p>
+      <p>El teléfono se quedó con el audio trabado y desde acá adentro no se
+      puede destrabar. Recargando queda como recién abierta: no se pierde nada
+      de lo que ya está guardado.</p>
+      <p><button class="mini destacado" data-accion="recargar-app">Recargar ahora</button></p>`);
+  }
+}
+
 function soltarMicrofono() {
   clearTimeout(centinelaLargo);
+  clearTimeout(centinelaMudo);
   if (!reconocedor) return;
   const viejo = reconocedor;
   reconocedor = null;
@@ -2839,28 +2945,64 @@ function alternarMicrofono() {
 /**
  * Abre el micrófono.
  *
- * Dos cosas importan acá, y las dos son por el celular:
+ * Tres cosas importan acá, y las tres son por el celular:
  *
  * 1. `start()` se llama YA, dentro del mismo toque que lo pidió. En el iPhone
  *    el micrófono sólo se entrega si el pedido sale del gesto del usuario;
  *    aplazarlo aunque sea una décima con un temporizador rompe esa cadena y la
  *    sesión abre sorda —dice "Escuchando" y no le llega audio—.
  *
- * 2. Cada sesión estrena instancia, y la anterior se suelta antes. Reusar la
+ * 2. La excepción a lo anterior es cuando Ari venía hablando. Ahí el teléfono
+ *    tiene el audio puesto en reproducir, y abrir el dictado en ese mismo
+ *    instante da una sesión muda pase lo que pase: el gesto no sirve de nada
+ *    si el aparato no tiene el micrófono para dar. Se prefiere esperar ese
+ *    respiro —son milésimas— a abrir a tiempo una sesión que no va a oír.
+ *
+ * 3. Cada sesión estrena instancia, y la anterior se suelta antes. Reusar la
  *    misma dejaba el micrófono tomado por la sesión vieja: el segundo dictado
  *    no transcribía ni terminaba nunca, y volvía a andar solo recién cuando el
  *    sistema soltaba el micrófono por su cuenta, un rato después.
  */
 function empezarAEscuchar(intento = 0) {
   if (escuchando) return;
+  const ficha = ++fichaDeArranque;
 
-  // La voz de Ari y el micrófono se pelean el audio del teléfono: primero se
-  // calla, después se graba.
-  const veniaHablando = 'speechSynthesis' in window && speechSynthesis.speaking;
-  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  // La voz de Ari y el micrófono se pelean el audio del teléfono. Cortarle la
+  // voz no alcanza: el aparato tarda un momento en pasar de reproducir a
+  // grabar, y el dictado que arranca DENTRO de ese momento nace mudo —abre,
+  // dice "Escuchando" y no transcribe nunca—. Antes se abría igual y sólo se
+  // acortaba el plazo para darlo por perdido; ahora se espera ese momento y
+  // recién después se abre, que es lo que evita la falla en vez de detectarla.
+  const hayVoz = 'speechSynthesis' in window;
+  const veniaHablando = hayVoz && (speechSynthesis.speaking || speechSynthesis.pending);
+  if (hayVoz) speechSynthesis.cancel();
   margenSordo = veniaHablando ? MARGEN_SORDO_TRAS_HABLAR : MARGEN_SORDO;
 
   soltarMicrofono();          // suelta y tira la sesión anterior
+
+  if (!veniaHablando) {
+    // El caso de siempre: `start()` sale dentro del mismo toque que lo pidió,
+    // que es como el iPhone entrega el micrófono.
+    abrirSesionDeVoz(intento);
+    return;
+  }
+
+  // Ari venía hablando: se le corta y se le da al teléfono ese respiro. El
+  // botón ya se pinta, para que el toque se sienta atendido y nadie lo golpee
+  // tres veces creyendo que no pasó nada.
+  arrancando = true;
+  marcarGrabando(true);
+  $('#pista').textContent = 'Un momento, que se calle Ari…';
+  clearTimeout(vigilante);
+  vigilante = setTimeout(() => {
+    // Si mientras tanto se volvió a tocar el micrófono, este pedido ya no vale.
+    if (ficha !== fichaDeArranque) return;
+    abrirSesionDeVoz(intento);
+  }, ESPERA_TRAS_HABLAR);
+}
+
+/** Crea la sesión y la abre. Sale de `empezarAEscuchar`, que decide el cuándo. */
+function abrirSesionDeVoz(intento = 0) {
   reconocedor = crearReconocedor();
   arrancando = true;
 
@@ -2895,6 +3037,10 @@ function empezarAEscuchar(intento = 0) {
 /** Cierra la sesión de dictado, y se asegura de que cierre de verdad. */
 function detenerMicrofono() {
   clearTimeout(centinelaAudio);
+  clearTimeout(centinelaMudo);
+  // Si había un arranque esperando a que Ari se callara, queda anulado: se
+  // pidió parar, no arrancar tarde.
+  fichaDeArranque += 1;
   // Si no hay sesión pero igual se cree "escuchando" —el navegador abandonó
   // el reconocedor sin avisar con onend ni onerror, algo que pasa de verdad—
   // no hay nada que detener, pero tampoco hay que dejar el botón mudo para
@@ -4369,6 +4515,12 @@ $('#en-curso').addEventListener('click', async (e) => {
 });
 
 $('#mic').addEventListener('click', alternarMicrofono);
+
+// El único botón que vive dentro de la conversación: el de recargar cuando el
+// audio del teléfono quedó trabado y no hay otra salida.
+$('#conversacion').addEventListener('click', (e) => {
+  if (e.target.closest('[data-accion="recargar-app"]')) location.reload();
+});
 
 // Marcar "manos libres" sin estar ya en una conversación no hacía nada por sí
 // solo: sólo se usaba la próxima vez que el micrófono se abriera a mano.

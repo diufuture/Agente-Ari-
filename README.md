@@ -244,6 +244,33 @@ no le llega nada— hasta que el sistema se desocupa unos segundos después.
 Soltándolo al terminar, queda libre mientras Ari contesta y habla, que es justo
 el rato en que uno está esperando para volver a hablarle.
 
+**La voz de Ari contra el micrófono.** En el iPhone las dos cosas se pelean el
+audio del aparato, y la que pierde siempre es el micrófono: si Ari acaba de
+contestar en voz alta, el dictado siguiente *abre* —dice «Escuchando», el botón
+se pone en rojo— pero no transcribe, no falla y no termina nunca. De ahí venía
+que tomara una sola orden y después hubiera que cerrar y volver a abrir la
+aplicación.
+
+Se ataca en tres escalones, del más suave al más bruto:
+
+1. **No abrir el micrófono mientras el parlante siga tomado.** Si Ari venía
+   hablando, se le corta la voz, se le da al teléfono un respiro de milésimas y
+   recién ahí se abre el dictado. En el resto de los casos `start()` sigue
+   saliendo dentro del mismo toque, que es como el iPhone entrega el micrófono.
+2. **Reconocer la sesión muda.** Que el audio abra (`onaudiostart`) no prueba
+   que la sesión sirva —justamente en ésta abre—, así que no alcanza con eso
+   para darla por buena: sólo la cuentan la voz detectada o el texto. Si a los
+   nueve segundos no llegó ni voz, ni error, ni cierre, la sesión está muerta y
+   se corta. Un dictado sano que nadie contesta se cierra solo mucho antes.
+3. **Apagarle la voz a Ari.** Si el micrófono se murió justo después de que Ari
+   hablara, la culpable es la voz: se apaga sola, se dice por qué, y se puede
+   seguir dictando una orden atrás de otra. Queda prendible de nuevo en la
+   casilla **voz**.
+
+Si ni así oye, el navegador quedó con el audio trabado y desde adentro de la
+página no hay nada que hacer: aparece un botón para **recargar**, que es lo
+mismo que cerrar y volver a abrir la aplicación pero sin tener que adivinarlo.
+
 Cuál es la cotización en curso se guarda en la base, no en el navegador: se
 puede empezar en el celular recorriendo la obra y terminarla en el computador.
 
