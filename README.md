@@ -282,6 +282,21 @@ conversación vuelve donde estaba** —se guarda de este lado y se repone del
 otro—, así que deja de doler. Los datos nunca corrieron riesgo: viven en el
 servidor, incluida la cotización en curso.
 
+**Teléfonos de un solo dictado por carga.** Hay iPhones donde el dictado anda
+una vez y no vuelve más, hagas lo que hagas: es el aparato, no la aplicación.
+Cuando se detecta uno —la primera vez que el micrófono abre y no oye— queda
+anotado en ese teléfono, y de ahí en adelante **la página se renueva sola
+apenas Ari termina de contestar**, mientras uno lee la respuesta. Así el
+micrófono siempre está nuevo para la orden siguiente y se puede dictar una
+atrás de otra sin cerrar nada. La conversación se conserva en cada renovación,
+la hoja del chat queda abierta, y si en ese momento uno se puso a escribir o a
+dictar, no se renueva nada: primero está lo que se esté haciendo.
+
+Ese reinicio se programa **apenas llega la respuesta**, antes de repintar la
+pantalla y antes de leerla en voz alta. Si colgara de que todo eso saliera
+bien, un tropiezo dibujando dejaría el micrófono mudo otra vez, que es justo
+lo que esto viene a evitar.
+
 Cuál es la cotización en curso se guarda en la base, no en el navegador: se
 puede empezar en el celular recorriendo la obra y terminarla en el computador.
 
@@ -623,6 +638,34 @@ editándolo después). Sólo esos llevan stock:
 - Para poner cuánto hay, alcanza con escribirlo en **Cantidad disponible** al
   editar el producto: se guarda la diferencia como movimiento, así queda
   anotado por qué cambió.
+
+### Los tres estados de una cotización
+
+Tocando la pastilla del estado, en la lista, se va rotando entre tres:
+
+| Estado | Qué quiere decir | Cuenta para el cliente |
+|---|---|---|
+| **pendiente** | Se presentó y se está esperando respuesta | Sí |
+| **aprobada** | El cliente dijo que sí: es una venta | Sí, y pasa a cobranza |
+| **no aprobada** | Se cotizó y no pasó nada, o el cliente no la tomó | **No** |
+
+Antes eran dos, y faltaba justamente el caso más común de todos: la oferta que
+se manda y queda ahí. Dejarla «pendiente» para siempre inflaba el cotizado del
+cliente con plata que nunca iba a entrar; marcarla aprobada era mentir.
+
+Una **no aprobada** no suma al total cotizado ni al saldo del cliente, pero
+**no se borra ni se esconde**: sigue en la lista y sigue contando entre las
+ofertas que se le presentaron a ese cliente, que es lo que uno quiere mirar
+cuando vuelve a negociar con él.
+
+> En la base este estado se llama `rechazada` desde la primera versión, y así
+> se queda para no tener que tocar lo ya guardado. En pantalla dice **no
+> aprobada**, que es lo que de verdad pasó casi siempre: no es que el cliente
+> haya dicho que no, es que no dijo nada.
+
+Ojo con no confundirlo con **Cerrar**, que es otra cosa: cerrar archiva la
+cotización en el historial —sale de la lista del día a día— y puede hacerse
+con cualquiera de los tres estados.
 
 ### Aprobar una cotización descuenta de la bodega
 

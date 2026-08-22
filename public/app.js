@@ -413,6 +413,29 @@ const ENCABEZADOS = {
   n_cotizaciones: 'Ofertas', por_cobrar: 'Por cobrar',
 };
 
+/**
+ * Cómo se lee cada estado en pantalla.
+ *
+ * En la base el tercer estado de una cotización se llama `rechazada` desde
+ * siempre, y así se queda —cambiarle el nombre obligaría a tocar los datos ya
+ * guardados—. Pero «rechazada» suena a que el cliente dijo que no, y casi
+ * nunca es eso: lo normal es que se cotizó y no volvió a saberse. En pantalla
+ * dice **no aprobada**, que es lo que de verdad pasó.
+ */
+const ROTULO_ESTADO = { rechazada: 'no aprobada' };
+const rotuloDeEstado = (e) => ROTULO_ESTADO[e] || e;
+
+/**
+ * La rueda de estados de una cotización, tocando la pastilla.
+ *
+ * Son tres y no dos: una oferta que no se aprobó no vuelve a estar pendiente
+ * —pendiente es la que todavía se está esperando—. La que se cotizó y quedó
+ * ahí es **no aprobada**, y no cuenta para lo cotizado ni para el saldo del
+ * cliente, pero sigue guardada y sigue apareciendo entre lo que se le
+ * presentó.
+ */
+const SIGUIENTE_ESTADO_COT = { pendiente: 'aprobada', aprobada: 'rechazada', rechazada: 'pendiente' };
+
 /** Columnas de plata: van alineadas a la derecha, con los números en columna. */
 const COLUMNAS_DINERO = new Set(['monto', 'cotizado', 'abonado', 'saldo', 'precio_canal', 'precio_constructor', 'precio_cliente']);
 
@@ -490,7 +513,7 @@ function celda(columna, fila) {
       return escapar(fmtFecha(v));
     case 'estado':
     case 'prioridad':
-      return `<span class="pastilla ${escapar(v)}">${escapar(v)}</span>`;
+      return `<span class="pastilla ${escapar(v)}">${escapar(rotuloDeEstado(v))}</span>`;
     case 'telefono':
       return v ? `<a href="tel:${escapar(v)}" style="color:var(--acento);text-decoration:none">${escapar(v)}</a>` : '—';
     case 'email':
@@ -970,7 +993,7 @@ function detalleCotizacion(cot, abonos, items = [], totales = null) {
               instalado no abría nada. Este «Ver» es otro: no navega a
               ningún lado, arma el PDF y lo enseña. */ ''}
         <div class="ficha-acciones">
-          <span class="pastilla ${escapar(cot.estado)}">${escapar(cot.estado)}</span>
+          <span class="pastilla ${escapar(cot.estado)}">${escapar(rotuloDeEstado(cot.estado))}</span>
           ${cot.archivo
             ? `<a class="mini destacado" href="${escapar(cot.archivo)}" target="_blank" rel="noopener"
                   data-titulo="${escapar(cot.archivo_nombre || cot.titulo)}">Ver el PDF</a>`
@@ -2260,7 +2283,8 @@ function listaCotizaciones(filas) {
         </div>
         <div class="cot-botones">
           <button class="pastilla ${escapar(q.estado)} cambia" data-accion="alternar-estado-cot" data-id="${q.id}"
-                  title="Tocá para ${aprobada ? 'volverla a pendiente' : 'marcarla aprobada'}">${escapar(q.estado)} ⇄</button>
+                  title="Tocá para pasarla a «${escapar(rotuloDeEstado(SIGUIENTE_ESTADO_COT[q.estado] || 'aprobada'))}»">${
+                    escapar(rotuloDeEstado(q.estado))} ⇄</button>
           ${q.archivo
             ? `<a class="mini pdf" href="${escapar(q.archivo)}" target="_blank" rel="noopener"
                   data-titulo="${escapar(q.titulo)}" title="Abrir la oferta en PDF">📄</a>`
@@ -2305,7 +2329,8 @@ function barraCotizaciones(cerradas = 0) {
   const filtros = estado.verHistorialCot ? '' : `
     ${filtro('', 'Todas')}
     ${filtro('pendiente', 'Pendientes')}
-    ${filtro('aprobada', 'Aprobadas')}`;
+    ${filtro('aprobada', 'Aprobadas')}
+    ${filtro('rechazada', 'No aprobadas')}`;
 
   if (!estado.subiendoOferta) {
     return `<div class="barra-productos">
@@ -2422,7 +2447,7 @@ function burbuja(clase, html) {
   return div;
 }
 
-async function enviar(texto) {
+async function enviar(texto, { porVoz = false } = {}) {
   texto = texto.trim();
   if (!texto) return;
 
@@ -2447,6 +2472,16 @@ async function enviar(texto) {
     estado.historial.push({ rol: 'user', texto }, { rol: 'assistant', texto: r.respuesta });
     estado.historial = estado.historial.slice(-8);
 
+    // Teléfonos que sólo dan un dictado por carga de página: se les deja el
+    // micrófono nuevo mientras se lee la respuesta, así la próxima orden sale
+    // al primer toque en vez de morir sin oír.
+    //
+    // Va acá y no al final a propósito: si algo de lo que viene después
+    // —repintar la pantalla, leer la respuesta en voz alta— llegara a fallar,
+    // el micrófono tiene que quedar listo igual. Quedarse mudo por un tropiezo
+    // de dibujo sería volver justo al problema que esto viene a resolver.
+    if (porVoz && unaSolaSesionPorPagina) programarReinicioDeVoz();
+
     // Si Ari consultó algo, el dashboard muestra el resultado.
     if (r.vista) {
       estado.vistaAsistente = r.vista;
@@ -2465,9 +2500,11 @@ async function enviar(texto) {
       }
     });
 
-    // Si pediste ver algo, en celular la hoja se aparta para dejar el
-    // resultado a la vista; la respuesta queda en la conversación.
-    if (r.vista && esCelular()) setTimeout(cerrarHoja, 1500);
+    // Si pediste ver algo por escrito, en celular la hoja se aparta para dejar
+    // el resultado a la vista. Dictando NO: ahí se está en medio de una
+    // seguidilla de órdenes, y que la hoja se cierre sola obliga a volver a
+    // abrirla —y a buscar el micrófono— antes de cada frase.
+    if (r.vista && esCelular() && !porVoz) setTimeout(cerrarHoja, 1500);
   } catch (e) {
     cargando.className = 'burbuja ari error';
     cargando.innerHTML = escapar(e.message);
@@ -2804,6 +2841,7 @@ function crearReconocedor() {
   };
 
   r.onend = () => {
+    r.yaTermino = true;
     escuchando = false;
     arrancando = false;
     clearTimeout(vigilante);
@@ -2826,7 +2864,7 @@ function crearReconocedor() {
     if (texto) {
       silenciosSeguidos = 0;
       $('#pista').textContent = '';
-      enviar(texto);
+      enviar(texto, { porVoz: true });
       return;
     }
 
@@ -2885,8 +2923,9 @@ function crearReconocedor() {
    otro, así recargar deja de doler. */
 const LLAVE_CHARLA = 'ari_charla';
 const LLAVE_CHARLA_HISTORIAL = 'ari_charla_historial';
+const LLAVE_LISTO_DICTAR = 'ari_listo_dictar';
 
-function recargarConservandoCharla() {
+function recargarConservandoCharla({ listo = false } = {}) {
   try {
     const copia = $('#conversacion').cloneNode(true);
     // Los avisos de la falla y el "pensando" a medias no tienen por qué
@@ -2895,6 +2934,7 @@ function recargarConservandoCharla() {
     copia.querySelectorAll('.pensando').forEach((p) => p.closest('.burbuja')?.remove());
     sessionStorage.setItem(LLAVE_CHARLA, copia.innerHTML);
     sessionStorage.setItem(LLAVE_CHARLA_HISTORIAL, JSON.stringify(estado.historial));
+    if (listo) sessionStorage.setItem(LLAVE_LISTO_DICTAR, '1');
   } catch { /* sin espacio: se recarga igual, aunque sea sin la charla */ }
   location.reload();
 }
@@ -2903,18 +2943,60 @@ function recargarConservandoCharla() {
 function restaurarCharla() {
   let html = null;
   let historial = null;
+  let listo = false;
   try {
     html = sessionStorage.getItem(LLAVE_CHARLA);
     historial = sessionStorage.getItem(LLAVE_CHARLA_HISTORIAL);
+    listo = sessionStorage.getItem(LLAVE_LISTO_DICTAR) === '1';
     sessionStorage.removeItem(LLAVE_CHARLA);
     sessionStorage.removeItem(LLAVE_CHARLA_HISTORIAL);
+    sessionStorage.removeItem(LLAVE_LISTO_DICTAR);
   } catch { /* no había nada guardado */ }
-  if (!html) return false;
+  if (!html) return null;
 
   $('#conversacion').innerHTML = html;
   try { estado.historial = JSON.parse(historial) || []; } catch { /* sigue sin memoria */ }
   $('#conversacion').scrollTop = $('#conversacion').scrollHeight;
-  return true;
+  return { listo };
+}
+
+/* ── Teléfonos de un solo dictado por carga ──
+   Hay iPhones donde el dictado anda UNA vez y no vuelve más: ni cambiando de
+   instancia, ni soltando el micrófono, ni apagándole la voz a Ari. Lo único
+   que lo revive es recargar la página. Antes eso significaba cerrar la
+   aplicación a mano después de cada orden.
+   Cuando se detecta uno de esos teléfonos queda anotado, y de ahí en adelante
+   la página se renueva sola apenas Ari termina de contestar —mientras uno lee
+   la respuesta, que es el rato muerto—, así el micrófono siempre está nuevo
+   para la orden siguiente y no hay nada que cerrar ni volver a abrir. */
+const LLAVE_UNA_POR_PAGINA = 'ari_mic_una_por_pagina';
+let unaSolaSesionPorPagina = (() => {
+  try { return localStorage.getItem(LLAVE_UNA_POR_PAGINA) === '1'; } catch { return false; }
+})();
+
+function anotarTelefonoDeUnSoloDictado() {
+  if (!ES_IOS || unaSolaSesionPorPagina) return;
+  unaSolaSesionPorPagina = true;
+  try { localStorage.setItem(LLAVE_UNA_POR_PAGINA, '1'); } catch { /* sin espacio */ }
+}
+
+function programarReinicioDeVoz(intento = 0) {
+  if (escuchando || arrancando) return;
+  $('#pista').textContent = 'Dejando el micrófono listo para la próxima orden…';
+  setTimeout(() => {
+    // Si en el ínterin se puso a dictar o a escribir, no se le mueve el piso.
+    if (escuchando || arrancando || $('#texto').value.trim()) {
+      $('#pista').textContent = PISTA_INICIAL;
+      return;
+    }
+    // Y si Ari todavía está leyendo la respuesta, se le deja terminar:
+    // recargar en el medio le corta la frase por la mitad.
+    if ('speechSynthesis' in window && speechSynthesis.speaking && intento < 20) {
+      programarReinicioDeVoz(intento + 1);
+      return;
+    }
+    recargarConservandoCharla({ listo: true });
+  }, intento === 0 ? 1400 : 400);
 }
 
 function recuperarDeSesionMuerta() {
@@ -2924,6 +3006,9 @@ function recuperarDeSesionMuerta() {
   soltarMicrofono();
   sesionesMudasSeguidas += 1;
   huboSesionMuda = true;
+  // Este teléfono ya mostró que no da dos dictados en la misma carga: de acá
+  // en más se le renueva la página sola entre orden y orden.
+  anotarTelefonoDeUnSoloDictado();
 
   if (ariHablo && $('#tts').checked) {
     $('#tts').checked = false;
@@ -2983,7 +3068,12 @@ function soltarMicrofono() {
   viejo.onresult = null;
   viejo.onerror = null;
   viejo.onend = null;
-  try { viejo.abort(); } catch { /* ya estaba suelto */ }
+  // `abort()` es para la sesión que quedó colgada. Si ya terminó sola, no hay
+  // nada que abortar, y hacerlo igual es meterle mano al audio del teléfono
+  // justo después de que lo soltó —otra manera de dejárselo trabado—.
+  if (!viejo.yaTermino) {
+    try { viejo.abort(); } catch { /* ya estaba suelto */ }
+  }
 }
 
 let avisoVozMostrado = false;
@@ -3614,10 +3704,14 @@ $('#contenido').addEventListener('click', async (e) => {
   }
   if (accion === 'alternar-estado-cot') {
     const actual = await api(`/cotizaciones/${id}`);
-    const nuevo = actual.estado === 'aprobada' ? 'pendiente' : 'aprobada';
+    const nuevo = SIGUIENTE_ESTADO_COT[actual.estado] || 'aprobada';
     try {
       await api(`/cotizaciones/${id}`, { method: 'PATCH', body: { estado: nuevo } });
-      avisar(nuevo === 'aprobada' ? 'Marcada como aprobada ✓' : 'Vuelve a estar pendiente');
+      avisar({
+        aprobada: 'Marcada como aprobada ✓',
+        rechazada: 'Queda como no aprobada. No suma al cotizado del cliente.',
+        pendiente: 'Vuelve a estar pendiente',
+      }[nuevo]);
       await refrescarResumen();
       await pintar();
     } catch (err) {
@@ -4786,9 +4880,12 @@ async function volverDondeEstaba() {
   // Si se llegó acá recargando para destrabar el micrófono, la conversación
   // vuelve donde estaba: la recarga tiene que sentirse un tropiezo, no un
   // volver a empezar.
-  if (restaurarCharla()) {
+  const vuelta = restaurarCharla();
+  if (vuelta) {
     abrirHoja();
-    $('#pista').textContent = 'Listo, el micrófono quedó libre. Tocalo y seguí dictando.';
+    $('#pista').textContent = vuelta.listo
+      ? 'Micrófono nuevo. Tocalo y seguí dictando.'
+      : 'Listo, el micrófono quedó libre. Tocalo y seguí dictando.';
   }
 
   try {
