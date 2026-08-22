@@ -979,11 +979,16 @@ Mientras esa variable no exista, la puerta no está abierta: la ruta responde
 **2. Pegar el aviso en el Apps Script de la hoja** (Extensiones → Apps Script),
 y llamar a `avisarAAri(...)` justo después de guardar la fila.
 
-> El script completo —con las dos funciones, los ayudantes de fecha y hora, y
-> las columnas configurables arriba— está en **`scripts/avisar-a-ari.gs`**. Se
-> copia entero al final del Apps Script de la hoja y se ajustan las primeras
-> quince líneas. Lo de acá abajo es la versión mínima, para leerla de un
-> vistazo:
+> Hay dos archivos listos en `scripts/`:
+>
+> - **`formulario-amazonia-96.gs`** — el formulario de Amazonía 96 **entero y
+>   ya enlazado**: recibe el turno, lo escribe en la hoja, manda los dos
+>   correos y avisa a Ari. Reemplaza el Apps Script de esa hoja tal cual;
+>   sólo hay que pegarle el token. Es el que sirve si es esa la hoja.
+> - **`avisar-a-ari.gs`** — sólo el enlace, con las columnas configurables
+>   arriba, para pegar al final del Apps Script de **otra** hoja.
+>
+> Lo de acá abajo es la versión mínima, para leerla de un vistazo:
 
 ```js
 var ARI_URL   = 'https://ari.clickcontrol.co/api/enlace/cita';
@@ -1025,6 +1030,11 @@ lista se agenda o se actualiza; lo que ya no está se marca como **cancelado**
 (no se borra: el registro queda). En el Apps Script es la función
 `sincronizarConAri()`, y se deja corriendo sola con un activador de tiempo
 (Apps Script → Activadores → cada hora).
+
+> **El nombre del proyecto tiene que ser el mismo** en el aviso suelto y en la
+> sincronización. Si no coinciden, la sincronización no reconoce la cita que ya
+> entró por el aviso y la agenda de nuevo: quedan duplicadas. Por eso en los
+> dos scripts sale de una sola constante, `ARI_PROYECTO`.
 
 Tres cosas que esa sincronización **no** toca, a propósito:
 
