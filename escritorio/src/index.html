@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sintetizador de Prompts</title>
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+
+<header class="barra-titulo">
+  <div class="marca">
+    <span class="punto"></span>
+    <h1>Sintetizador de Prompts</h1>
+    <span class="sello" title="No sale a internet ni llama a ninguna IA">Local · 0 tokens</span>
+  </div>
+  <div class="acciones-titulo">
+    <button id="btn-biblioteca" class="boton fantasma" title="Mostrar u ocultar la biblioteca">Biblioteca</button>
+  </div>
+</header>
+
+<div class="ventana" id="ventana">
+
+  <aside class="biblioteca" id="panel-biblioteca">
+    <div class="buscador">
+      <input id="buscar" type="search" placeholder="Buscar en mis prompts" autocomplete="off">
+    </div>
+    <ul class="guardados" id="guardados"></ul>
+    <div class="pie-biblioteca">
+      <button id="btn-exportar-todo" class="boton fantasma pequeño">Exportar todo</button>
+      <button id="btn-importar" class="boton fantasma pequeño">Importar</button>
+      <input id="archivo-importar" type="file" accept="application/json" hidden>
+    </div>
+  </aside>
+
+  <main class="paneles">
+
+    <section class="panel">
+      <div class="cabecera-panel">
+        <h2>Lo que dictaste</h2>
+        <div class="acciones">
+          <button id="btn-dictar" class="boton fantasma pequeño" title="Dictado del sistema">Dictar</button>
+          <button id="btn-abrir" class="boton fantasma pequeño">Abrir archivo</button>
+          <button id="btn-limpiar" class="boton fantasma pequeño">Limpiar</button>
+        </div>
+      </div>
+      <textarea id="entrada" spellcheck="true"
+        placeholder="Hablá o pegá acá todo lo que tengas: el dictado completo, el correo largo, la transcripción de la reunión. Con vueltas, repeticiones y muletillas: de eso se encarga la app."></textarea>
+      <div class="pie-panel" id="pie-entrada"></div>
+    </section>
+
+    <section class="panel">
+      <div class="cabecera-panel">
+        <h2>El prompt listo</h2>
+        <div class="acciones">
+          <button id="btn-copiar" class="boton primario pequeño">Copiar</button>
+          <button id="btn-guardar-biblioteca" class="boton fantasma pequeño">Guardar</button>
+          <button id="btn-exportar" class="boton fantasma pequeño">.md</button>
+        </div>
+      </div>
+
+      <div class="controles">
+        <div class="grupo" id="niveles" role="group" aria-label="Nivel de síntesis"></div>
+        <select id="plantilla" class="selector" aria-label="Plantilla"></select>
+      </div>
+
+      <div class="interruptores">
+        <label><input type="checkbox" id="op-datos" checked> Datos duros</label>
+        <label><input type="checkbox" id="op-conceptos" checked> Conceptos</label>
+        <label><input type="checkbox" id="op-preguntas" checked> Preguntas</label>
+      </div>
+
+      <pre id="salida" class="salida"></pre>
+      <div class="pie-panel" id="pie-salida"></div>
+    </section>
+
+  </main>
+</div>
+
+<div id="aviso" class="aviso" role="status" aria-live="polite"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

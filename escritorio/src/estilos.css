@@ -1,0 +1,329 @@
+/* ══════════════════════════════════════════════════════════════════
+   Sintetizador de Prompts — apariencia
+   Sigue el tema del sistema: oscuro si el Mac está en oscuro.
+   ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  --fondo: #f6f6f8;
+  --panel: #ffffff;
+  --panel-2: #eceef2;
+  --borde: #dcdfe6;
+  --tinta: #1c1e24;
+  --tinta-suave: #6a7080;
+  --acento: #2f6df6;
+  --acento-tinta: #ffffff;
+  --verde: #17864a;
+  --sombra: 0 1px 2px rgba(20, 24, 40, .06), 0 8px 24px rgba(20, 24, 40, .06);
+  --radio: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #12141a;
+    --panel: #191c24;
+    --panel-2: #22262f;
+    --borde: #2c313c;
+    --tinta: #e9ecf2;
+    --tinta-suave: #929aab;
+    --acento: #5b8cff;
+    --acento-tinta: #0d1017;
+    --verde: #45c98a;
+    --sombra: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 30px rgba(0, 0, 0, .25);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--fondo);
+  color: var(--tinta);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─────────── Barra de título ─────────── */
+
+.barra-titulo {
+  -webkit-app-region: drag;          /* se arrastra la ventana desde acá */
+  flex: 0 0 auto;
+  height: 52px;
+  padding: 0 16px 0 88px;            /* deja lugar a los tres botones del Mac */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--borde);
+}
+
+/* Abierto como archivo suelto en el navegador no hay semáforo que esquivar. */
+body.en-navegador .barra-titulo { padding-left: 16px; }
+
+.marca { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.marca h1 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.1px; white-space: nowrap; }
+
+.punto {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--verde);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--verde) 22%, transparent);
+}
+
+.sello {
+  padding: 3px 8px;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--tinta-suave);
+  white-space: nowrap;
+}
+
+.acciones-titulo { -webkit-app-region: no-drag; }
+
+/* ─────────── Estructura ─────────── */
+
+.ventana {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.ventana.sin-biblioteca { grid-template-columns: 0 minmax(0, 1fr); }
+.ventana.sin-biblioteca .biblioteca { display: none; }
+
+.paneles {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .paneles { grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr 1fr; }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  overflow: hidden;
+}
+
+.cabecera-panel {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.cabecera-panel h2 { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: var(--tinta-suave); }
+.acciones { display: flex; gap: 6px; }
+
+/* ─────────── Entrada y salida ─────────── */
+
+textarea#entrada {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 14px 16px;
+  border: 0;
+  resize: none;
+  background: transparent;
+  color: var(--tinta);
+  font: 14px/1.65 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+textarea#entrada:focus { outline: none; }
+textarea#entrada::placeholder { color: var(--tinta-suave); }
+
+.salida {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: transparent;
+  color: var(--tinta);
+  font: 13px/1.65 ui-monospace, 'SF Mono', Menlo, monospace;
+  user-select: text;
+}
+
+.salida.vacia { color: var(--tinta-suave); font-family: inherit; font-size: 14px; }
+
+.pie-panel {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-top: 1px solid var(--borde);
+  background: var(--panel-2);
+  font-size: 11.5px;
+  color: var(--tinta-suave);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.pie-panel b { color: var(--tinta); font-weight: 600; }
+.pie-panel .bueno { color: var(--verde); font-weight: 600; }
+
+/* ─────────── Controles ─────────── */
+
+.controles {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 0;
+  align-items: center;
+}
+
+.grupo {
+  display: flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--panel-2);
+  border-radius: 8px;
+}
+
+.grupo button {
+  flex: 1 1 auto;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tinta-suave);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.grupo button.activo { background: var(--panel); color: var(--tinta); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+
+.selector {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--tinta);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.interruptores {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 14px;
+  padding: 8px 12px 10px;
+  font-size: 12px;
+  color: var(--tinta-suave);
+  border-bottom: 1px solid var(--borde);
+}
+
+.interruptores label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.interruptores input { margin: 0; accent-color: var(--acento); }
+
+/* ─────────── Botones ─────────── */
+
+.boton {
+  padding: 6px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 7px;
+  background: var(--panel-2);
+  color: var(--tinta);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.boton:hover { border-color: color-mix(in srgb, var(--acento) 45%, var(--borde)); }
+.boton:active { transform: translateY(.5px); }
+.boton.pequeño { padding: 5px 9px; font-size: 12px; }
+.boton.fantasma { background: transparent; }
+.boton.primario { background: var(--acento); border-color: var(--acento); color: var(--acento-tinta); font-weight: 600; }
+.boton:disabled { opacity: .45; cursor: default; }
+
+/* ─────────── Biblioteca ─────────── */
+
+.biblioteca {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--borde);
+  background: var(--panel);
+}
+
+.buscador { padding: 12px; }
+
+.buscador input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--tinta);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.buscador input:focus { outline: 2px solid color-mix(in srgb, var(--acento) 40%, transparent); outline-offset: -1px; }
+
+.guardados { flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0; padding: 0 8px; list-style: none; }
+
+.guardados li {
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.guardados li:hover { background: var(--panel-2); }
+.guardados li.activo { background: color-mix(in srgb, var(--acento) 14%, transparent); }
+.guardados .titulo { font-size: 12.5px; font-weight: 500; line-height: 1.35; }
+.guardados .fecha { font-size: 11px; color: var(--tinta-suave); display: flex; justify-content: space-between; gap: 8px; }
+.guardados .borrar { border: 0; background: none; color: var(--tinta-suave); cursor: pointer; font-size: 11px; padding: 0; }
+.guardados .borrar:hover { color: #e5484d; }
+.guardados .nada { padding: 16px 10px; color: var(--tinta-suave); font-size: 12px; line-height: 1.5; }
+
+.pie-biblioteca { flex: 0 0 auto; display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--borde); }
+.pie-biblioteca .boton { flex: 1 1 0; }
+
+/* ─────────── Aviso flotante ─────────── */
+
+.aviso {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translate(-50%, 14px);
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--tinta);
+  color: var(--panel);
+  font-size: 12.5px;
+  font-weight: 500;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.aviso.visible { opacity: 1; transform: translate(-50%, 0); }
+
+/* Cuando se arrastra un archivo encima del panel de entrada. */
+.panel.soltando { border-color: var(--acento); box-shadow: 0 0 0 3px color-mix(in srgb, var(--acento) 22%, transparent); }

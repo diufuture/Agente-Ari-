@@ -1,0 +1,1663 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sintetizador de Prompts</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════
+   Sintetizador de Prompts — apariencia
+   Sigue el tema del sistema: oscuro si el Mac está en oscuro.
+   ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  --fondo: #f6f6f8;
+  --panel: #ffffff;
+  --panel-2: #eceef2;
+  --borde: #dcdfe6;
+  --tinta: #1c1e24;
+  --tinta-suave: #6a7080;
+  --acento: #2f6df6;
+  --acento-tinta: #ffffff;
+  --verde: #17864a;
+  --sombra: 0 1px 2px rgba(20, 24, 40, .06), 0 8px 24px rgba(20, 24, 40, .06);
+  --radio: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #12141a;
+    --panel: #191c24;
+    --panel-2: #22262f;
+    --borde: #2c313c;
+    --tinta: #e9ecf2;
+    --tinta-suave: #929aab;
+    --acento: #5b8cff;
+    --acento-tinta: #0d1017;
+    --verde: #45c98a;
+    --sombra: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 30px rgba(0, 0, 0, .25);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--fondo);
+  color: var(--tinta);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─────────── Barra de título ─────────── */
+
+.barra-titulo {
+  -webkit-app-region: drag;          /* se arrastra la ventana desde acá */
+  flex: 0 0 auto;
+  height: 52px;
+  padding: 0 16px 0 88px;            /* deja lugar a los tres botones del Mac */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--borde);
+}
+
+/* Abierto como archivo suelto en el navegador no hay semáforo que esquivar. */
+body.en-navegador .barra-titulo { padding-left: 16px; }
+
+.marca { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.marca h1 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.1px; white-space: nowrap; }
+
+.punto {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--verde);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--verde) 22%, transparent);
+}
+
+.sello {
+  padding: 3px 8px;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--tinta-suave);
+  white-space: nowrap;
+}
+
+.acciones-titulo { -webkit-app-region: no-drag; }
+
+/* ─────────── Estructura ─────────── */
+
+.ventana {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.ventana.sin-biblioteca { grid-template-columns: 0 minmax(0, 1fr); }
+.ventana.sin-biblioteca .biblioteca { display: none; }
+
+.paneles {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .paneles { grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr 1fr; }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  overflow: hidden;
+}
+
+.cabecera-panel {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.cabecera-panel h2 { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: var(--tinta-suave); }
+.acciones { display: flex; gap: 6px; }
+
+/* ─────────── Entrada y salida ─────────── */
+
+textarea#entrada {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 14px 16px;
+  border: 0;
+  resize: none;
+  background: transparent;
+  color: var(--tinta);
+  font: 14px/1.65 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+textarea#entrada:focus { outline: none; }
+textarea#entrada::placeholder { color: var(--tinta-suave); }
+
+.salida {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: transparent;
+  color: var(--tinta);
+  font: 13px/1.65 ui-monospace, 'SF Mono', Menlo, monospace;
+  user-select: text;
+}
+
+.salida.vacia { color: var(--tinta-suave); font-family: inherit; font-size: 14px; }
+
+.pie-panel {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-top: 1px solid var(--borde);
+  background: var(--panel-2);
+  font-size: 11.5px;
+  color: var(--tinta-suave);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.pie-panel b { color: var(--tinta); font-weight: 600; }
+.pie-panel .bueno { color: var(--verde); font-weight: 600; }
+
+/* ─────────── Controles ─────────── */
+
+.controles {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 0;
+  align-items: center;
+}
+
+.grupo {
+  display: flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--panel-2);
+  border-radius: 8px;
+}
+
+.grupo button {
+  flex: 1 1 auto;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tinta-suave);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.grupo button.activo { background: var(--panel); color: var(--tinta); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+
+.selector {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--tinta);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.interruptores {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 14px;
+  padding: 8px 12px 10px;
+  font-size: 12px;
+  color: var(--tinta-suave);
+  border-bottom: 1px solid var(--borde);
+}
+
+.interruptores label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.interruptores input { margin: 0; accent-color: var(--acento); }
+
+/* ─────────── Botones ─────────── */
+
+.boton {
+  padding: 6px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 7px;
+  background: var(--panel-2);
+  color: var(--tinta);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.boton:hover { border-color: color-mix(in srgb, var(--acento) 45%, var(--borde)); }
+.boton:active { transform: translateY(.5px); }
+.boton.pequeño { padding: 5px 9px; font-size: 12px; }
+.boton.fantasma { background: transparent; }
+.boton.primario { background: var(--acento); border-color: var(--acento); color: var(--acento-tinta); font-weight: 600; }
+.boton:disabled { opacity: .45; cursor: default; }
+
+/* ─────────── Biblioteca ─────────── */
+
+.biblioteca {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--borde);
+  background: var(--panel);
+}
+
+.buscador { padding: 12px; }
+
+.buscador input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--tinta);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.buscador input:focus { outline: 2px solid color-mix(in srgb, var(--acento) 40%, transparent); outline-offset: -1px; }
+
+.guardados { flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0; padding: 0 8px; list-style: none; }
+
+.guardados li {
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.guardados li:hover { background: var(--panel-2); }
+.guardados li.activo { background: color-mix(in srgb, var(--acento) 14%, transparent); }
+.guardados .titulo { font-size: 12.5px; font-weight: 500; line-height: 1.35; }
+.guardados .fecha { font-size: 11px; color: var(--tinta-suave); display: flex; justify-content: space-between; gap: 8px; }
+.guardados .borrar { border: 0; background: none; color: var(--tinta-suave); cursor: pointer; font-size: 11px; padding: 0; }
+.guardados .borrar:hover { color: #e5484d; }
+.guardados .nada { padding: 16px 10px; color: var(--tinta-suave); font-size: 12px; line-height: 1.5; }
+
+.pie-biblioteca { flex: 0 0 auto; display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--borde); }
+.pie-biblioteca .boton { flex: 1 1 0; }
+
+/* ─────────── Aviso flotante ─────────── */
+
+.aviso {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translate(-50%, 14px);
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--tinta);
+  color: var(--panel);
+  font-size: 12.5px;
+  font-weight: 500;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.aviso.visible { opacity: 1; transform: translate(-50%, 0); }
+
+/* Cuando se arrastra un archivo encima del panel de entrada. */
+.panel.soltando { border-color: var(--acento); box-shadow: 0 0 0 3px color-mix(in srgb, var(--acento) 22%, transparent); }
+
+</style>
+</head>
+<body>
+
+<header class="barra-titulo">
+  <div class="marca">
+    <span class="punto"></span>
+    <h1>Sintetizador de Prompts</h1>
+    <span class="sello" title="No sale a internet ni llama a ninguna IA">Local · 0 tokens</span>
+  </div>
+  <div class="acciones-titulo">
+    <button id="btn-biblioteca" class="boton fantasma" title="Mostrar u ocultar la biblioteca">Biblioteca</button>
+  </div>
+</header>
+
+<div class="ventana" id="ventana">
+
+  <aside class="biblioteca" id="panel-biblioteca">
+    <div class="buscador">
+      <input id="buscar" type="search" placeholder="Buscar en mis prompts" autocomplete="off">
+    </div>
+    <ul class="guardados" id="guardados"></ul>
+    <div class="pie-biblioteca">
+      <button id="btn-exportar-todo" class="boton fantasma pequeño">Exportar todo</button>
+      <button id="btn-importar" class="boton fantasma pequeño">Importar</button>
+      <input id="archivo-importar" type="file" accept="application/json" hidden>
+    </div>
+  </aside>
+
+  <main class="paneles">
+
+    <section class="panel">
+      <div class="cabecera-panel">
+        <h2>Lo que dictaste</h2>
+        <div class="acciones">
+          <button id="btn-dictar" class="boton fantasma pequeño" title="Dictado del sistema">Dictar</button>
+          <button id="btn-abrir" class="boton fantasma pequeño">Abrir archivo</button>
+          <button id="btn-limpiar" class="boton fantasma pequeño">Limpiar</button>
+        </div>
+      </div>
+      <textarea id="entrada" spellcheck="true"
+        placeholder="Hablá o pegá acá todo lo que tengas: el dictado completo, el correo largo, la transcripción de la reunión. Con vueltas, repeticiones y muletillas: de eso se encarga la app."></textarea>
+      <div class="pie-panel" id="pie-entrada"></div>
+    </section>
+
+    <section class="panel">
+      <div class="cabecera-panel">
+        <h2>El prompt listo</h2>
+        <div class="acciones">
+          <button id="btn-copiar" class="boton primario pequeño">Copiar</button>
+          <button id="btn-guardar-biblioteca" class="boton fantasma pequeño">Guardar</button>
+          <button id="btn-exportar" class="boton fantasma pequeño">.md</button>
+        </div>
+      </div>
+
+      <div class="controles">
+        <div class="grupo" id="niveles" role="group" aria-label="Nivel de síntesis"></div>
+        <select id="plantilla" class="selector" aria-label="Plantilla"></select>
+      </div>
+
+      <div class="interruptores">
+        <label><input type="checkbox" id="op-datos" checked> Datos duros</label>
+        <label><input type="checkbox" id="op-conceptos" checked> Conceptos</label>
+        <label><input type="checkbox" id="op-preguntas" checked> Preguntas</label>
+      </div>
+
+      <pre id="salida" class="salida"></pre>
+      <div class="pie-panel" id="pie-salida"></div>
+    </section>
+
+  </main>
+</div>
+
+<div id="aviso" class="aviso" role="status" aria-live="polite"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   Motor de síntesis de prompts — 100 % local
+   ══════════════════════════════════════════════════════════════════
+
+   Convierte un dictado largo y desordenado (hablado, transcrito, "un
+   libro") en un prompt corto, ordenado y listo para pegar en un
+   proyecto de Claude.
+
+   No usa red, ni IA, ni API keys: es análisis de texto puro. Por eso
+   no consume un solo token y funciona sin internet.
+
+   Cómo trabaja, en orden:
+     1. Limpia el dictado (muletillas, tartamudeos, relleno).
+     2. Parte el texto en frases, aunque venga sin puntuación.
+     3. Clasifica cada frase en una sección (objetivo, contexto…).
+     4. Rescata los datos duros (cifras, fechas, plazos, enlaces).
+     5. Comprime cada frase a una viñeta y descarta las repetidas.
+     6. Ordena por importancia y se queda con las mejores.
+     7. Lo arma en la plantilla que se elija.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ─────────── Ajustes ─────────── */
+
+/** Qué tan apretada queda la síntesis. */
+const NIVELES = {
+  detallado:   { viñetas: 8, total: 22, largo: 230, etiqueta: 'Detallado' },
+  equilibrado: { viñetas: 5, total: 12, largo: 150, etiqueta: 'Equilibrado' },
+  esencial:    { viñetas: 3, total: 8,  largo: 100, etiqueta: 'Esencial' },
+};
+
+const NIVEL_POR_DEFECTO = 'equilibrado';
+
+/** Las secciones del prompt, en el orden en que se leen mejor. */
+const SECCIONES = [
+  { id: 'objetivo',      titulo: 'Objetivo' },
+  { id: 'contexto',      titulo: 'Contexto' },
+  { id: 'requisitos',    titulo: 'Requisitos' },
+  { id: 'restricciones', titulo: 'Restricciones' },
+  { id: 'formato',       titulo: 'Formato de salida' },
+  { id: 'audiencia',     titulo: 'Audiencia y tono' },
+  { id: 'ejemplos',      titulo: 'Ejemplos y referencias' },
+  { id: 'criterios',     titulo: 'Criterios de éxito' },
+  { id: 'preguntas',     titulo: 'Dudas por resolver' },
+];
+
+/* ─────────── Léxico ─────────── */
+
+// Pistas de cada sección. Se escriben sin tildes: el texto se compara
+// normalizado. El orden de la lista define el desempate.
+const PISTAS = {
+  restricciones: [
+    'no quiero', 'no queremos', 'no necesito', 'no debe', 'no debes', 'no deben',
+    'no puede', 'no pueden', 'no uses', 'no usar', 'no incluyas', 'no incluir',
+    'no hagas', 'no hacer', 'nunca', 'jamas', 'evita', 'evitar', 'sin que',
+    'nada de', 'prohibido', 'esta prohibido', 'no mas de', 'como maximo',
+    'maximo', 'no exceder', 'limite', 'limitado a', 'presupuesto', 'no gastar',
+    'antes de', 'antes del', 'a mas tardar', 'a más tardar', 'para antes',
+    'plazo', 'fecha limite', 'no se puede', 'olvidate de', 'no menciones',
+    'no hables de', 'nada mas', 'solamente', 'unicamente', 'únicamente',
+  ],
+  formato: [
+    'formato', 'en markdown', 'markdown', 'json', 'csv', 'xml', 'tabla', 'tablas',
+    'lista', 'listas', 'viñetas', 'bullets', 'puntos', 'pasos', 'paso a paso',
+    'resumen', 'esquema', 'plantilla', 'estructura', 'secciones', 'titulos',
+    'parrafos', 'palabras', 'caracteres', 'extension', 'de largo', 'una hoja',
+    'pdf', 'excel', 'presentacion', 'diapositivas', 'codigo', 'entregame',
+    'devuelveme', 'dame la salida', 'que me lo des', 'me lo entregas',
+    'sintetizado', 'sintetizada', 'sintetico', 'sintético', 'resumido',
+    'organizado', 'organizada', 'ordenado', 'ordenada', 'breve', 'conciso',
+    'concisa', 'al grano', 'corto', 'que se entienda', 'que lo entienda',
+  ],
+  audiencia: [
+    'dirigido a', 'para el cliente', 'para los clientes', 'publico', 'audiencia',
+    'lector', 'lectores', 'tono', 'estilo', 'lenguaje', 'voz', 'formal',
+    'informal', 'cercano', 'tecnico', 'sencillo', 'simple', 'coloquial',
+    'profesional', 'para gente', 'para personas', 'para alguien',
+    'sin tecnicismos', 'lenguaje sencillo', 'hablale', 'háblale', 'tratame de',
+  ],
+  criterios: [
+    'exito', 'esta listo cuando', 'listo cuando', 'sabre que', 'sabremos que',
+    'voy a saber', 'vamos a saber', 'sabre', 'sabremos', 'quedo bien',
+    'quede bien', 'este bien', 'me sirve si', 'lo apruebo', 'doy por',
+    'criterio', 'criterios', 'aceptacion', 'kpi', 'metrica', 'metricas',
+    'medir', 'validar', 'verificar', 'comprobar', 'que funcione', 'funcione bien',
+    'resultado esperado', 'esperado es', 'objetivo de negocio', 'meta de',
+    'calidad', 'que quede bien', 'bien hecho', 'sin errores',
+  ],
+  ejemplos: [
+    'por ejemplo', 'un ejemplo', 'ejemplo', 'ejemplos', 'tal como', 'igual que',
+    'parecido a', 'similar a', 'como el de', 'como lo hace', 'referencia',
+    'referencias', 'inspirate', 'basate en', 'te paso', 'te comparto', 'mira el',
+    'como este', 'del estilo de',
+  ],
+  requisitos: [
+    'debe', 'debes', 'deben', 'deberia', 'debería', 'tiene que', 'tienen que',
+    'hay que', 'es obligatorio', 'obligatorio', 'requisito', 'requisitos',
+    'necesario que', 'imprescindible', 'siempre', 'asegurate', 'asegurar',
+    'incluye', 'incluir', 'considera', 'considerar', 'ten en cuenta',
+    'importante que', 'clave que', 'es clave', 'es importante', 'ojo con',
+    'no olvides', 'me tiene que', 'que respete', 'que cumpla',
+  ],
+  objetivo: [
+    'quiero', 'queremos', 'necesito', 'necesitamos', 'quisiera', 'me gustaria',
+    'busco', 'buscamos', 'el objetivo', 'la meta', 'la idea es', 'se trata de',
+    'la intencion', 'el proposito', 'ayudame a', 'ayudame', 'hazme', 'haceme',
+    'hacer', 'crea', 'crear', 'creame', 'genera', 'generar', 'desarrolla',
+    'desarrollar', 'diseña', 'diseñar', 'construye', 'construir', 'arma',
+    'armar', 'redacta', 'redactar', 'escribe', 'escribir', 'analiza', 'analizar',
+    'resume', 'resumir', 'traduce', 'organiza', 'organizar', 'optimiza',
+    'mejora', 'mejorar', 'automatiza', 'implementa', 'propone', 'proponme',
+    'dame', 'requiero', 'lo que pido',
+  ],
+  contexto: [
+    'tengo', 'tenemos', 'trabajo en', 'trabajamos', 'actualmente', 'hoy en dia',
+    'hoy', 'ahora mismo', 'en este momento', 'mi empresa', 'mi negocio',
+    'mi equipo', 'mi cliente', 'nuestros clientes', 'el proyecto', 'la empresa',
+    'contamos con', 'usamos', 'utilizamos', 'manejo', 'manejamos', 'llevo',
+    'llevamos', 'venimos', 'el problema es', 'nos pasa', 'me pasa', 'resulta que',
+    'la situacion', 'el caso es', 'somos', 'soy',
+  ],
+};
+
+// El rol que se le pide al asistente ("actúa como…").
+const PISTAS_ROL = [
+  'actua como', 'actues como', 'comportate como', 'eres un', 'eres una',
+  'sos un', 'sos una', 'como experto', 'como experta', 'experto en',
+  'experta en', 'especialista en', 'en el papel de', 'asume el rol',
+  'tu rol es', 'haz de',
+];
+
+// Muletillas del habla que siempre sobran, digan lo que digan.
+const MULETILLAS = [
+  'o sea', 'osea', 'eh', 'ehh', 'ehhh', 'em', 'mmm', 'mm', 'ajam', 'ajá',
+  'digamos que', 'digamos', 'como que', 'mas o menos', 'más o menos', 'a ver',
+  'si me entiendes', 'me entiendes', 'me explico', 'me sigues', 'me sigue',
+  'por asi decirlo', 'por así decirlo', 'como te digo', 'como te decia',
+  'como te decía', 'que se yo', 'basicamente', 'básicamente', 'obviamente',
+  'practicamente', 'prácticamente', 'literalmente', 'en realidad',
+];
+
+// Estas también son muletillas, pero sólo cuando van sueltas entre pausas:
+// «este, entonces…» sobra; «este proyecto» no se toca.
+const MULETILLAS_SUELTAS = [
+  'este', 'esteee', 'bueno', 'pues', 'nada', 'total', 'en fin', 'mira', 'mire',
+  'oye', 'oiga', 'vale', 'ok', 'okey', 'verdad', 'cierto', 'no cierto', 'sabes',
+  'la verdad', 'de verdad', 'realmente', 'tipo', 'igual', 'y eso', 'y ya',
+  'veamos',
+];
+
+// Relleno con el que arrancan las frases habladas y que no aporta nada.
+const RELLENO_INICIAL = [
+  'lo que yo quiero es que', 'lo que quiero es que', 'lo que necesito es que',
+  'lo que yo necesito es', 'lo que quiero', 'lo que necesito',
+  'yo lo que quiero es', 'yo lo que necesito es que', 'yo lo que necesito es',
+  'yo necesito que', 'yo quiero que', 'yo lo que', 'ah', 'ay', 'oh', 'uy',
+  'la idea es que', 'la idea seria que',
+  'me gustaria que', 'me gustaría que', 'quisiera que', 'yo creo que',
+  'yo pienso que', 'pienso que', 'creo que', 'siento que', 'la verdad es que',
+  'resulta que', 'sucede que', 'el tema es que', 'el punto es que',
+  'lo importante es que', 'lo que pasa es que', 'te cuento que', 'te digo que',
+  'ah no espera', 'no espera', 'espera', 'una ultima cosa', 'una última cosa',
+  'ultima cosa', 'última cosa', 'y otra cosa', 'otra cosa', 'una cosa mas',
+  'una cosa más', 'lo otro', 'volviendo a', 'como te venia diciendo',
+  'quiero que', 'necesito que', 'entonces', 'y entonces', 'asi que', 'así que',
+  'por eso', 'y bueno', 'bueno', 'pues', 'y', 'pero', 'ademas', 'además',
+  'tambien', 'también', 'o sea', 'es decir', 'igual', 'aparte',
+];
+
+const VACIAS = new Set(`a al algo algun alguna algunas alguno algunos ante antes aqui asi aun aunque
+cada casi como con contra cual cuales cuando cuanto de del desde donde dos e el ella ellas ello ellos
+en entre era eran eres es esa esas ese eso esos esta estaba estan estar estas este esto estos ha haber
+habia han hasta hay la las le les lo los mas me mi mis mucho muchos muy nada ni no nos nosotros o os
+otra otras otro otros para pero poco por porque que quien quienes se ser si sin sobre solo son su sus
+tal tan tanto te tener tiene tienen todo todos tras tu tus un una uno unas unos usted ustedes va vamos
+van vez y ya yo he hemos has hube hacia donde cuyo cuya sea sean fue fueron sido siendo estoy estamos
+entonces ahora luego despues después ademas además tambien también sino mismo misma tema temas cosa cosas
+forma formas manera maneras parte partes punto puntos veces bien mal mucha muchas poca pocas siempre nunca
+aqui allí alli aquel aquella todas otra otras hace hacer hizo hicimos hacen dice dijo decir digo tengo
+tenemos quiero queremos necesito necesitamos puede pueden poder podemos ser estar estan están hay tipo
+gente cual cuales debe deben debes ahi ahí eso esas esos algo alguien nadie porque pues
+tres cuatro cinco seis siete ocho nueve diez once doce quince veinte treinta cien mil
+año años mes meses dia dias día días semana semanas hora horas minuto minutos
+the of and to in for with a an is are it this that on be by or as at from`.split(/\s+/));
+
+/* ─────────── Utilidades de texto ─────────── */
+
+/** Minúsculas, sin tildes y con la puntuación vuelta espacio. */
+function normalizar(texto) {
+  return ` ${texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()} `;
+}
+
+/** ¿El texto normalizado contiene esta pista como palabra completa? */
+function contiene(normalizado, pista) {
+  return normalizado.includes(` ${pista.normalize('NFD').replace(/[̀-ͯ]/g, '')} `);
+}
+
+/** Limpia el dictado: tartamudeos, muletillas y espacios de más. */
+function limpiarDictado(texto) {
+  let t = String(texto || '').replace(/\r\n?/g, '\n');
+
+  // «me me me da» → «me da»; «en en en los» → «en los»
+  t = t.replace(/\b(\p{L}{1,8})(\s+\1\b)+/giu, '$1');
+
+  const escapar = (m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Las que siempre sobran: basta con que estén entre separadores.
+  for (const m of MULETILLAS) {
+    t = t.replace(new RegExp(`(^|[\\s,;:.¡!¿?])${escapar(m)}([\\s,;:.¡!¿?]|$)`, 'giu'), '$1$2');
+  }
+
+  // Las ambiguas: sólo si vienen aisladas por pausas o al empezar la frase.
+  for (const m of MULETILLAS_SUELTAS) {
+    t = t.replace(new RegExp(`(^|[.¡!¿?\\n])\\s*${escapar(m)}\\s*[,;]`, 'giu'), '$1 ');
+    t = t.replace(new RegExp(`[,;]\\s*${escapar(m)}\\s*(?=[,;.!?\\n]|$)`, 'giu'), '');
+    t = t.replace(new RegExp(`(^|[.¡!¿?\\n])\\s*${escapar(m)}\\s+(?=[a-záéíóúñ])`, 'giu'), '$1 ');
+  }
+
+  // Coletillas de confirmación: «…, ¿no?», «…, ¿sí?», «…, ¿ya?»
+  t = t.replace(/[,\s]*¿?\s*(no|si|sí|ya|ok|va)\s*\?/gi, '');
+
+  // Si al quitar la muletilla quedó una pregunta hueca («¿?»), fuera.
+  t = t.replace(/¿\s*\?/g, '').replace(/¿\s*(?=[,;.])/g, '');
+
+  return t
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\s+([,;:.!?])/g, '$1')
+    .replace(/([,;:])\1+/g, '$1')
+    .replace(/,\s*([.;:])/g, '$1')
+    .replace(/\.{4,}/g, '…')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Une los renglones que están cortados por el ancho del texto, no por
+ * el punto final. Un correo o una transcripción pegada vienen así, y si
+ * no se unen cada pedazo se clasifica por su cuenta y sale cualquier cosa.
+ */
+function unirRenglones(texto) {
+  const lineas = texto.split('\n');
+  const salida = [];
+
+  for (const cruda of lineas) {
+    const linea = cruda.trim();
+    const anterior = salida[salida.length - 1];
+    const sigue =
+      anterior &&
+      linea &&
+      !/[.!?…:;]$/.test(anterior) &&        // la anterior no cerró idea
+      !/^[-*•\d]/.test(linea) &&            // esta no abre una lista
+      !/^#{1,6}\s/.test(linea) &&           // ni un título
+      !/^[A-ZÁÉÍÓÚÑ\s]{6,}$/.test(anterior); // ni la anterior era un encabezado
+
+    if (sigue) salida[salida.length - 1] = `${anterior} ${linea}`;
+    else salida.push(linea);
+  }
+
+  return salida.join('\n');
+}
+
+/**
+ * Parte el texto en frases. Aguanta dictado sin puntuación: si un tramo
+ * se va de largo, lo corta por los conectores del habla.
+ */
+function partirEnFrases(texto) {
+  const crudas = [];
+  for (const parrafo of unirRenglones(texto).split(/\n+/)) {
+    for (const tramo of parrafo.split(/(?<=[.!?…])\s+|(?<=[a-záéíóúñ]\.)(?=[A-ZÁÉÍÓÚÑ¿¡])/)) {
+      if (tramo.trim()) crudas.push(tramo.trim());
+    }
+  }
+
+  const conectores = /\s+(?=(?:y luego|luego|despues|después|ademas|además|tambien|también|pero|aunque|entonces|por otro lado|por otra parte|aparte|igualmente|asimismo|y ademas|y además|y tambien|y también|otra cosa|otra cosa es|lo otro|y lo otro)\b)/i;
+  const frases = [];
+
+  for (const cruda of crudas) {
+    let tramos = cruda.length > 200 ? cruda.split(/\s*;\s*/) : [cruda];
+    tramos = tramos.flatMap((t) => (t.length > 200 ? t.split(conectores) : [t]));
+    // Una negación colgada de otra idea es una restricción propia.
+    tramos = tramos.flatMap((t) =>
+      t.split(/,\s+(?=(?:(?:y|pero)\s+)?(?:nunca|jamas|jamás|tampoco)\b|(?:y|pero)\s+no\s)/i));
+
+    // Último recurso: sigue larguísimo y sin puntos → corto por comas.
+    tramos = tramos.flatMap((t) => (t.length > 320 ? t.split(/,\s+/) : [t]));
+    for (const t of tramos) {
+      const frase = t.trim().replace(/^[,;:\s]+/, '');
+      if (frase.split(/\s+/).length >= 3) frases.push(frase);
+    }
+  }
+
+  return frases;
+}
+
+/* ─────────── Clasificación ─────────── */
+
+/** Puntúa una frase contra las pistas de una sección. */
+function puntuarSeccion(normalizada, pistas) {
+  let puntos = 0;
+  for (const pista of pistas) {
+    if (!contiene(normalizada, pista)) continue;
+    const peso = pista.split(' ').length * 2 + 1;
+    // Lo que se dice al principio manda más que lo que se dice al final.
+    const alPrincipio = normalizada.indexOf(` ${pista} `) < 45;
+    puntos += alPrincipio ? peso * 1.6 : peso;
+  }
+  return puntos;
+}
+
+/** Decide a qué sección pertenece una frase. */
+function clasificar(frase) {
+  if (/\?\s*$/.test(frase.trim())) return { seccion: 'preguntas', fuerza: 6 };
+
+  const norma = normalizar(frase);
+  let mejor = { seccion: 'contexto', fuerza: 0 };
+
+  for (const [seccion, pistas] of Object.entries(PISTAS)) {
+    const fuerza = puntuarSeccion(norma, pistas);
+    if (fuerza > mejor.fuerza) mejor = { seccion, fuerza };
+  }
+
+  return mejor;
+}
+
+/** Busca el rol que se le pide al asistente, si es que se pide alguno. */
+function detectarRol(texto) {
+  const norma = normalizar(texto);
+  for (const pista of PISTAS_ROL) {
+    const i = norma.indexOf(` ${pista} `);
+    if (i === -1) continue;
+    const cola = norma.slice(i + pista.length + 2).split(' ').filter(Boolean).slice(0, 7);
+    const util = [];
+    for (const palabra of cola) {
+      util.push(palabra);
+      if (util.length >= 3 && VACIAS.has(palabra)) break;
+    }
+    const rol = util.join(' ').replace(/\s+(que|y|para|con|de|en)$/, '').trim();
+    if (rol.length > 3) return rol;
+  }
+  return null;
+}
+
+/* ─────────── Compresión ─────────── */
+
+/** Deja una frase hablada como una viñeta corta y directa. */
+function comprimir(frase, largoMaximo) {
+  let t = frase.trim();
+
+  // Fuera el relleno con el que arranca (puede venir encadenado).
+  for (let vuelta = 0; vuelta < 4; vuelta++) {
+    const antes = t;
+    for (const relleno of RELLENO_INICIAL) {
+      const patron = new RegExp(`^${relleno.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b[,:;\\s]*`, 'iu');
+      if (patron.test(t)) { t = t.replace(patron, ''); break; }
+    }
+    if (t === antes) break;
+  }
+
+  t = t.replace(/^[,;:\s]+/, '').replace(/\s+/g, ' ').trim();
+  t = t.replace(/\.\s*([,;])/g, '$1');
+  t = t.replace(/[\s,;:]+$/, '').replace(/\s+(y|o|que|pero|de|para|con|en)$/i, '');
+
+  if (t.length > largoMaximo) {
+    const corte = t.slice(0, largoMaximo);
+    const espacio = corte.lastIndexOf(' ');
+    t = `${(espacio > largoMaximo * 0.6 ? corte.slice(0, espacio) : corte).replace(/[\s,;:]+$/, '')}…`;
+  }
+
+  return t ? t[0].toLocaleUpperCase('es') + t.slice(1) : '';
+}
+
+/** Palabras con contenido de una frase, para comparar y contar. */
+function contenido(texto) {
+  return normalizar(texto).split(' ').filter((p) => p.length > 3 && !VACIAS.has(p));
+}
+
+/** Qué tanto se parecen dos frases (0 = nada, 1 = lo mismo). */
+function parecido(a, b) {
+  const uno = new Set(contenido(a));
+  const dos = new Set(contenido(b));
+  if (!uno.size || !dos.size) return 0;
+  let comunes = 0;
+  for (const p of uno) if (dos.has(p)) comunes++;
+  return comunes / Math.min(uno.size, dos.size);
+}
+
+/* ─────────── Conceptos y datos duros ─────────── */
+
+/** Las palabras y parejas de palabras que más se repiten. */
+function conceptosClave(texto, cuantos = 10) {
+  const palabras = normalizar(texto).split(' ').filter(Boolean);
+  const utiles = palabras.filter((p) => p.length > 3 && !VACIAS.has(p) && !/^\d+$/.test(p));
+
+  // Para mostrarlos con sus tildes, guardo cómo se escribió cada palabra.
+  const conTildes = texto.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const original = new Map();
+  palabras.forEach((p, i) => {
+    if (!original.has(p) && conTildes[i]) original.set(p, conTildes[i].toLocaleLowerCase('es'));
+  });
+  const comoSeDijo = (t) => t.split(' ').map((p) => original.get(p) || p).join(' ');
+
+  const veces = new Map();
+  for (const p of utiles) veces.set(p, (veces.get(p) || 0) + 1);
+
+  // Parejas seguidas ("lista de precios") pesan más que las sueltas.
+  const parejas = new Map();
+  for (let i = 0; i < palabras.length - 1; i++) {
+    const [a, b] = [palabras[i], palabras[i + 1]];
+    if (a.length < 4 || b.length < 4 || VACIAS.has(a) || VACIAS.has(b)) continue;
+    const pareja = `${a} ${b}`;
+    parejas.set(pareja, (parejas.get(pareja) || 0) + 1);
+  }
+
+  const candidatos = [
+    ...[...parejas].filter(([, n]) => n >= 2).map(([t, n]) => ({ texto: t, peso: n * 2.5 })),
+    ...[...veces].filter(([, n]) => n >= 2).map(([t, n]) => ({ texto: t, peso: n })),
+  ].sort((a, b) => b.peso - a.peso);
+
+  // Si una pareja ya entró, no repito sus palabras sueltas.
+  const elegidos = [];
+  const sumar = (c) => {
+    if (elegidos.some((e) => e.texto.includes(c.texto) || c.texto.includes(e.texto))) return;
+    elegidos.push(c);
+  };
+  for (const c of candidatos) {
+    sumar(c);
+    if (elegidos.length >= cuantos) break;
+  }
+
+  // En textos cortos nada llega a repetirse: entonces valen las palabras
+  // largas de una sola aparición, que suelen ser las que cargan el tema.
+  if (elegidos.length < 4) {
+    const sueltas = [...new Set(utiles)]
+      .map((t) => ({ texto: t, peso: t.length / 10 }))
+      .sort((a, b) => b.peso - a.peso);
+    for (const c of sueltas) {
+      sumar(c);
+      if (elegidos.length >= Math.min(cuantos, 6)) break;
+    }
+  }
+
+  return elegidos.map((c) => ({ ...c, texto: comoSeDijo(c.texto) }));
+}
+
+/** Cifras, plazos, enlaces: lo que no se puede perder al resumir. */
+function datosDuros(texto) {
+  const patrones = [
+    /\b\d+(?:[.,]\d+)?\s*(?:millones?|mil|k|%|por ciento|pesos|dolares|dólares|usd|cop|eur|euros)\b/gi,
+    /[$€£]\s?\d[\d.,]*/g,
+    /\b\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\s+de\s+\d{4})?/gi,
+    /\b\d{4}-\d{2}-\d{2}\b/g,
+    /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g,
+    /\b(?:lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b/gi,
+    /\b\d+\s*(?:dias?|días?|semanas?|meses?|años?|horas?|minutos?|paginas?|páginas?|palabras|caracteres|slides?|diapositivas)\b/gi,
+    /https?:\/\/\S+/g,
+    /\b[\w.+-]+@[\w-]+\.[\w.]+\b/g,
+  ];
+
+  const vistos = new Map();
+  for (const patron of patrones) {
+    for (const hallazgo of texto.match(patron) || []) {
+      const limpio = hallazgo.trim().replace(/[.,;]$/, '');
+      const clave = limpio.toLowerCase();
+      if (!vistos.has(clave)) vistos.set(clave, limpio);
+    }
+  }
+  return [...vistos.values()].slice(0, 14);
+}
+
+/* ─────────── Análisis ─────────── */
+
+/** Preguntas que conviene resolver cuando falta una parte del prompt. */
+const FALTANTES = {
+  objetivo:      '¿Cuál es la acción concreta que debe ejecutar? (analizar, redactar, diseñar…)',
+  formato:       '¿En qué formato querés la respuesta? (lista, tabla, documento, código…)',
+  audiencia:     '¿Para quién es y con qué tono? (cliente, equipo técnico, formal, cercano…)',
+  criterios:     '¿Cómo vas a saber que el resultado quedó bien?',
+  restricciones: '¿Qué NO debe hacer o incluir? (largo máximo, temas a evitar…)',
+  ejemplos:      '¿Tenés un ejemplo o una referencia a seguir?',
+};
+
+/**
+ * Analiza el dictado y devuelve todo lo que hace falta para armar el
+ * prompt: secciones con viñetas, conceptos, datos duros y métricas.
+ */
+function analizar(texto, opciones = {}) {
+  const nivel = NIVELES[opciones.nivel] || NIVELES[NIVEL_POR_DEFECTO];
+  const original = String(texto || '');
+  const limpio = limpiarDictado(original);
+  const frases = partirEnFrases(limpio);
+  const conceptos = conceptosClave(limpio);
+  const clavesTop = new Set(conceptos.slice(0, 6).flatMap((c) => c.texto.split(' ')));
+
+  const cubos = Object.fromEntries(SECCIONES.map((s) => [s.id, []]));
+
+  frases.forEach((frase, i) => {
+    const { seccion, fuerza } = clasificar(frase);
+    const viñeta = comprimir(frase, nivel.largo);
+    if (viñeta.split(/\s+/).length < 3) return;
+
+    const palabras = contenido(frase);
+    const aciertos = palabras.filter((p) => clavesTop.has(p)).length;
+    const peso =
+      1 +
+      Math.min(fuerza, 12) * 0.35 +          // qué tan claramente es de su sección
+      Math.min(aciertos, 5) * 0.7 +          // habla de lo que el texto repite
+      (/\d/.test(frase) ? 0.9 : 0) +         // trae cifras
+      (i < frases.length * 0.25 ? 0.5 : 0) - // lo primero suele ser el encargo
+      (frase.length > 260 ? 0.6 : 0);
+
+    cubos[seccion].push({ texto: viñeta, peso, orden: i });
+  });
+
+  // Fuera repetidas y contenidas dentro de otra, y me quedo con las mejores.
+  const secciones = {};
+  for (const { id } of SECCIONES) {
+    const candidatas = [...cubos[id]].sort((a, b) => b.peso - a.peso);
+    const elegidas = [];
+    for (const c of candidatas) {
+      const repetida = elegidas.some(
+        (e) => parecido(e.texto, c.texto) > 0.7 ||
+               normalizar(e.texto).includes(normalizar(c.texto).trim()),
+      );
+      if (repetida) continue;
+      elegidas.push(c);
+      if (elegidas.length >= nivel.viñetas) break;
+    }
+    secciones[id] = elegidas.sort((a, b) => a.orden - b.orden);
+  }
+
+  // Tope global: aunque cada sección respete su cupo, un prompt de
+  // cuarenta viñetas no es una síntesis. Se salva la mejor de cada
+  // sección y el resto compite por los lugares que queden.
+  const todas = SECCIONES.flatMap(({ id }) => secciones[id].map((v) => ({ ...v, id })));
+  if (todas.length > nivel.total) {
+    const salvadas = new Set();
+    for (const { id } of SECCIONES) {
+      const mejor = [...secciones[id]].sort((a, b) => b.peso - a.peso)[0];
+      if (mejor) salvadas.add(mejor.texto);
+    }
+    for (const v of [...todas].sort((a, b) => b.peso - a.peso)) {
+      if (salvadas.size >= nivel.total) break;
+      salvadas.add(v.texto);
+    }
+    for (const { id } of SECCIONES) {
+      secciones[id] = secciones[id].filter((v) => salvadas.has(v.texto));
+    }
+  }
+
+  for (const { id } of SECCIONES) secciones[id] = secciones[id].map((v) => v.texto);
+
+  // El objetivo no puede quedar vacío: si nadie lo reclamó, uso la mejor frase.
+  if (!secciones.objetivo.length) {
+    const rescate = [...cubos.contexto].sort((a, b) => b.peso - a.peso)[0];
+    if (rescate) {
+      secciones.objetivo = [rescate.texto];
+      secciones.contexto = secciones.contexto.filter((t) => t !== rescate.texto);
+    }
+  }
+
+  const preguntas = Object.entries(FALTANTES)
+    .filter(([id]) => !secciones[id]?.length)
+    .map(([, pregunta]) => pregunta);
+
+  const datos = datosDuros(limpio);
+  const rol = detectarRol(limpio);
+  const titulo = titular(secciones, conceptos);
+
+  return {
+    titulo,
+    rol,
+    secciones,
+    conceptos,
+    datos,
+    preguntas,
+    faltantes: preguntas,
+    nivel: opciones.nivel || NIVEL_POR_DEFECTO,
+    fuente: { original, limpio, frases: frases.length },
+  };
+}
+
+/** Un título corto para reconocer el prompt en la biblioteca. */
+function titular(secciones, conceptos) {
+  const base = secciones.objetivo[0] || secciones.contexto[0];
+  if (base) {
+    let corto = comprimir(base, 68).replace(/…$/, '');
+    let antes;
+    do {
+      antes = corto;
+      corto = corto.replace(/[\s,;:]+$/, '').replace(/\s+\p{L}{1,4}$/u, (cola) =>
+        VACIAS.has(cola.trim().toLowerCase()) ? '' : cola);
+    } while (corto !== antes);
+    if (corto.length > 12) return corto;
+  }
+  const claves = conceptos.slice(0, 3).map((c) => c.texto).join(', ');
+  return claves ? `Prompt sobre ${claves}` : 'Prompt sin título';
+}
+
+/* ─────────── Plantillas ─────────── */
+
+const PLANTILLAS = [
+  { id: 'estructurado', nombre: 'Estructurado', pie: 'Secciones en Markdown. El de todos los días.' },
+  { id: 'claude',       nombre: 'Claude / XML',  pie: 'Etiquetas XML: lo que mejor sigue Claude en un proyecto.' },
+  { id: 'sistema',      nombre: 'Instrucciones', pie: 'Para pegar en las instrucciones del proyecto.' },
+  { id: 'brief',        nombre: 'Brief',         pie: 'Resumen de encargo para pasarle a una persona.' },
+  { id: 'esencia',      nombre: 'Esencia',       pie: 'Diez líneas y punto.' },
+];
+
+const listar = (viñetas) => viñetas.map((v) => `- ${v}`).join('\n');
+
+function plantillaEstructurado(a, o) {
+  const partes = [`# ${a.titulo}`];
+  if (a.rol) partes.push(`**Rol:** actuá como ${a.rol}.`);
+
+  for (const { id, titulo } of SECCIONES) {
+    if (id === 'preguntas') continue;
+    const viñetas = a.secciones[id];
+    if (viñetas?.length) partes.push(`## ${titulo}\n${listar(viñetas)}`);
+  }
+  if (o.datos && a.datos.length) partes.push(`## Datos que no se pueden perder\n${listar(a.datos)}`);
+  if (o.conceptos && a.conceptos.length) {
+    partes.push(`## Conceptos clave\n${a.conceptos.map((c) => c.texto).join(' · ')}`);
+  }
+  if (o.preguntas && (a.secciones.preguntas.length || a.preguntas.length)) {
+    partes.push(`## Antes de empezar, resolvé\n${listar([...a.secciones.preguntas, ...a.preguntas])}`);
+  }
+  return partes.join('\n\n');
+}
+
+function plantillaClaude(a, o) {
+  const bloque = (etiqueta, viñetas) =>
+    viñetas?.length ? `<${etiqueta}>\n${listar(viñetas)}\n</${etiqueta}>` : '';
+
+  const partes = [];
+  if (a.rol) partes.push(`<rol>Actuás como ${a.rol}.</rol>`);
+  partes.push(bloque('objetivo', a.secciones.objetivo));
+  partes.push(bloque('contexto', a.secciones.contexto));
+  partes.push(bloque('requisitos', a.secciones.requisitos));
+  partes.push(bloque('restricciones', a.secciones.restricciones));
+  partes.push(bloque('formato_de_salida', a.secciones.formato));
+  partes.push(bloque('audiencia_y_tono', a.secciones.audiencia));
+  partes.push(bloque('ejemplos', a.secciones.ejemplos));
+  partes.push(bloque('criterios_de_exito', a.secciones.criterios));
+  if (o.datos) partes.push(bloque('datos', a.datos));
+  if (o.preguntas) partes.push(bloque('dudas', [...a.secciones.preguntas, ...a.preguntas]));
+  return partes.filter(Boolean).join('\n\n');
+}
+
+function plantillaSistema(a, o) {
+  const partes = [];
+  partes.push(`Actuás como ${a.rol || 'un especialista en ' + (a.conceptos[0]?.texto || 'el tema de este proyecto')}.`);
+
+  if (a.secciones.objetivo.length) partes.push(`TU TAREA\n${listar(a.secciones.objetivo)}`);
+  if (a.secciones.contexto.length) partes.push(`CONTEXTO\n${listar(a.secciones.contexto)}`);
+
+  const reglas = [
+    ...a.secciones.requisitos,
+    ...a.secciones.restricciones.map((r) => (/^no\b/i.test(r) ? r : `Evitá: ${r[0].toLowerCase()}${r.slice(1)}`)),
+  ];
+  if (reglas.length) partes.push(`REGLAS\n${listar(reglas)}`);
+
+  const salida = [...a.secciones.formato, ...a.secciones.audiencia];
+  if (salida.length) partes.push(`CÓMO RESPONDER\n${listar(salida)}`);
+  if (a.secciones.ejemplos.length) partes.push(`REFERENCIAS\n${listar(a.secciones.ejemplos)}`);
+  if (a.secciones.criterios.length) partes.push(`ANTES DE ENTREGAR, VERIFICÁ\n${listar(a.secciones.criterios)}`);
+  if (o.datos && a.datos.length) partes.push(`DATOS FIJOS\n${listar(a.datos)}`);
+  if (o.preguntas && a.preguntas.length) {
+    partes.push(`SI TE FALTA ALGO\nPreguntá antes de suponer, sobre todo:\n${listar(a.preguntas)}`);
+  }
+  return partes.join('\n\n');
+}
+
+function plantillaBrief(a, o) {
+  const partes = [`PROYECTO: ${a.titulo}`];
+  if (a.secciones.objetivo.length) partes.push(`QUÉ SE PIDE\n${listar(a.secciones.objetivo)}`);
+  if (a.secciones.contexto.length) partes.push(`DE DÓNDE VENIMOS\n${listar(a.secciones.contexto)}`);
+
+  const entregables = [...a.secciones.formato, ...a.secciones.requisitos];
+  if (entregables.length) partes.push(`ENTREGABLES Y CONDICIONES\n${listar(entregables)}`);
+  if (a.secciones.restricciones.length) partes.push(`FUERA DE ALCANCE / LÍMITES\n${listar(a.secciones.restricciones)}`);
+  if (a.secciones.audiencia.length) partes.push(`PARA QUIÉN\n${listar(a.secciones.audiencia)}`);
+  if (a.secciones.criterios.length) partes.push(`SE APRUEBA CUANDO\n${listar(a.secciones.criterios)}`);
+  if (o.datos && a.datos.length) partes.push(`CIFRAS Y FECHAS\n${listar(a.datos)}`);
+  if (o.preguntas && a.preguntas.length) partes.push(`PENDIENTE DE DEFINIR\n${listar(a.preguntas)}`);
+  return partes.join('\n\n');
+}
+
+function plantillaEsencia(a) {
+  const mejores = [
+    ...a.secciones.objetivo.slice(0, 2),
+    ...a.secciones.requisitos.slice(0, 2),
+    ...a.secciones.restricciones.slice(0, 1),
+    ...a.secciones.formato.slice(0, 1),
+    ...a.secciones.contexto.slice(0, 2),
+    ...a.secciones.criterios.slice(0, 1),
+  ].slice(0, 8);
+
+  const partes = [a.titulo, listar(mejores.map((m) => comprimir(m, 110)))];
+  if (a.datos.length) partes.push(`Datos: ${a.datos.slice(0, 6).join(' · ')}`);
+  return partes.join('\n\n');
+}
+
+/** Arma el texto final con la plantilla elegida. */
+function renderizar(analisis, opciones = {}) {
+  const o = {
+    datos: opciones.datos !== false,
+    conceptos: opciones.conceptos !== false,
+    preguntas: opciones.preguntas !== false,
+    ...{},
+  };
+  switch (opciones.plantilla) {
+    case 'claude':  return plantillaClaude(analisis, o);
+    case 'sistema': return plantillaSistema(analisis, o);
+    case 'brief':   return plantillaBrief(analisis, o);
+    case 'esencia': return plantillaEsencia(analisis, o);
+    default:        return plantillaEstructurado(analisis, o);
+  }
+}
+
+/* ─────────── Métricas ─────────── */
+
+/** Tokens aproximados. En español ronda un token cada 3,6 caracteres. */
+const estimarTokens = (texto) => Math.ceil(String(texto || '').length / 3.6);
+
+function medir(entrada, salida) {
+  const palabras = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
+  const tokensEntrada = estimarTokens(entrada);
+  const tokensSalida = estimarTokens(salida);
+  return {
+    caracteresEntrada: entrada.length,
+    caracteresSalida: salida.length,
+    palabrasEntrada: palabras(entrada),
+    palabrasSalida: palabras(salida),
+    tokensEntrada,
+    tokensSalida,
+    tokensAhorrados: Math.max(0, tokensEntrada - tokensSalida),
+    reduccion: entrada.length ? Math.round((1 - salida.length / entrada.length) * 100) : 0,
+  };
+}
+
+/* ─────────── Puerta de entrada ─────────── */
+
+/** Dictado en bruto → prompt listo, con su análisis y sus métricas. */
+function optimizar(texto, opciones = {}) {
+  const analisis = analizar(texto, opciones);
+  const prompt = renderizar(analisis, opciones);
+  return { prompt, analisis, metricas: medir(String(texto || ''), prompt) };
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   Sintetizador de Prompts — interfaz
+   ══════════════════════════════════════════════════════════════════
+   Todo pasa acá dentro: el motor corre en la misma ventana y la
+   biblioteca vive en el almacenamiento local del Mac. Nunca sale nada
+   a la red.
+   ══════════════════════════════════════════════════════════════════ */
+
+
+const $ = (s) => document.querySelector(s);
+
+// En Electron existe el puente `ari`; abierto como archivo suelto en el
+// navegador, no. La app funciona igual en los dos casos.
+const puente = globalThis.ari || null;
+
+const LLAVES = { prompts: 'ari.prompts', ajustes: 'ari.ajustes', borrador: 'ari.borrador' };
+
+const estado = {
+  nivel: NIVEL_POR_DEFECTO,
+  plantilla: 'estructurado',
+  datos: true,
+  conceptos: true,
+  preguntas: true,
+  resultado: null,
+  guardados: [],
+  busqueda: '',
+  abierto: null,          // id del prompt de la biblioteca que se está viendo
+  conBiblioteca: true,
+};
+
+/* ─────────── Guardado local ─────────── */
+
+function leer(llave, siNoHay) {
+  try {
+    const crudo = localStorage.getItem(llave);
+    return crudo ? JSON.parse(crudo) : siNoHay;
+  } catch {
+    return siNoHay;
+  }
+}
+
+function escribir(llave, valor) {
+  try {
+    localStorage.setItem(llave, JSON.stringify(valor));
+  } catch {
+    avisar('No se pudo guardar: el disco de la app está lleno');
+  }
+}
+
+const guardarAjustes = () => escribir(LLAVES.ajustes, {
+  nivel: estado.nivel,
+  plantilla: estado.plantilla,
+  datos: estado.datos,
+  conceptos: estado.conceptos,
+  preguntas: estado.preguntas,
+  conBiblioteca: estado.conBiblioteca,
+});
+
+/* ─────────── Avisos ─────────── */
+
+let relojAviso = null;
+
+function avisar(texto) {
+  const caja = $('#aviso');
+  caja.textContent = texto;
+  caja.classList.add('visible');
+  clearTimeout(relojAviso);
+  relojAviso = setTimeout(() => caja.classList.remove('visible'), 2200);
+}
+
+/* ─────────── Síntesis ─────────── */
+
+let relojSintesis = null;
+
+/** Rehace el prompt. Se llama a cada tecla, con un respiro de por medio. */
+function sintetizar({ yaMismo = false } = {}) {
+  clearTimeout(relojSintesis);
+  const hacerlo = () => {
+    const entrada = $('#entrada').value;
+    escribir(LLAVES.borrador, entrada);
+
+    if (!entrada.trim()) {
+      estado.resultado = null;
+      pintarSalida();
+      return;
+    }
+
+    estado.resultado = optimizar(entrada, {
+      nivel: estado.nivel,
+      plantilla: estado.plantilla,
+      datos: estado.datos,
+      conceptos: estado.conceptos,
+      preguntas: estado.preguntas,
+    });
+    pintarSalida();
+  };
+  if (yaMismo) hacerlo();
+  else relojSintesis = setTimeout(hacerlo, 220);
+}
+
+const numero = (n) => n.toLocaleString('es-CO');
+
+function pintarSalida() {
+  const salida = $('#salida');
+  const pieEntrada = $('#pie-entrada');
+  const pieSalida = $('#pie-salida');
+  const entrada = $('#entrada').value;
+
+  const palabras = entrada.trim() ? entrada.trim().split(/\s+/).length : 0;
+  pieEntrada.innerHTML = `<span><b>${numero(palabras)}</b> palabras</span><span><b>${numero(entrada.length)}</b> caracteres</span>`;
+
+  if (!estado.resultado) {
+    salida.classList.add('vacia');
+    salida.textContent = 'Escribí, dictá o pegá algo a la izquierda y el prompt aparece acá solo.';
+    pieSalida.innerHTML = '<span>Sin conexión · no consume tokens</span>';
+    return;
+  }
+
+  const { prompt, metricas, analisis } = estado.resultado;
+  salida.classList.remove('vacia');
+  salida.textContent = prompt;
+
+  const recorte = metricas.reduccion > 0
+    ? `<span class="bueno">−${metricas.reduccion}% más corto</span>`
+    : '<span>ganó estructura</span>';
+
+  const ahorro = metricas.tokensAhorrados > 0
+    ? `<span><b>~${numero(metricas.tokensAhorrados)}</b> tokens menos por consulta</span>`
+    : `<span><b>~${numero(metricas.tokensSalida)}</b> tokens al usarlo</span>`;
+
+  const pendientes = analisis.preguntas.length
+    ? `<span><b>${analisis.preguntas.length}</b> ${analisis.preguntas.length === 1 ? 'duda por resolver' : 'dudas por resolver'}</span>`
+    : '<span class="bueno">no le falta nada</span>';
+
+  pieSalida.innerHTML = [
+    `<span><b>${numero(metricas.palabrasSalida)}</b> palabras</span>`,
+    recorte,
+    ahorro,
+    pendientes,
+  ].join('');
+}
+
+/* ─────────── Biblioteca ─────────── */
+
+const fecha = (marca) => new Date(marca).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' });
+
+function pintarBiblioteca() {
+  const lista = $('#guardados');
+  const busqueda = estado.busqueda.trim().toLowerCase();
+  const visibles = estado.guardados.filter((p) =>
+    !busqueda || `${p.titulo} ${p.entrada}`.toLowerCase().includes(busqueda));
+
+  lista.innerHTML = '';
+
+  if (!visibles.length) {
+    const nada = document.createElement('li');
+    nada.className = 'nada';
+    nada.textContent = estado.guardados.length
+      ? 'Ningún prompt guardado coincide con esa búsqueda.'
+      : 'Todavía no guardaste ninguno. Sintetizá uno y tocá «Guardar».';
+    lista.append(nada);
+    return;
+  }
+
+  for (const prompt of visibles) {
+    const fila = document.createElement('li');
+    fila.className = prompt.id === estado.abierto ? 'activo' : '';
+
+    const titulo = document.createElement('div');
+    titulo.className = 'titulo';
+    titulo.textContent = prompt.titulo;
+
+    const pie = document.createElement('div');
+    pie.className = 'fecha';
+    const cuando = document.createElement('span');
+    cuando.textContent = `${fecha(prompt.marca)} · ${NIVELES[prompt.nivel]?.etiqueta || prompt.nivel}`;
+    const borrar = document.createElement('button');
+    borrar.className = 'borrar';
+    borrar.textContent = 'Borrar';
+    borrar.title = 'Borrar este prompt';
+    borrar.addEventListener('click', (e) => { e.stopPropagation(); borrarGuardado(prompt.id); });
+    pie.append(cuando, borrar);
+
+    fila.append(titulo, pie);
+    fila.addEventListener('click', () => abrirGuardado(prompt.id));
+    lista.append(fila);
+  }
+}
+
+function guardarEnBiblioteca() {
+  if (!estado.resultado) return avisar('Todavía no hay nada que guardar');
+
+  const registro = {
+    id: estado.abierto || `p${Date.now().toString(36)}`,
+    titulo: estado.resultado.analisis.titulo,
+    entrada: $('#entrada').value,
+    nivel: estado.nivel,
+    plantilla: estado.plantilla,
+    marca: Date.now(),
+  };
+
+  const otros = estado.guardados.filter((p) => p.id !== registro.id);
+  estado.guardados = [registro, ...otros];
+  estado.abierto = registro.id;
+  escribir(LLAVES.prompts, estado.guardados);
+  pintarBiblioteca();
+  avisar('Guardado en la biblioteca');
+}
+
+function abrirGuardado(id) {
+  const prompt = estado.guardados.find((p) => p.id === id);
+  if (!prompt) return;
+  estado.abierto = id;
+  estado.nivel = prompt.nivel || estado.nivel;
+  estado.plantilla = prompt.plantilla || estado.plantilla;
+  $('#entrada').value = prompt.entrada;
+  pintarControles();
+  sintetizar({ yaMismo: true });
+  pintarBiblioteca();
+}
+
+function borrarGuardado(id) {
+  estado.guardados = estado.guardados.filter((p) => p.id !== id);
+  if (estado.abierto === id) estado.abierto = null;
+  escribir(LLAVES.prompts, estado.guardados);
+  pintarBiblioteca();
+  avisar('Prompt borrado');
+}
+
+function exportarBiblioteca() {
+  if (!estado.guardados.length) return avisar('La biblioteca está vacía');
+  const contenido = JSON.stringify({ app: 'sintetizador-de-prompts', version: 1, prompts: estado.guardados }, null, 2);
+  descargar('mis-prompts.json', contenido);
+}
+
+async function importarBiblioteca(archivo) {
+  try {
+    const datos = JSON.parse(await archivo.text());
+    const entrantes = Array.isArray(datos) ? datos : datos.prompts;
+    if (!Array.isArray(entrantes)) throw new Error('formato desconocido');
+
+    const conocidos = new Set(estado.guardados.map((p) => p.id));
+    const nuevos = entrantes
+      .filter((p) => p && p.entrada && !conocidos.has(p.id))
+      .map((p) => ({ ...p, id: p.id || `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` }));
+
+    estado.guardados = [...nuevos, ...estado.guardados];
+    escribir(LLAVES.prompts, estado.guardados);
+    pintarBiblioteca();
+    avisar(nuevos.length ? `Se importaron ${nuevos.length}` : 'Ya los tenías todos');
+  } catch {
+    avisar('Ese archivo no es una biblioteca de prompts');
+  }
+}
+
+/* ─────────── Salidas al sistema ─────────── */
+
+async function copiarPrompt() {
+  if (!estado.resultado) return avisar('Todavía no hay prompt');
+  const texto = estado.resultado.prompt;
+  try {
+    if (puente) await puente.copiar(texto);
+    else await navigator.clipboard.writeText(texto);
+    avisar('Copiado: pegalo en tu proyecto');
+  } catch {
+    avisar('No se pudo copiar; seleccioná el texto a mano');
+  }
+}
+
+/** Guarda un archivo: con diálogo del sistema en la app, o descarga suelta. */
+function descargar(nombre, contenido) {
+  if (puente) {
+    puente.guardarTexto(nombre, contenido).then((hecho) => hecho && avisar('Archivo guardado'));
+    return;
+  }
+  const enlace = document.createElement('a');
+  enlace.href = URL.createObjectURL(new Blob([contenido], { type: 'text/plain;charset=utf-8' }));
+  enlace.download = nombre;
+  enlace.click();
+  setTimeout(() => URL.revokeObjectURL(enlace.href), 1000);
+}
+
+function exportarPrompt() {
+  if (!estado.resultado) return avisar('Todavía no hay prompt');
+  const nombre = `${estado.resultado.analisis.titulo}`
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 50) || 'prompt';
+  descargar(`${nombre}.md`, estado.resultado.prompt);
+}
+
+async function abrirArchivo() {
+  if (puente) {
+    const archivo = await puente.abrirTexto();
+    if (!archivo) return;
+    $('#entrada').value = archivo.contenido;
+    estado.abierto = null;
+    sintetizar({ yaMismo: true });
+    avisar(`Abierto: ${archivo.nombre}`);
+    return;
+  }
+  const selector = document.createElement('input');
+  selector.type = 'file';
+  selector.accept = '.txt,.md,.markdown,text/plain';
+  selector.addEventListener('change', async () => {
+    const archivo = selector.files?.[0];
+    if (!archivo) return;
+    $('#entrada').value = await archivo.text();
+    estado.abierto = null;
+    sintetizar({ yaMismo: true });
+  });
+  selector.click();
+}
+
+function limpiar() {
+  $('#entrada').value = '';
+  estado.abierto = null;
+  estado.resultado = null;
+  sintetizar({ yaMismo: true });
+  pintarBiblioteca();
+  $('#entrada').focus();
+}
+
+/* ─────────── Controles ─────────── */
+
+function pintarControles() {
+  for (const boton of document.querySelectorAll('#niveles button')) {
+    boton.classList.toggle('activo', boton.dataset.nivel === estado.nivel);
+  }
+  $('#plantilla').value = estado.plantilla;
+  $('#op-datos').checked = estado.datos;
+  $('#op-conceptos').checked = estado.conceptos;
+  $('#op-preguntas').checked = estado.preguntas;
+  $('#ventana').classList.toggle('sin-biblioteca', !estado.conBiblioteca);
+}
+
+function armarControles() {
+  const niveles = $('#niveles');
+  for (const [id, nivel] of Object.entries(NIVELES)) {
+    const boton = document.createElement('button');
+    boton.dataset.nivel = id;
+    boton.textContent = nivel.etiqueta;
+    boton.title = `Hasta ${nivel.total} viñetas de ${nivel.largo} caracteres`;
+    boton.addEventListener('click', () => {
+      estado.nivel = id;
+      pintarControles();
+      guardarAjustes();
+      sintetizar({ yaMismo: true });
+    });
+    niveles.append(boton);
+  }
+
+  const plantillas = $('#plantilla');
+  for (const plantilla of PLANTILLAS) {
+    const opcion = document.createElement('option');
+    opcion.value = plantilla.id;
+    opcion.textContent = plantilla.nombre;
+    opcion.title = plantilla.pie;
+    plantillas.append(opcion);
+  }
+  plantillas.addEventListener('change', () => {
+    estado.plantilla = plantillas.value;
+    guardarAjustes();
+    sintetizar({ yaMismo: true });
+  });
+
+  for (const [id, campo] of [['datos', '#op-datos'], ['conceptos', '#op-conceptos'], ['preguntas', '#op-preguntas']]) {
+    $(campo).addEventListener('change', (e) => {
+      estado[id] = e.target.checked;
+      guardarAjustes();
+      sintetizar({ yaMismo: true });
+    });
+  }
+}
+
+/* ─────────── Arrastrar archivos ─────────── */
+
+function armarArrastre() {
+  const panel = $('#entrada').closest('.panel');
+
+  for (const evento of ['dragenter', 'dragover']) {
+    panel.addEventListener(evento, (e) => { e.preventDefault(); panel.classList.add('soltando'); });
+  }
+  for (const evento of ['dragleave', 'drop']) {
+    panel.addEventListener(evento, () => panel.classList.remove('soltando'));
+  }
+
+  panel.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    const archivo = e.dataTransfer?.files?.[0];
+    if (!archivo) return;
+    if (archivo.size > 8 * 1024 * 1024) return avisar('Ese archivo pesa demasiado');
+    $('#entrada').value = await archivo.text();
+    estado.abierto = null;
+    sintetizar({ yaMismo: true });
+    avisar(`Listo: ${archivo.name}`);
+  });
+}
+
+/* ─────────── Atajos y menú ─────────── */
+
+function armarAtajos() {
+  document.addEventListener('keydown', (e) => {
+    const mando = e.metaKey || e.ctrlKey;
+    if (!mando) return;
+
+    if (e.key === 'Enter') { e.preventDefault(); sintetizar({ yaMismo: true }); }
+    else if (e.key === 'c' && e.shiftKey) { e.preventDefault(); copiarPrompt(); }
+    else if (e.key === 's') { e.preventDefault(); exportarPrompt(); }
+    else if (e.key === 'd') { e.preventDefault(); guardarEnBiblioteca(); }
+    else if (e.key === 'k') { e.preventDefault(); $('#buscar').focus(); }
+  });
+
+  puente?.alMenu((orden) => {
+    if (orden.startsWith('nivel:')) {
+      estado.nivel = orden.split(':')[1];
+      pintarControles();
+      guardarAjustes();
+      return sintetizar({ yaMismo: true });
+    }
+    ({
+      abrir: abrirArchivo,
+      guardar: exportarPrompt,
+      biblioteca: guardarEnBiblioteca,
+      limpiar,
+      copiar: copiarPrompt,
+      sintetizar: () => sintetizar({ yaMismo: true }),
+      dictar: () => {
+        $('#entrada').focus();
+        avisar('Tocá dos veces la tecla Fn y hablá: el dictado es el del Mac');
+      },
+    })[orden]?.();
+  });
+}
+
+/* ─────────── Arranque ─────────── */
+
+function arrancar() {
+  if (!puente) document.body.classList.add('en-navegador');
+  Object.assign(estado, leer(LLAVES.ajustes, {}));
+  estado.guardados = leer(LLAVES.prompts, []);
+
+  armarControles();
+  armarArrastre();
+  armarAtajos();
+  pintarControles();
+
+  $('#entrada').value = leer(LLAVES.borrador, '') || '';
+  $('#entrada').addEventListener('input', () => {
+    estado.abierto = null;
+    sintetizar();
+  });
+
+  $('#btn-copiar').addEventListener('click', copiarPrompt);
+  $('#btn-exportar').addEventListener('click', exportarPrompt);
+  $('#btn-guardar-biblioteca').addEventListener('click', guardarEnBiblioteca);
+  $('#btn-abrir').addEventListener('click', abrirArchivo);
+  $('#btn-limpiar').addEventListener('click', limpiar);
+  $('#btn-dictar').addEventListener('click', () => {
+    $('#entrada').focus();
+    avisar('Tocá dos veces la tecla Fn y hablá: el dictado es el del Mac');
+  });
+
+  $('#btn-biblioteca').addEventListener('click', () => {
+    estado.conBiblioteca = !estado.conBiblioteca;
+    pintarControles();
+    guardarAjustes();
+  });
+
+  $('#buscar').addEventListener('input', (e) => {
+    estado.busqueda = e.target.value;
+    pintarBiblioteca();
+  });
+
+  $('#btn-exportar-todo').addEventListener('click', exportarBiblioteca);
+  $('#btn-importar').addEventListener('click', () => $('#archivo-importar').click());
+  $('#archivo-importar').addEventListener('change', (e) => {
+    const archivo = e.target.files?.[0];
+    if (archivo) importarBiblioteca(archivo);
+    e.target.value = '';
+  });
+
+  pintarBiblioteca();
+  sintetizar({ yaMismo: true });
+  $('#entrada').focus();
+}
+
+arrancar();
+
+</script>
+</body>
+</html>

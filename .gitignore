@@ -6,3 +6,6 @@ public/uploads/
 *.db-journal
 *.db-wal
 .DS_Store
+
+# La app de escritorio se compila en su propia carpeta
+escritorio/entregas/

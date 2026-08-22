@@ -1027,6 +1027,18 @@ recién al final por el nombre exacto, así que la misma persona agendando dos
 veces no queda duplicada en la lista de clientes. Los datos que ya tuviera
 cargados no se pisan: sólo se completan los que estén vacíos.
 
+## Sintetizador de Prompts (app de escritorio para Mac)
+
+En [`escritorio/`](escritorio/) hay una aplicación aparte, que no tiene que ver
+con la operación del negocio: convierte un dictado largo —hablado de corrido,
+con vueltas y muletillas— en un prompt corto y ordenado para pegar en un
+proyecto de Claude.
+
+Corre entera dentro del Mac: **no sale a internet, no llama a ninguna IA y no
+gasta un solo token.** Se puede abrir con doble clic
+(`escritorio/dist/sintetizador-de-prompts.html`) o instalar como app del Dock.
+La guía completa está en [`escritorio/LEEME.md`](escritorio/LEEME.md).
+
 ## Datos
 
 Todo queda en `data/clic-control.db` (SQLite), en tu propia máquina o servidor.

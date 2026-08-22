@@ -1,0 +1,49 @@
+{
+  "name": "sintetizador-de-prompts",
+  "productName": "Sintetizador de Prompts",
+  "version": "1.0.0",
+  "description": "App de escritorio para Mac que convierte un dictado largo en un prompt corto y ordenado. Todo local: sin internet, sin IA y sin gastar tokens.",
+  "private": true,
+  "type": "module",
+  "main": "main.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "construir": "node build/empaquetar.mjs",
+    "prestart": "npm run construir",
+    "start": "electron .",
+    "predist": "npm run construir && npm test",
+    "dist": "electron-builder --mac",
+    "test": "node --test test/*.test.js",
+    "sintetizar": "node bin/sintetizar.mjs"
+  },
+  "bin": {
+    "sintetizar-prompt": "bin/sintetizar.mjs"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "co.clickcontrol.sintetizador",
+    "productName": "Sintetizador de Prompts",
+    "directories": {
+      "output": "entregas"
+    },
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "dist/**",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "identity": null
+    }
+  }
+}
