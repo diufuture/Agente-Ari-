@@ -500,6 +500,28 @@ por un archivo que no llegó bien sería el peor final posible.
 Lo único que el CSV no trae son las fotos, porque un CSV es sólo texto. Las que
 ya tengan los productos se conservan, y las nuevas se suben desde la ficha.
 
+### Armar la cotización tocando el catálogo
+
+Dictar es lo más rápido para uno o dos renglones sueltos. Para veinte no: ahí
+conviene ir mirando la lista, y es además donde uno se acuerda de lo que
+falta. Por eso, **mientras hay una cotización abierta**, el catálogo se
+convierte en la forma de cargarla:
+
+1. Se abre **Productos** —el aviso de arriba recuerda qué se está armando—.
+2. Se filtra por tipo o se busca, como siempre.
+3. En el producto que sea, **➕ Cotizar** abre un renglón debajo con la
+   cantidad y el precio que le va a quedar.
+4. **Agregar**, y la lista se queda donde estaba, lista para el siguiente.
+
+El precio que se muestra y el que entra es **el del nivel de esa cotización**
+—canal, constructor o cliente final—, no siempre el de cliente. Si el producto
+no tiene precio para ese nivel lo avisa antes de agregarlo, en vez de meter un
+renglón en $ 0 sin decir nada.
+
+Agregar dos veces el mismo producto **suma la cantidad** en vez de repetir el
+renglón, igual que dictando. Y con la cotización cerrada no aparece nada de
+esto: el ➕ y el aviso sólo están mientras haya algo que armar.
+
 ### Nombrar un producto como uno lo nombra
 
 Nadie dicta una referencia como está escrita en la lista de precios. Uno dice

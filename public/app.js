@@ -21,6 +21,7 @@ const estado = {
   buscarCotizaciones: '',  // texto del buscador de cotizaciones
   nuevoProducto: false,    // el formulario de alta manual de producto está abierto
   subiendoFotoPara: null,  // id del producto al que se le está por asignar una foto
+  cotizandoProducto: null, // id del producto al que se le está poniendo cantidad para meterlo en la cotización en curso
   itemEditando: null,      // id del renglón de cotización abierto para editar
   nuevoCliente: false,     // el formulario de alta manual de cliente está abierto
   citaEditando: null,      // id de la cita abierta para editar en la agenda
@@ -573,6 +574,15 @@ function accionesDeFila(entidad, f) {
     }
   }
   if (entidad === 'productos') {
+    // Con una cotización abierta, el catálogo se vuelve la forma más rápida de
+    // armarla: se va tocando ➕ producto por producto y se pone la cantidad,
+    // sin dictar nada. Para veinte renglones es mucho menos trabajo que
+    // nombrarlos uno por uno, y no se equivoca de referencia.
+    if (estado.resumen?.enCurso) {
+      acciones.push({ accion: 'cotizar-producto', rotulo: '➕ Cotizar', corto: 'Cotizar',
+        icono: ICONO_MAS, tono: 'ok', clase: 'destacado',
+        titulo: `Agregarlo a «${estado.resumen.enCurso.titulo}»` });
+    }
     acciones.push({ accion: 'abrir-producto', rotulo: 'Ver', corto: 'Ver',
       icono: ICONO_OJO, tono: 'editar', clase: 'destacado' });
     // La ficha técnica, a un toque desde la lista: si ya está cargada, no hay
@@ -630,7 +640,7 @@ function cajonDeAcciones(lista) {
 // dónde corre el renglón.
 const anchoDeCajon = (lista) => lista.length * 66 + 12;
 
-function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
+function tabla(entidad, columnas, filas, { vacio, compacta = false, debajoDe = null } = {}) {
   if (!filas.length) {
     return `<div class="tarjeta"><div class="vacio">
       <strong>Nada por acá</strong>${escapar(vacio || 'Pedíselo a Ari por voz y aparece de inmediato.')}
@@ -668,8 +678,14 @@ function tabla(entidad, columnas, filas, { vacio, compacta = false } = {}) {
     // ellas deslizando en el celular en vez de con una hilera de botones.
     const cajon = compacta || !lista.length ? '' : `<td class="td-cajon">${cajonDeAcciones(lista)}</td>`;
 
+    // Un renglón que se abre debajo del que se tocó, sin sacar a nadie de la
+    // lista: es donde se pone la cantidad para mandar el producto a la
+    // cotización que se está armando.
+    const intercalado = debajoDe ? debajoDe(f) : '';
+
     return `<tr${cajon ? ` class="deslizable" style="--cajon:${anchoDeCajon(lista)}px"` : ''}>${
-      celdas}${acciones}${cajon}</tr>`;
+      celdas}${acciones}${cajon}</tr>${
+      intercalado ? `<tr class="fila-editor"><td colspan="${columnas.length + 2}">${intercalado}</td></tr>` : ''}`;
   }).join('');
 
   return `<div class="tarjeta"><div class="tabla-envoltura"><table>
@@ -1990,12 +2006,16 @@ async function pintar() {
 
       contenedor.innerHTML = barra
         + filtrosTipo
+        + avisoCotizacionEnCurso()
         + (estado.nuevoProducto ? formularioNuevoProducto() : '')
         + (estado.verDescontinuados
           ? '<p class="ayuda">Los descontinuados son los que dejaron de venir en la lista del proveedor. Siguen guardados con su historial; para volver a usarlos, abrilos y marcá «Disponible en el catálogo».</p>'
           : '')
         + tabla('productos', ['foto', 'tipo', 'referencia', 'descripcion', 'stock', 'precio_canal', 'precio_constructor', 'precio_cliente'], filas,
-          { vacio: 'Todavía no hay productos en el catálogo. Importá una lista de precios o agregá uno a mano.' });
+          {
+            vacio: 'Todavía no hay productos en el catálogo. Importá una lista de precios o agregá uno a mano.',
+            debajoDe: (p) => (estado.cotizandoProducto === p.id ? formularioCotizarProducto(p) : ''),
+          });
       $('#buscar-productos')?.focus();
 
       // El botón de achicar fotos sólo aparece si hay algo que achicar, y se
@@ -2130,6 +2150,62 @@ async function pintar() {
   }
 }
 
+/* ── Armar la cotización desde el catálogo ──
+   Dictar sirve para uno o dos renglones sueltos; para veinte es más rápido
+   ir tocando el catálogo. Con una cotización abierta, cada producto muestra
+   un ➕ que abre este renglón: cantidad, el precio que le va a quedar según
+   el nivel de esa cotización, y listo. La lista no se mueve, así se puede
+   seguir cargando de corrido. */
+
+/** Qué precio del catálogo le toca a esta cotización. */
+const PRECIO_DEL_NIVEL = { canal: 'precio_canal', constructor: 'precio_constructor', cliente: 'precio_cliente' };
+
+/**
+ * Los botones flotantes del celular estorban mientras se pone la cantidad:
+ * el micrófono queda parado justo encima de «Agregar». Con el renglón
+ * abierto se esconden, igual que cuando se abre la conversación.
+ */
+const sincronizarFlotantes = () =>
+  $('.fabs')?.classList.toggle('oculto', Boolean(estado.cotizandoProducto));
+
+function formularioCotizarProducto(p) {
+  const q = estado.resumen?.enCurso;
+  if (!q) return '';
+  const nivel = q.nivel_precio || 'cliente';
+  const precio = Number(p[PRECIO_DEL_NIVEL[nivel] ?? 'precio_cliente']) || 0;
+
+  return `<form class="cotizar-producto" data-id="${p.id}">
+    <label><span>Cantidad</span>
+      ${/* step="any" y no step="1": con min="0.01" el navegador daría por
+            inválido cualquier entero —los válidos serían 0.01, 1.01, 2.01…—
+            y bloquearía el envío sin decir nada. Además las cantidades no
+            siempre son enteras: hay metros de cable y horas de obra. */ ''}
+      <input name="cantidad" type="number" inputmode="decimal" min="0.01" step="any" value="1"
+             autofocus aria-label="Cantidad" /></label>
+    <div class="cotizar-precio">
+      <b>${fmtDinero(precio, q.moneda)}</b>
+      <span>c/u · precio ${escapar(nivel)}</span>
+    </div>
+    <div class="cotizar-botones">
+      <button type="submit" class="mini destacado">Agregar a la cotización</button>
+      <button type="button" class="mini" data-accion="cancelar-cotizar">Cancelar</button>
+    </div>
+    ${precio <= 0
+      ? '<p class="ayuda">Este producto no tiene precio para ese nivel: va a entrar en $ 0 y hay que ponérselo a mano en la cotización.</p>'
+      : ''}
+  </form>`;
+}
+
+/** El aviso de arriba del catálogo: qué se está armando y cómo agregarle. */
+function avisoCotizacionEnCurso() {
+  const q = estado.resumen?.enCurso;
+  if (!q) return '';
+  return `<p class="ayuda aviso-armando">
+    Estás armando <b>${escapar(q.titulo)}</b>${q.cliente ? ` para <b class="es-cliente">${escapar(q.cliente)}</b>` : ''}.
+    Tocá <b>➕ Cotizar</b> en cualquier producto para agregarlo sin dictar nada.
+  </p>`;
+}
+
 /** Alta manual de un cliente, y el total de lo que mueve la cartera. */
 function barraClientes(filas) {
   const suma = (campo) => filas.reduce((s, f) => s + (Number(f[campo]) || 0), 0);
@@ -2230,6 +2306,7 @@ const ICONO_LAPIZ = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.
 const ICONO_CANECA = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z"/></svg>`;
 const ICONO_OJO = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5C6.5 5 2.7 9.1 1.5 12c1.2 2.9 5 7 10.5 7s9.3-4.1 10.5-7c-1.2-2.9-5-7-10.5-7Zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-2.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/></svg>`;
 const ICONO_CHECK = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z"/></svg>`;
+const ICONO_MAS = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2Z"/></svg>`;
 const ICONO_DOC = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm2 16H8v-2h8v2Zm0-4H8v-2h8v2Zm-3-5V3.5L18.5 9H13Z"/></svg>`;
 
 /**
@@ -3259,8 +3336,10 @@ $('#nav').addEventListener('click', (e) => {
   estado.productoAbierto = null;
   estado.importacion = null;
   estado.nuevoProducto = false;
+  estado.cotizandoProducto = null;
   estado.editando = false;
   cerrarHoja();
+  sincronizarFlotantes();
   pintar();
   $('#contenido').scrollTop = 0;
 });
@@ -3702,6 +3781,22 @@ $('#contenido').addEventListener('click', async (e) => {
     await pintar();
     return;
   }
+  if (accion === 'cotizar-producto') {
+    // Tocarlo otra vez lo cierra: sirve de escape sin tener que apuntarle al
+    // botón de cancelar.
+    estado.cotizandoProducto = estado.cotizandoProducto === Number(id) ? null : Number(id);
+    await pintar();
+    sincronizarFlotantes();
+    const campo = $('.cotizar-producto input[name="cantidad"]');
+    if (campo) { campo.focus(); campo.select(); }
+    return;
+  }
+  if (accion === 'cancelar-cotizar') {
+    estado.cotizandoProducto = null;
+    await pintar();
+    sincronizarFlotantes();
+    return;
+  }
   if (accion === 'alternar-estado-cot') {
     const actual = await api(`/cotizaciones/${id}`);
     const nuevo = SIGUIENTE_ESTADO_COT[actual.estado] || 'aprobada';
@@ -4085,6 +4180,39 @@ $('#contenido').addEventListener('click', async (e) => {
 });
 
 $('#contenido').addEventListener('submit', async (e) => {
+  // Un producto del catálogo directo a la cotización que se está armando.
+  if (e.target.classList.contains('cotizar-producto')) {
+    e.preventDefault();
+    const q = estado.resumen?.enCurso;
+    if (!q) { avisar('No hay ninguna cotización abierta.', true); return; }
+
+    const producto_id = Number(e.target.dataset.id);
+    const cantidad = Number(new FormData(e.target).get('cantidad')) || 1;
+    const boton = e.target.querySelector('button[type="submit"]');
+    if (boton) { boton.disabled = true; boton.textContent = 'Agregando…'; }
+
+    try {
+      const item = await api(`/cotizaciones/${q.id}/items`, { method: 'POST', body: { producto_id, cantidad } });
+      estado.cotizandoProducto = null;
+      // El resumen primero: es de donde sale el total que se va a avisar y el
+      // renglón de arriba, y sin refrescarlo mostraría el de antes.
+      await refrescarResumen();
+      const tot = estado.resumen?.enCurso?.totales;
+      avisar(`Agregado: ${item.cantidad} × ${nombreCortoDeProducto(item.descripcion, 32)}${
+        tot ? ` · total ${fmtDinero(tot.total, q.moneda)}` : ''} ✓`);
+      await pintar();
+      sincronizarFlotantes();
+      // El buscador queda listo para el siguiente: cargando de a veinte
+      // renglones, volver a tocarlo cada vez es la mitad del trabajo.
+      const buscador = $('#buscar-productos');
+      if (buscador && !esCelular()) { buscador.focus(); buscador.select(); }
+    } catch (err) {
+      avisar(err.message, true);
+      if (boton) { boton.disabled = false; boton.textContent = 'Agregar a la cotización'; }
+    }
+    return;
+  }
+
   if (e.target.id === 'form-editar') {
     e.preventDefault();
     const { entidad, id } = e.target.dataset;
