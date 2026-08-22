@@ -937,6 +937,13 @@ async function api(req, res, url) {
     // que este servidor no conoce. Sin esto caía en el alta genérica y
     // respondía "no recibí ningún dato para guardar", que no le dice a nadie
     // que lo que pasa es que el servidor está viejo.
+    // GET /api/clientes/:id/arrastra -> qué se va a llevar por delante
+    // borrarlo, para poder avisarlo con números antes de preguntar. Va antes
+    // del portazo de acá abajo, que si no se la come.
+    if (recurso === 'clientes' && id && partes[2] === 'arrastra' && req.method === 'GET') {
+      return json(res, 200, db.loQueCuelgaDelCliente(Number(id)));
+    }
+
     if (partes[2]) {
       return json(res, 404, {
         error: `Esta versión del servidor no conoce /${recurso}/${id}/${partes[2]}. `
@@ -1036,6 +1043,14 @@ async function api(req, res, url) {
       if (tabla === 'cotizaciones') {
         const r = db.eliminarCotizacion(Number(id));
         return json(res, r.borrada ? 200 : 404, r);
+      }
+      // Y borrar un cliente se lleva todo lo suyo. Dejar sus cotizaciones,
+      // citas y cobros vivos y sin dueño —que es lo que pasaba— llenaba las
+      // listas de renglones «Sin cliente» que sumaban a los totales y que ya
+      // no había forma de rastrear.
+      if (tabla === 'clientes') {
+        const r = db.eliminarClienteYLoSuyo(Number(id));
+        return json(res, r.borrado ? 200 : 404, r);
       }
       return json(res, db.eliminar(tabla, Number(id)) ? 200 : 404, { ok: true });
     }

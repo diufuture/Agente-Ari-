@@ -1312,6 +1312,74 @@ export function eliminarCotizacion(id) {
   return { borrada: true, abonos, devueltosAlInventario: movimientos };
 }
 
+/**
+ * Todo lo que cuelga de un cliente, contado antes de borrarlo.
+ *
+ * Sirve para poder avisar de verdad qué se va a llevar por delante, con
+ * números y no con un «¿seguro?» genérico. Borrar un cliente es de las pocas
+ * cosas de acá que no tienen vuelta atrás.
+ */
+export function loQueCuelgaDelCliente(id) {
+  const cuantos = (tabla) =>
+    one(`SELECT COUNT(*) n FROM ${tabla} WHERE cliente_id = ?`, [id]).n;
+  return {
+    cotizaciones: cuantos('cotizaciones'),
+    citas: cuantos('citas'),
+    cobros: cuantos('cobros'),
+    recordatorios: cuantos('recordatorios'),
+    notas: cuantos('notas'),
+    abonos: one(
+      `SELECT COUNT(*) n FROM abonos a
+        JOIN cotizaciones q ON q.id = a.cotizacion_id
+       WHERE q.cliente_id = ?`, [id],
+    ).n,
+  };
+}
+
+/**
+ * Borra un cliente y TODO lo suyo.
+ *
+ * Antes las cotizaciones, citas, cobros y recordatorios tenían el cliente en
+ * `ON DELETE SET NULL`: borrar al cliente los dejaba a todos vivos y sin
+ * dueño, apareciendo como «Sin cliente» en las listas y sumando a los totales
+ * de la empresa. Nadie podía saber de quién habían sido, ni por qué estaban
+ * ahí, y limpiarlos a mano era imposible.
+ *
+ * Las cotizaciones se borran una por una a propósito, con la misma función
+ * que las borra sueltas: es la que devuelve a la bodega lo que había salido
+ * por las aprobadas. Un DELETE en bloque se llevaría los renglones pero
+ * dejaría el inventario descontado por ventas que ya no existen.
+ */
+export function eliminarClienteYLoSuyo(id) {
+  const cliente = obtenerPorId('clientes', id);
+  if (!cliente) return { borrado: false };
+
+  const resumen = loQueCuelgaDelCliente(id);
+  let devueltosAlInventario = 0;
+
+  // Todo o nada: si algo falla a mitad de camino, un cliente a medio borrar
+  // —sin cotizaciones pero todavía en la lista— sería peor que no haberlo
+  // tocado. `node:sqlite` no trae envoltorio de transacciones, así que van
+  // las tres órdenes a mano.
+  db.exec('BEGIN');
+  try {
+    for (const { id: idCot } of all('SELECT id FROM cotizaciones WHERE cliente_id = ?', [id])) {
+      devueltosAlInventario += eliminarCotizacion(idCot).devueltosAlInventario;
+    }
+    // Las notas ya caen solas (van con ON DELETE CASCADE); el resto no.
+    run('DELETE FROM citas WHERE cliente_id = ?', [id]);
+    run('DELETE FROM cobros WHERE cliente_id = ?', [id]);
+    run('DELETE FROM recordatorios WHERE cliente_id = ?', [id]);
+    run('DELETE FROM clientes WHERE id = ?', [id]);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+
+  return { borrado: true, nombre: cliente.nombre, ...resumen, devueltosAlInventario };
+}
+
 /** Si la que se borró era la que se estaba dictando, se deja de apuntar a ella. */
 function cerrarSiEsLaActiva(id) {
   const fila = one('SELECT valor FROM ajustes WHERE clave = ?', [CLAVE_ACTIVA]);

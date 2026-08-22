@@ -500,6 +500,24 @@ por un archivo que no llegó bien sería el peor final posible.
 Lo único que el CSV no trae son las fotos, porque un CSV es sólo texto. Las que
 ya tengan los productos se conservan, y las nuevas se suben desde la ficha.
 
+### Borrar un cliente se lleva todo lo suyo
+
+Borrar un cliente **borra también sus cotizaciones, sus citas, sus cobros, sus
+pendientes y sus notas**. Antes no: la base los dejaba vivos y sin dueño
+—`ON DELETE SET NULL`—, así que seguían apareciendo en las listas como «Sin
+cliente», sumando a los totales de la empresa, sin forma de saber de quién
+habían sido ni por qué estaban ahí.
+
+Antes de preguntar, la aplicación dice **con números** qué se va a llevar por
+delante («3 cotizaciones, 2 abonos, 1 cita…»), porque esto no tiene vuelta
+atrás. Y las cotizaciones se borran de a una, con la misma función que las
+borra sueltas: es la que **devuelve a la bodega** lo que había salido por las
+aprobadas. Un borrado en bloque dejaría el inventario descontado por ventas
+que ya no existen.
+
+Todo pasa en una transacción: o se va el cliente entero, o no se toca nada.
+Un cliente a medio borrar sería peor que no haberlo intentado.
+
 ### Armar la cotización tocando el catálogo
 
 Dictar es lo más rápido para uno o dos renglones sueltos. Para veinte no: ahí
@@ -959,7 +977,13 @@ Mientras esa variable no exista, la puerta no está abierta: la ruta responde
 503 y no hay forma de escribir en la agenda desde afuera.
 
 **2. Pegar el aviso en el Apps Script de la hoja** (Extensiones → Apps Script),
-y llamar a `avisarAAri(...)` justo después de guardar la fila:
+y llamar a `avisarAAri(...)` justo después de guardar la fila.
+
+> El script completo —con las dos funciones, los ayudantes de fecha y hora, y
+> las columnas configurables arriba— está en **`scripts/avisar-a-ari.gs`**. Se
+> copia entero al final del Apps Script de la hoja y se ajustan las primeras
+> quince líneas. Lo de acá abajo es la versión mínima, para leerla de un
+> vistazo:
 
 ```js
 var ARI_URL   = 'https://ari.clickcontrol.co/api/enlace/cita';

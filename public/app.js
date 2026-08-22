@@ -2168,6 +2168,26 @@ const PRECIO_DEL_NIVEL = { canal: 'precio_canal', constructor: 'precio_construct
 const sincronizarFlotantes = () =>
   $('.fabs')?.classList.toggle('oculto', Boolean(estado.cotizandoProducto));
 
+/**
+ * Repinta sin perder de vista dónde estabas.
+ *
+ * `pintar()` rehace el contenido entero, y la lista vuelve al principio. Con
+ * un catálogo de cincuenta productos eso obligaba a bajar de nuevo a buscar
+ * el que se acababa de tocar: cargar una cotización de veinte renglones se
+ * volvía media hora de andar bajando.
+ *
+ * Se guarda la posición, se repinta, y se vuelve. Después se lleva a la vista
+ * el renglón que quedó abierto —sólo si hace falta—, porque al abrirse crece
+ * unos píxeles y en el borde de la pantalla podría quedar cortado.
+ */
+async function pintarSinMoverse() {
+  const caja = $('#contenido');
+  const donde = caja?.scrollTop ?? 0;
+  await pintar();
+  if (caja) caja.scrollTop = donde;
+  $('.fila-editor')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
 function formularioCotizarProducto(p) {
   const q = estado.resumen?.enCurso;
   if (!q) return '';
@@ -3785,7 +3805,7 @@ $('#contenido').addEventListener('click', async (e) => {
     // Tocarlo otra vez lo cierra: sirve de escape sin tener que apuntarle al
     // botón de cancelar.
     estado.cotizandoProducto = estado.cotizandoProducto === Number(id) ? null : Number(id);
-    await pintar();
+    await pintarSinMoverse();
     sincronizarFlotantes();
     const campo = $('.cotizar-producto input[name="cantidad"]');
     if (campo) { campo.focus(); campo.select(); }
@@ -3793,7 +3813,7 @@ $('#contenido').addEventListener('click', async (e) => {
   }
   if (accion === 'cancelar-cotizar') {
     estado.cotizandoProducto = null;
-    await pintar();
+    await pintarSinMoverse();
     sincronizarFlotantes();
     return;
   }
@@ -4167,7 +4187,28 @@ $('#contenido').addEventListener('click', async (e) => {
       await api(`/${entidad}/${id}`, { method: 'PATCH', body: { estado: boton.dataset.estado } });
       avisar('Actualizado ✓');
     } else if (accion === 'borrar') {
-      if (!confirm('¿Borrar este registro definitivamente?')) return;
+      // Borrar un cliente se lleva TODO lo suyo, así que primero se dice qué
+      // es «todo» con números: un «¿seguro?» pelado no alcanza para algo que
+      // no tiene vuelta atrás.
+      if (entidad === 'clientes') {
+        const arrastra = await api(`/clientes/${id}/arrastra`);
+        const detalle = [
+          [arrastra.cotizaciones, 'cotización', 'cotizaciones'],
+          [arrastra.abonos, 'abono', 'abonos'],
+          [arrastra.cobros, 'cobro', 'cobros'],
+          [arrastra.citas, 'cita', 'citas'],
+          [arrastra.recordatorios, 'pendiente', 'pendientes'],
+          [arrastra.notas, 'nota', 'notas'],
+        ].filter(([n]) => n > 0).map(([n, uno, varios]) => `${n} ${n === 1 ? uno : varios}`);
+
+        const aviso = detalle.length
+          ? `Se va a borrar este cliente y todo lo suyo:\n\n· ${detalle.join('\n· ')}\n\n`
+            + 'Lo que hubiera salido de bodega por sus cotizaciones aprobadas vuelve al inventario.\n\n'
+            + 'Esto no se puede deshacer. ¿Seguimos?'
+          : 'Este cliente no tiene nada cargado. ¿Borrarlo?';
+        if (!confirm(aviso)) return;
+      } else if (!confirm('¿Borrar este registro definitivamente?')) return;
+
       await api(`/${entidad}/${id}`, { method: 'DELETE' });
       avisar('Registro eliminado');
     }
@@ -4200,7 +4241,7 @@ $('#contenido').addEventListener('submit', async (e) => {
       const tot = estado.resumen?.enCurso?.totales;
       avisar(`Agregado: ${item.cantidad} × ${nombreCortoDeProducto(item.descripcion, 32)}${
         tot ? ` · total ${fmtDinero(tot.total, q.moneda)}` : ''} ✓`);
-      await pintar();
+      await pintarSinMoverse();
       sincronizarFlotantes();
       // El buscador queda listo para el siguiente: cargando de a veinte
       // renglones, volver a tocarlo cada vez es la mitad del trabajo.
