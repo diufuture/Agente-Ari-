@@ -301,6 +301,14 @@ textarea#entrada::placeholder { color: var(--tinta-suave); }
 .guardados .borrar { border: 0; background: none; color: var(--tinta-suave); cursor: pointer; font-size: 11px; padding: 0; }
 .guardados .borrar:hover { color: #e5484d; }
 .guardados .nada { padding: 16px 10px; color: var(--tinta-suave); font-size: 12px; line-height: 1.5; }
+.guardados .advertencia {
+  margin: 0 2px 8px;
+  border: 1px solid color-mix(in srgb, #e5a23d 45%, var(--borde));
+  border-radius: 8px;
+  background: color-mix(in srgb, #e5a23d 12%, transparent);
+  color: var(--tinta);
+  padding: 10px;
+}
 
 .pie-biblioteca { flex: 0 0 auto; display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--borde); }
 .pie-biblioteca .boton { flex: 1 1 0; }

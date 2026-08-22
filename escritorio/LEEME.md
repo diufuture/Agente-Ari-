@@ -19,9 +19,15 @@ señal, en un avión, con la clave de la API vencida: da igual.
 
 ### Opción 1 — sin instalar nada (30 segundos)
 
-Doble clic en **`dist/sintetizador-de-prompts.html`**. Se abre en Safari o
-Chrome y funciona completo: síntesis, biblioteca, exportar. Es un solo
+Doble clic en **`dist/sintetizador-de-prompts.html`**. Se abre en el
+navegador y funciona completo: síntesis, biblioteca, exportar. Es un solo
 archivo, se puede copiar a donde sea.
+
+> **Abrilo con Chrome.** Ahí la biblioteca sobrevive al cerrar y volver a
+> abrir. Safari no deja guardar nada en un archivo abierto con doble clic:
+> si es tu caso, la propia app te lo avisa arriba de la biblioteca y podés
+> exportar con **Exportar todo**. Con la app instalada (opción 2) esto no
+> pasa nunca.
 
 ### Opción 2 — la app de verdad, en el Dock
 

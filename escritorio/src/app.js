@@ -27,6 +27,7 @@ const estado = {
   busqueda: '',
   abierto: null,          // id del prompt de la biblioteca que se está viendo
   conBiblioteca: true,
+  seGuarda: true,         // el navegador deja conservar la biblioteca
 };
 
 /* ─────────── Guardado local ─────────── */
@@ -40,11 +41,31 @@ function leer(llave, siNoHay) {
   }
 }
 
+/**
+ * ¿Este navegador deja guardar? Safari no guarda nada en un archivo
+ * abierto con doble clic, y en ventana privada no guarda ninguno. Hay
+ * que saberlo al arrancar para avisar de una, en vez de dejar que el
+ * usuario pierda la biblioteca al cerrar.
+ */
+function aquiSeGuarda() {
+  try {
+    localStorage.setItem('ari.prueba', '1');
+    localStorage.removeItem('ari.prueba');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function escribir(llave, valor) {
+  if (!estado.seGuarda) return;   // ya se avisó al arrancar, no se insiste
   try {
     localStorage.setItem(llave, JSON.stringify(valor));
-  } catch {
-    avisar('No se pudo guardar: el disco de la app está lleno');
+  } catch (falla) {
+    const lleno = falla?.name === 'QuotaExceededError' || falla?.code === 22;
+    avisar(lleno
+      ? 'La biblioteca llegó al tope: borrá alguno o exportalos'
+      : 'Este navegador no deja guardar; la biblioteca no se conserva');
   }
 }
 
@@ -152,6 +173,16 @@ function pintarBiblioteca() {
     !busqueda || `${p.titulo} ${p.entrada}`.toLowerCase().includes(busqueda));
 
   lista.innerHTML = '';
+
+  if (!estado.seGuarda) {
+    const aviso = document.createElement('li');
+    aviso.className = 'nada advertencia';
+    aviso.textContent = puente
+      ? 'Este Mac no está dejando guardar: lo que armes se pierde al cerrar.'
+      : 'Abierto así, este navegador no conserva nada al cerrar. Usá Chrome, '
+        + 'o instalá la app, o exportá lo que quieras conservar.';
+    lista.append(aviso);
+  }
 
   if (!visibles.length) {
     const nada = document.createElement('li');
@@ -440,7 +471,9 @@ function armarAtajos() {
 
 function arrancar() {
   if (!puente) document.body.classList.add('en-navegador');
+  const seGuarda = aquiSeGuarda();
   Object.assign(estado, leer(LLAVES.ajustes, {}));
+  estado.seGuarda = seGuarda;
   estado.guardados = leer(LLAVES.prompts, []);
 
   armarControles();
