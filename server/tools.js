@@ -173,7 +173,7 @@ export const HERRAMIENTAS = [
         },
         producto: {
           type: 'string',
-          description: 'Nombre o referencia del producto en el catálogo. Su precio y descripción se copian de ahí.',
+          description: 'El producto del catálogo, dicho COMO LO DIJO EL USUARIO: la referencia si la nombró ("CLICK Z1", "z uno"), o si no lo que es ("un interruptor de tres canales", "la pantalla de cuatro pulgadas"). No hace falta adivinar la referencia ni corregirle las palabras: la búsqueda entiende números dichos con letras, referencias a pedazos y coincidencias en la descripción. Su precio y descripción se copian del catálogo. Si hay varios parecidos te devuelve la lista para que preguntes cuál.',
         },
         descripcion: {
           type: 'string',
@@ -327,7 +327,7 @@ export const HERRAMIENTAS = [
     input_schema: {
       type: 'object',
       properties: {
-        producto: { type: 'string', description: 'Nombre, referencia o descripción del producto.' },
+        producto: { type: 'string', description: 'El producto dicho como lo dijo el usuario: referencia entera o a pedazos ("z uno"), o lo que es ("pantalla de cuatro pulgadas"). No hace falta corregirle las palabras.' },
         cantidad: {
           type: 'number',
           description: 'Positiva si es una entrada (compra, ajuste al alza). Negativa si es una salida (venta, daño, ajuste a la baja).',

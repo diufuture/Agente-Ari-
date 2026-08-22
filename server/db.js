@@ -637,6 +637,145 @@ export function resolverCotizacion(texto, clienteId = null, { soloConSaldo = tru
  * Encuentra un producto del catálogo por id, referencia o descripción.
  * Devuelve { id, producto } o { error, sugerencias }.
  */
+/* ------------------------------------------------------------------ */
+/* Encontrar un producto por como uno lo nombra                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Nadie dicta una referencia como está escrita en la lista de precios.
+ *
+ * Uno dice «un interruptor zeta uno» y en el catálogo figura CLICK Z1; dice
+ * «una pantalla de cuatro pulgadas» y figura CLICK DP4 con la medida metida
+ * en la descripción. Antes se buscaba la frase entera como un solo pedazo de
+ * texto —`LIKE '%interruptor z uno%'`—, así que no encontraba nada nunca y
+ * había que saberse la referencia de memoria y pronunciarla clavada.
+ *
+ * Acá se parte la frase en palabras y se busca cada una por su cuenta, con
+ * tres arreglos que son los que hacen la diferencia dictando:
+ *
+ * 1. Los números dichos se pasan a cifra: «zeta uno» → «z 1».
+ * 2. Se compara también todo pegado y sin signos: «z 1» → «z1», que sí está
+ *    adentro de «CLICKZ1». Es lo que hace que valga decir la referencia
+ *    entera, a pedazos, o sólo la parte que uno recuerda.
+ * 3. Se perdona una letra de diferencia en palabras largas, porque el dictado
+ *    escribe «clic» donde dice CLICK, o «zigbi» donde dice Zigbee.
+ *
+ * Lo que coincide en la REFERENCIA pesa mucho más que lo que coincide en la
+ * descripción: quien dice «z1» está nombrando el producto, no describiéndolo.
+ */
+const sinAcentos = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const normalizar = (s) => sinAcentos(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const pegar = (s) => sinAcentos(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// El dictado escribe los números con letras. También «zeta», que es como se
+// pronuncia la Z de las referencias.
+// Ojo con «un» y «una»: no están acá a propósito. Son artículos mucho más
+// seguido que números —«una pantalla» son ganas de una pantalla, no de la
+// pantalla 1— y traducirlos metía un 1 en la búsqueda que después hacía juego
+// con la DP10 y tapaba a la DP4. Se filtran como palabra vacía más abajo.
+// «uno» sí queda: eso se dice nombrando, «canal uno», «zeta uno».
+const DICHO_A_CIFRA = {
+  cero: '0', uno: '1',
+  dos: '2', tres: '3', cuatro: '4', cinco: '5', seis: '6', siete: '7',
+  ocho: '8', nueve: '9', diez: '10', once: '11', doce: '12', trece: '13',
+  catorce: '14', quince: '15', dieciseis: '16', diecisiete: '17',
+  dieciocho: '18', diecinueve: '19', veinte: '20', treinta: '30',
+};
+// Nombres de letra que no son además otra palabra. «ese» y «ele» quedan
+// afuera aposta: son el demostrativo y el artículo mucho más seguido que la S
+// y la L, y no hay cómo distinguirlos sin adivinar. Igual el dictado suele
+// escribir «S» derecho cuando uno deletrea.
+const LETRA_DICHA = { zeta: 'z', equis: 'x', hache: 'h' };
+
+// Palabras que no distinguen un producto de otro: si se dejaran, «de» haría
+// juego con medio catálogo y arruinaría el conteo.
+const PALABRA_VACIA = new Set([
+  'de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'unos', 'unas', 'lo',
+  'con', 'para', 'por', 'y', 'o', 'en', 'al', 'a', 'que', 'me', 'le', 'su',
+  'sus', 'mas', 'este', 'esta', 'ese', 'esa', 'esos', 'esas', 'referencia',
+  'producto', 'articulo', 'item', 'ponele', 'agregale', 'agrega', 'sumale',
+]);
+
+/** Distancia de edición, cortada en 1: alcanza para «clic» contra «click». */
+function difiereEnUna(a, b) {
+  if (a === b) return true;
+  const [corta, larga] = a.length <= b.length ? [a, b] : [b, a];
+  if (larga.length - corta.length > 1) return false;
+  let i = 0;
+  let j = 0;
+  let fallos = 0;
+  while (i < corta.length && j < larga.length) {
+    if (corta[i] === larga[j]) { i += 1; j += 1; continue; }
+    fallos += 1;
+    if (fallos > 1) return false;
+    if (corta.length === larga.length) { i += 1; j += 1; } else { j += 1; }
+  }
+  return fallos + (larga.length - j) + (corta.length - i) <= 1;
+}
+
+/** Parte lo que dijo el usuario en palabras buscables. */
+function palabrasDeConsulta(texto) {
+  return normalizar(texto)
+    .split(' ')
+    // Las vacías se van ANTES de traducir números: si no, «una» se volvía un
+    // 1 y ya no había forma de reconocerla como el artículo que era.
+    .filter((p) => p && !PALABRA_VACIA.has(p))
+    .map((p) => DICHO_A_CIFRA[p] ?? LETRA_DICHA[p] ?? p);
+}
+
+/**
+ * Ordena el catálogo por qué tan bien encaja con lo que dijo el usuario.
+ * Devuelve `{ producto, puntos }`, de mejor a peor, sin los que no llegan.
+ */
+export function buscarProductos(texto, { limite = 5, incluir_inactivos = false } = {}) {
+  const palabras = palabrasDeConsulta(texto);
+  if (!palabras.length) return [];
+  const consultaPegada = palabras.join('');
+
+  const catalogo = consultar('productos', { limite: 5000, incluir_inactivos });
+
+  const puntuados = catalogo.map((p) => {
+    const refPegada = pegar(p.referencia);
+    const resto = normalizar([p.descripcion, p.categoria, p.marca, p.tipo, p.unidad].filter(Boolean).join(' '));
+    const restoPegado = pegar(resto);
+    const palabrasResto = resto.split(' ').filter(Boolean);
+
+    let puntos = 0;
+    // La referencia clavada, dicha como sea: «click z1», «clic zeta uno».
+    if (refPegada && refPegada === consultaPegada) puntos += 1000;
+    // O una parte de ella, que es lo normal: «z1» adentro de «clickz1».
+    else if (refPegada && consultaPegada.length >= 2 && refPegada.includes(consultaPegada)) puntos += 400;
+
+    let acertadas = 0;
+    for (const palabra of palabras) {
+      const pegada = pegar(palabra);
+      if (refPegada && pegada && refPegada.includes(pegada)) { puntos += 60; acertadas += 1; continue; }
+      if (palabrasResto.includes(palabra)) { puntos += 20; acertadas += 1; continue; }
+      if (restoPegado && pegada && restoPegado.includes(pegada)) { puntos += 10; acertadas += 1; continue; }
+      // Último intento: el dictado escribió casi bien una palabra larga.
+      if (palabra.length >= 4 && palabrasResto.some((w) => w.length >= 4 && difiereEnUna(w, palabra))) {
+        puntos += 12; acertadas += 1;
+      }
+    }
+
+    // Que aparezca UNA palabra de cinco no dice nada. Se exige que la mayor
+    // parte de lo dicho aparezca en el producto, si no sale cualquier cosa.
+    const cobertura = acertadas / palabras.length;
+    if (cobertura < 0.6) return { producto: p, puntos: 0 };
+    if (acertadas === palabras.length) puntos += 50;
+
+    return { producto: p, puntos };
+  });
+
+  return puntuados
+    .filter((x) => x.puntos > 0)
+    .sort((a, b) => b.puntos - a.puntos
+      || String(a.producto.referencia ?? '').localeCompare(String(b.producto.referencia ?? '')))
+    .slice(0, limite);
+}
+
+const comoSeLlama = (p) => `#${p.id} ${p.referencia ? `${p.referencia} ` : ''}${p.descripcion}`;
+
 export function resolverProducto(texto) {
   if (typeof texto === 'number' || /^\d+$/.test(String(texto ?? '').trim())) {
     const p = obtenerPorId('productos', Number(texto));
@@ -646,20 +785,22 @@ export function resolverProducto(texto) {
   const q = String(texto ?? '').trim();
   if (!q) return { error: 'No dijiste qué producto.', sugerencias: [] };
 
-  const parecidos = all(
-    `${selectConCliente('productos')}
-      WHERE t.referencia LIKE ? COLLATE NOCASE OR t.descripcion LIKE ? COLLATE NOCASE
-      ORDER BY t.descripcion COLLATE NOCASE LIMIT 5`,
-    [`%${q}%`, `%${q}%`],
-  );
-  if (parecidos.length === 1) return { id: parecidos[0].id, producto: parecidos[0] };
-  if (parecidos.length > 1) {
-    return {
-      error: `Hay varios productos que coinciden con "${q}".`,
-      sugerencias: parecidos.map((p) => `#${p.id} ${p.referencia ? `${p.referencia} ` : ''}${p.descripcion}`),
-    };
+  const encontrados = buscarProductos(q);
+  if (!encontrados.length) {
+    return { error: `No encontré ningún producto que coincida con "${q}".`, sugerencias: [] };
   }
-  return { error: `No encontré ningún producto que coincida con "${q}".`, sugerencias: [] };
+
+  const [mejor, segundo] = encontrados;
+  // Se elige solo cuando hay un ganador claro: o es el único, o le saca
+  // bastante al que sigue. Si están parejos conviene preguntar, porque meter
+  // el renglón equivocado en una cotización cuesta más que una repregunta.
+  const gananciaClara = !segundo || mejor.puntos - segundo.puntos >= 100;
+  if (gananciaClara) return { id: mejor.producto.id, producto: mejor.producto };
+
+  return {
+    error: `Hay varios productos que coinciden con "${q}".`,
+    sugerencias: encontrados.map((x) => comoSeLlama(x.producto)),
+  };
 }
 
 /* ------------------------------------------------------------------ */

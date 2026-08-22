@@ -500,6 +500,44 @@ por un archivo que no llegó bien sería el peor final posible.
 Lo único que el CSV no trae son las fotos, porque un CSV es sólo texto. Las que
 ya tengan los productos se conservan, y las nuevas se suben desde la ficha.
 
+### Nombrar un producto como uno lo nombra
+
+Nadie dicta una referencia como está escrita en la lista de precios. Uno dice
+«un interruptor **zeta uno**» y en el catálogo figura `CLICK Z1`; dice «una
+**pantalla de cuatro pulgadas**» y figura `CLICK DP4`, con la medida metida en
+la descripción. Antes se buscaba la frase entera como un solo pedazo de texto,
+así que no encontraba nada y había que saberse la referencia de memoria **y
+pronunciarla clavada**.
+
+Ahora la frase se parte en palabras y se busca cada una por su cuenta, tanto en
+la referencia como en la descripción, la categoría, la marca y el tipo. Con
+tres arreglos que son los que hacen la diferencia dictando:
+
+1. **Los números dichos se pasan a cifra**: «zeta uno» → `z 1`.
+2. **Se compara también todo pegado y sin signos**: `z 1` → `z1`, que sí está
+   adentro de `CLICKZ1`. Es lo que hace que valga decir la referencia entera, a
+   pedazos, o sólo la parte que uno recuerda.
+3. **Se perdona una letra** en palabras largas, porque el dictado escribe
+   «clic» donde dice CLICK.
+
+Lo que coincide en la **referencia** pesa mucho más que lo que coincide en la
+descripción: quien dice «z1» está nombrando el producto, no describiéndolo.
+
+Todo esto sirve igual escribiendo en el buscador del catálogo: si la frase
+entera no da nada, se prueba con el mismo buscador. No tenía sentido que la
+pantalla fuera más torpe que Ari.
+
+> **Cuando hay empate, pregunta.** Si dos productos encajan igual de bien
+> —«un interruptor de tres canales» cuando hay un `CLICK Z3` y un `G7-3`— no
+> elige ninguno: devuelve los candidatos para que Ari pregunte cuál. Meter el
+> renglón equivocado en una cotización cuesta mucho más que una repregunta.
+>
+> Un detalle del español, por si algún día extraña: **«un» y «una» no se leen
+> como el número 1**. Son artículos muchísimo más seguido, y traducirlos hacía
+> que «una pantalla» buscara un 1 y trajera la DP**10** antes que la DP4. Lo
+> mismo con «ese», que es el demostrativo antes que la letra S. «uno» y «zeta»
+> sí se traducen: eso se dice nombrando.
+
 ### Volver a subir una lista actualizada
 
 Es lo normal: el proveedor manda la lista nueva, con precios distintos,

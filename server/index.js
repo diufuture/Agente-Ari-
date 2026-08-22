@@ -956,7 +956,19 @@ async function api(req, res, url) {
         if (r.error) return json(res, 200, { filas: [], aviso: r.error });
         f.cliente_id = r.id;
       }
-      return json(res, 200, { filas: db.consultar(recurso, f) });
+      const filas = db.consultar(recurso, f);
+
+      // Buscando productos, si la frase entera no dio nada se prueba con el
+      // buscador que entiende cómo los nombra uno —«z uno» por CLICK Z1,
+      // «pantalla de 4 pulgadas» por la referencia que la tiene en la
+      // descripción—. Es el mismo que usa Ari al dictar; no tiene sentido que
+      // el buscador de la pantalla sea más torpe que él.
+      if (recurso === 'productos' && f.texto && !filas.length) {
+        const porPalabras = db.buscarProductos(f.texto, { limite: 25 });
+        if (porPalabras.length) return json(res, 200, { filas: porPalabras.map((x) => x.producto) });
+      }
+
+      return json(res, 200, { filas });
     }
 
     if (req.method === 'POST') {

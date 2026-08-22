@@ -1150,6 +1150,50 @@ comprobar('y de verdad cambiaron (no es que ya tuvieran ese valor)',
   comprobar('y lo que arman es de verdad un PDF', todasEmpiezanComoPdf, true);
 }
 
+/* 10 · Encontrar el producto por como uno lo nombra ------------------- */
+// Dictando nadie dice la referencia como está en la lista de precios: dice
+// "un interruptor z uno" o "la pantalla de cuatro pulgadas". Esto es lo que
+// separa una cotización que se arma hablando de una en la que hay que
+// saberse el catálogo de memoria, así que se prueba caso por caso.
+{
+  const catalogo = [
+    ['CLICK Z1', 'Interruptor inteligente Zigbee 1 canal, con retorno de estado'],
+    ['CLICK Z2', 'Interruptor inteligente Zigbee 2 canales, con retorno de estado'],
+    ['CLICK Z3', 'Interruptor inteligente Zigbee 3 canales, con retorno de estado'],
+    ['CLICK DP4', 'Pantalla tactil de 4 pulgadas para control de escenas y clima'],
+    ['CLICK DP7', 'Pantalla tactil de 7 pulgadas para control de escenas y clima'],
+    ['CLICK DP10', 'Pantalla tactil de 10 pulgadas, panel maestro de vivienda'],
+    ['CLICK S1', 'Cerradura inteligente con huella y teclado, acabado negro'],
+    ['CLICK 15', 'Cerradura de sobreponer con clave y tarjeta'],
+    ['MICRODIMMER 2CH', 'Modulo dimmer de 2 canales para iluminacion regulable'],
+  ];
+  for (const [referencia, descripcion] of catalogo) {
+    db.insertar('productos', { referencia, descripcion, precio_cliente: 100000, tipo: 'Domotica' });
+  }
+
+  const cual = (frase) => db.resolverProducto(frase).producto?.referencia ?? null;
+
+  comprobar('la referencia dicha con el número en letras', cual('clic z uno'), 'CLICK Z1');
+  comprobar('y deletreando la letra', cual('click zeta uno'), 'CLICK Z1');
+  comprobar('sólo el pedazo que uno recuerda', cual('z uno'), 'CLICK Z1');
+  comprobar('nombrando lo que es, no la referencia', cual('un interruptor z tres'), 'CLICK Z3');
+  // Y si de verdad hay dos que encajan igual —acá el G7-3 de más arriba
+  // también es un interruptor de 3 canales— no elige ninguno: pregunta.
+  comprobar('con dos que encajan igual de bien, no se juega por una',
+    cual('un interruptor de tres canales'), null);
+  comprobar('con la medida que vive en la descripción',
+    cual('una pantalla de cuatro pulgadas'), 'CLICK DP4');
+  comprobar('sin que el 4 se lo lleve la DP10',
+    cual('una pantalla de diez pulgadas'), 'CLICK DP10');
+  comprobar('con acentos y todo', cual('una pantalla táctil de 7 pulgadas'), 'CLICK DP7');
+
+  // Y lo que NO tiene que hacer: elegir por elegir.
+  comprobar('con algo ambiguo no elige solo', cual('una pantalla'), null);
+  comprobar('pero ofrece las opciones para preguntar',
+    db.resolverProducto('una pantalla').sugerencias.length, 3);
+  comprobar('y no inventa uno que no está', cual('una nevera de dos puertas'), null);
+}
+
 /* ------------------------------------------------------------------ */
 
 db.db.close();
