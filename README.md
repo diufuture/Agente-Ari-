@@ -251,7 +251,14 @@ se pone en rojo— pero no transcribe, no falla y no termina nunca. De ahí ven�
 que tomara una sola orden y después hubiera que cerrar y volver a abrir la
 aplicación.
 
-Se ataca en tres escalones, del más suave al más bruto:
+Lo primero es no meterse en el problema: **en el iPhone la casilla de voz
+arranca apagada**. Se probó de todo para que convivieran y no hay manera —hay
+teléfonos que no sueltan el audio ni cortándole la voz, hasta recargar la
+página—, y acá lo que se usa todo el día es dictar, no escuchar. En el
+computador no pasa nada de esto y la voz sigue viniendo prendida. La elección
+se recuerda: el que quiera la voz en el iPhone la prende y queda prendida.
+
+Si está prendida igual, hay tres escalones más, del más suave al más bruto:
 
 1. **No abrir el micrófono mientras el parlante siga tomado.** Si Ari venía
    hablando, se le corta la voz, se le da al teléfono un respiro de milésimas y
@@ -261,15 +268,19 @@ Se ataca en tres escalones, del más suave al más bruto:
    que la sesión sirva —justamente en ésta abre—, así que no alcanza con eso
    para darla por buena: sólo la cuentan la voz detectada o el texto. Si a los
    nueve segundos no llegó ni voz, ni error, ni cierre, la sesión está muerta y
-   se corta. Un dictado sano que nadie contesta se cierra solo mucho antes.
+   se corta. Un dictado sano que nadie contesta se cierra solo mucho antes. Una
+   vez que este teléfono ya mostró que lo hace, el plazo baja a tres segundos y
+   medio: no hay por qué hacerlo esperar de nuevo.
 3. **Apagarle la voz a Ari.** Si el micrófono se murió justo después de que Ari
-   hablara, la culpable es la voz: se apaga sola, se dice por qué, y se puede
-   seguir dictando una orden atrás de otra. Queda prendible de nuevo en la
-   casilla **voz**.
+   hablara, la culpable es la voz: se apaga sola —y queda apagada la próxima
+   vez que abra—, se dice por qué, y se puede seguir dictando.
 
 Si ni así oye, el navegador quedó con el audio trabado y desde adentro de la
-página no hay nada que hacer: aparece un botón para **recargar**, que es lo
-mismo que cerrar y volver a abrir la aplicación pero sin tener que adivinarlo.
+página no hay nada que hacer: aparece un botón para **recargar**. Recargar es
+lo mismo que cerrar y volver a abrir la aplicación, salvo que **la
+conversación vuelve donde estaba** —se guarda de este lado y se repone del
+otro—, así que deja de doler. Los datos nunca corrieron riesgo: viven en el
+servidor, incluida la cotización en curso.
 
 Cuál es la cotización en curso se guarda en la base, no en el navegador: se
 puede empezar en el celular recorriendo la obra y terminarla en el computador.

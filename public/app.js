@@ -2491,6 +2491,32 @@ if ('speechSynthesis' in window) {
   speechSynthesis.onvoiceschanged = cargarVoces;
 }
 
+/* ── La casilla de «voz», que ahora se recuerda ── */
+
+const LLAVE_VOZ = 'ari_voz';
+const recordarVoz = (prendida) => {
+  try { localStorage.setItem(LLAVE_VOZ, prendida ? '1' : '0'); } catch { /* sin espacio */ }
+};
+
+/**
+ * ¿La voz de Ari arranca prendida?
+ *
+ * Lo que haya elegido el dueño del teléfono manda siempre. La primera vez, en
+ * cambio, decide el aparato: en el iPhone la voz deja el micrófono sin poder
+ * oír —abre y no transcribe— y hay que recargar la página para recuperarlo. Y
+ * acá lo que se usa todo el día es dictar, no escuchar. Así que en el iPhone
+ * arranca apagada, y la prende el que la quiera; en el computador, donde no
+ * pasa nada de eso, sigue viniendo prendida como siempre.
+ */
+function vozAlAbrir() {
+  try {
+    const guardado = localStorage.getItem(LLAVE_VOZ);
+    if (guardado === '1') return true;
+    if (guardado === '0') return false;
+  } catch { /* sin permiso para guardar: decide el aparato */ }
+  return !ES_IOS;
+}
+
 /**
  * Lee la respuesta en voz alta. `alTerminar` corre cuando se calló —o de
  * inmediato si la voz está apagada—, que es cuando el modo manos libres puede
@@ -2539,6 +2565,14 @@ const Reconocimiento = window.SpeechRecognition || window.webkitSpeechRecognitio
 // distinguir "este navegador no puede" de "esta dirección no puede".
 const CONTEXTO_SEGURO = window.isSecureContext !== false;
 const VOZ_DISPONIBLE = Boolean(Reconocimiento) && CONTEXTO_SEGURO;
+
+// El iPhone y el iPad son los que tienen la pelea entre la voz de Ari y el
+// micrófono —y con ellos cualquier navegador que se les instale, porque
+// adentro todos son el mismo Safari—. El iPad moderno se hace pasar por Mac,
+// así que se lo reconoce por el dedo: un Mac de verdad no tiene pantalla
+// táctil.
+const ES_IOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 const MOTIVO_SIN_VOZ = !CONTEXTO_SEGURO
   ? 'El micrófono necesita una dirección segura (https). Por ahora escribile acá abajo.'
@@ -2591,6 +2625,11 @@ let centinelaMudo = null;
 // manda `no-speech` a los pocos segundos. Si a los nueve no llegó ni voz, ni
 // error, ni cierre, la sesión está muerta.
 const TECHO_MUDO_MS = 9_000;
+// Pero una vez que este teléfono ya mostró que hace esto, no hay por qué
+// volver a darle nueve segundos: se lo corta enseguida y se pasa antes al
+// remedio que sirve. Vuelve a los nueve apenas un dictado se oiga bien.
+const TECHO_MUDO_CORTO_MS = 3_500;
+let huboSesionMuda = false;
 
 // Lo que tarda el teléfono en soltar el parlante después de que se le corta la
 // voz a Ari. Abrir el micrófono adentro de ese rato es lo que lo deja mudo.
@@ -2619,6 +2658,9 @@ const marcarGrabando = (activo) =>
   ['#mic', '#fab-mic'].forEach((s) => $(s).classList.toggle('grabando', activo));
 
 function iniciarVoz() {
+  $('#tts').checked = vozAlAbrir();
+  $('#tts').addEventListener('change', () => recordarVoz($('#tts').checked));
+
   if (!VOZ_DISPONIBLE) {
     // No se desactivan los botones: tocarlos abre la conversación con el
     // teclado listo y explica por qué no hay voz. Un botón muerto no dice nada.
@@ -2667,6 +2709,7 @@ function crearReconocedor() {
     clearTimeout(centinelaMudo);
     reintentoSordo = 0;
     sesionesMudasSeguidas = 0;
+    huboSesionMuda = false;
     ariHablo = false;
   };
 
@@ -2713,7 +2756,7 @@ function crearReconocedor() {
     centinelaMudo = setTimeout(() => {
       if (reconocedor !== r) return;
       recuperarDeSesionMuerta();
-    }, TECHO_MUDO_MS);
+    }, huboSesionMuda ? TECHO_MUDO_CORTO_MS : TECHO_MUDO_MS);
   };
   // Esto sí: que el navegador oiga voz es prueba de que la sesión sirve.
   r.onspeechstart = daSenalesDeVida;
@@ -2833,15 +2876,58 @@ function crearReconocedor() {
  * es feo, pero es lo único que hace volver el micrófono, y se dice por qué:
  * un ajuste que se apaga solo y en silencio es peor que la falla.
  */
+/* ── Recargar sin perder la charla ──
+   Recargar es lo único que destraba el audio del iPhone, y hasta ahora
+   significaba cerrar la aplicación y volver a entrar: se perdía de vista todo
+   lo hablado. Los datos nunca estuvieron en riesgo —viven en el servidor,
+   incluida la cotización en curso—, pero la conversación sí, y es donde uno
+   está mirando qué le pidió a Ari. Se guarda de este lado y se repone del
+   otro, así recargar deja de doler. */
+const LLAVE_CHARLA = 'ari_charla';
+const LLAVE_CHARLA_HISTORIAL = 'ari_charla_historial';
+
+function recargarConservandoCharla() {
+  try {
+    const copia = $('#conversacion').cloneNode(true);
+    // Los avisos de la falla y el "pensando" a medias no tienen por qué
+    // reaparecer del otro lado: quedaron resueltos con la recarga misma.
+    copia.querySelectorAll('.aviso-voz, .error').forEach((b) => b.remove());
+    copia.querySelectorAll('.pensando').forEach((p) => p.closest('.burbuja')?.remove());
+    sessionStorage.setItem(LLAVE_CHARLA, copia.innerHTML);
+    sessionStorage.setItem(LLAVE_CHARLA_HISTORIAL, JSON.stringify(estado.historial));
+  } catch { /* sin espacio: se recarga igual, aunque sea sin la charla */ }
+  location.reload();
+}
+
+/** Repone la conversación del otro lado de la recarga. */
+function restaurarCharla() {
+  let html = null;
+  let historial = null;
+  try {
+    html = sessionStorage.getItem(LLAVE_CHARLA);
+    historial = sessionStorage.getItem(LLAVE_CHARLA_HISTORIAL);
+    sessionStorage.removeItem(LLAVE_CHARLA);
+    sessionStorage.removeItem(LLAVE_CHARLA_HISTORIAL);
+  } catch { /* no había nada guardado */ }
+  if (!html) return false;
+
+  $('#conversacion').innerHTML = html;
+  try { estado.historial = JSON.parse(historial) || []; } catch { /* sigue sin memoria */ }
+  $('#conversacion').scrollTop = $('#conversacion').scrollHeight;
+  return true;
+}
+
 function recuperarDeSesionMuerta() {
   escuchando = false;
   arrancando = false;
   marcarGrabando(false);
   soltarMicrofono();
   sesionesMudasSeguidas += 1;
+  huboSesionMuda = true;
 
   if (ariHablo && $('#tts').checked) {
     $('#tts').checked = false;
+    recordarVoz(false);   // que siga apagada la próxima vez que abra
     ariHablo = false;
     reintentoSordo = 0;
     abrirHoja();
@@ -2878,10 +2964,10 @@ function recuperarDeSesionMuerta() {
   if (!avisoRecargar) {
     avisoRecargar = true;
     burbuja('ari aviso-voz', `<p><b>El micrófono sigue sin oír.</b></p>
-      <p>El teléfono se quedó con el audio trabado y desde acá adentro no se
-      puede destrabar. Recargando queda como recién abierta: no se pierde nada
-      de lo que ya está guardado.</p>
-      <p><button class="mini destacado" data-accion="recargar-app">Recargar ahora</button></p>`);
+      <p>El teléfono se quedó con el audio trabado y desde acá adentro no hay
+      forma de destrabarlo. Recargando vuelve a oír enseguida: no se pierde
+      nada —ni lo guardado, ni esta conversación, ni la cotización en curso—.</p>
+      <p><button class="mini destacado" data-accion="recargar-app">Recargar y seguir dictando</button></p>`);
   }
 }
 
@@ -4519,7 +4605,7 @@ $('#mic').addEventListener('click', alternarMicrofono);
 // El único botón que vive dentro de la conversación: el de recargar cuando el
 // audio del teléfono quedó trabado y no hay otra salida.
 $('#conversacion').addEventListener('click', (e) => {
-  if (e.target.closest('[data-accion="recargar-app"]')) location.reload();
+  if (e.target.closest('[data-accion="recargar-app"]')) recargarConservandoCharla();
 });
 
 // Marcar "manos libres" sin estar ya en una conversación no hacía nada por sí
@@ -4696,6 +4782,14 @@ async function volverDondeEstaba() {
 (async function arrancar() {
   iniciarVoz();
   if (VOZ_DISPONIBLE) $('#pista').textContent = PISTA_INICIAL;
+
+  // Si se llegó acá recargando para destrabar el micrófono, la conversación
+  // vuelve donde estaba: la recarga tiene que sentirse un tropiezo, no un
+  // volver a empezar.
+  if (restaurarCharla()) {
+    abrirHoja();
+    $('#pista').textContent = 'Listo, el micrófono quedó libre. Tocalo y seguí dictando.';
+  }
 
   try {
     const s = await api('/estado');
