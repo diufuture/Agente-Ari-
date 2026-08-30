@@ -475,7 +475,7 @@ async function api(req, res, url) {
   }
 
   // Lo de acá abajo sí necesita estar aprobado.
-  if (recurso === 'portal' && ['catalogo', 'pedido', 'mis-pedidos', 'quien-soy'].includes(partes[1])) {
+  if (recurso === 'portal' && ['catalogo', 'pedido', 'mis-pedidos', 'quien-soy', 'vista-previa'].includes(partes[1])) {
     const idPortal = portalAuth.idDeSesion(req);
     const usuarioPortal = idPortal ? db.obtenerPortalUsuario(idPortal) : null;
     if (!usuarioPortal || usuarioPortal.estado !== 'aprobado') {
@@ -501,6 +501,18 @@ async function api(req, res, url) {
 
     if (partes[1] === 'mis-pedidos' && req.method === 'GET') {
       return json(res, 200, { filas: db.pedidosDePortalUsuario(usuarioPortal.id) });
+    }
+
+    // POST /api/portal/vista-previa -> la cotización de lo que hay en el
+    // carrito, tal como va a quedar, pero sin mandar nada todavía.
+    if (partes[1] === 'vista-previa' && req.method === 'POST') {
+      try {
+        const { items, notas } = await leerJson(req);
+        const html = imprimir.paginaVistaPreviaPortal(usuarioPortal, items, notas);
+        return json(res, 200, { html });
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
     }
   }
 

@@ -121,6 +121,27 @@ function vistaAcceso() {
 
 /* ─────────── Catálogo ─────────── */
 
+// Un ícono por tipo, adivinado por palabras clave —los tipos los escribe el
+// dueño a mano al cargar el catálogo (Display, Switch EU, Key look…), así
+// que no hay una lista cerrada de antemano: se reconoce el que más se parece
+// y, si ninguno encaja, queda uno genérico. Es sólo estético: nunca cambia
+// qué filtra ni qué se agrega.
+const ICONOS_TIPO = [
+  [/display|pantalla/i, '🖥️'],
+  [/switch|interruptor/i, '🔌'],
+  [/key|look|cerradura|lock|chapa/i, '🔒'],
+  [/luz|light|bombill|foco|lámp/i, '💡'],
+  [/sensor|hub|detector/i, '📡'],
+  [/sound|bocina|parlante|audio|música|speaker/i, '🔊'],
+  [/wifi|wi-fi/i, '📶'],
+  [/cámara|camera|cctv|video/i, '📷'],
+  [/termostato|clima|aire/i, '🌡️'],
+  [/cortina|persiana|motor|toldo/i, '🪟'],
+  [/riego|jardín|irrigación/i, '🌱'],
+  [/gateway|puerta de enlace|central/i, '🧩'],
+];
+const iconoDeTipo = (tipo) => ICONOS_TIPO.find(([re]) => re.test(tipo))?.[1] ?? '📦';
+
 // Los tipos con cuántos productos tiene cada uno, para filtrar de un solo
 // toque —como en Productos, dentro del panel—, en vez de un desplegable que
 // hay que abrir y volver a cerrar para cada intento.
@@ -182,7 +203,7 @@ function tarjetaProducto(p) {
         ${puntosDeFotos(p, idx)}
       </div>
       <div class="producto-cuerpo">
-        ${p.tipo ? `<span class="etiqueta">${escapar(p.tipo)}</span>` : ''}
+        ${p.tipo ? `<span class="etiqueta">${iconoDeTipo(p.tipo)} ${escapar(p.tipo)}</span>` : ''}
         <p class="producto-desc" data-accion="ver-detalle" data-id="${p.id}">${escapar(p.descripcion)}</p>
         ${p.referencia ? `<p class="producto-ref">Ref. ${escapar(p.referencia)}</p>` : ''}
         <p class="producto-precio">${fmtDinero(p.precio)}</p>
@@ -201,7 +222,7 @@ function vistaCatalogo() {
     ${tipos.length ? `<div class="filtros-tipo">
       <button type="button" class="chip${estado.filtroTipo ? '' : ' activo'}" data-accion="filtrar-tipo" data-tipo="">Todos <em>${estado.catalogo.length}</em></button>
       ${tipos.map(([t, n]) => `<button type="button" class="chip${estado.filtroTipo === t ? ' activo' : ''}"
-        data-accion="filtrar-tipo" data-tipo="${escapar(t)}">${escapar(t)} <em>${n}</em></button>`).join('')}
+        data-accion="filtrar-tipo" data-tipo="${escapar(t)}">${iconoDeTipo(t)} ${escapar(t)} <em>${n}</em></button>`).join('')}
     </div>` : ''}
     <div class="grilla-productos">
       ${filas.length ? filas.map(tarjetaProducto).join('') : '<p class="vacio">No hay productos que coincidan con la búsqueda.</p>'}
@@ -223,7 +244,7 @@ function vistaDetalle() {
         ${puntosDeFotos(p, idx)}
       </div>
       <div class="detalle-datos">
-        ${p.tipo ? `<span class="etiqueta">${escapar(p.tipo)}</span>` : ''}
+        ${p.tipo ? `<span class="etiqueta">${iconoDeTipo(p.tipo)} ${escapar(p.tipo)}</span>` : ''}
         <h2>${escapar(p.descripcion)}</h2>
         <table class="detalle-tabla">
           ${p.referencia ? `<tr><td>Referencia</td><td>${escapar(p.referencia)}</td></tr>` : ''}
@@ -231,6 +252,7 @@ function vistaDetalle() {
           ${p.categoria ? `<tr><td>Categoría</td><td>${escapar(p.categoria)}</td></tr>` : ''}
           ${p.unidad ? `<tr><td>Unidad</td><td>${escapar(p.unidad)}</td></tr>` : ''}
         </table>
+        ${p.caracteristicas ? `<p class="detalle-caracteristicas">${escapar(p.caracteristicas)}</p>` : ''}
         ${p.ficha ? `<a class="mini" href="${escapar(p.ficha)}" target="_blank" rel="noopener">📄 Ver ficha técnica</a>` : ''}
         <p class="producto-precio grande">${fmtDinero(p.precio)}</p>
         ${controlCantidad(p, enCarrito, { accion: 'agregar-y-cerrar', clase: 'btn-primario ancho', texto: 'Agregar al pedido' })}
@@ -457,6 +479,22 @@ document.addEventListener('click', async (e) => {
   }
   if (accion === 'sumar') { agregar(id, 1); refrescar(); return; }
   if (accion === 'restar') { agregar(id, -1); refrescar(); return; }
+
+  if (boton.id === 'ver-cotizacion') {
+    if (!estado.carrito.size) { avisar('Agregá al menos un producto para ver la cotización.', true); return; }
+    // Igual que al mandar el pedido: se abre YA, antes del await, para que
+    // no lo tome como un pop-up no pedido y lo bloquee.
+    const previa = window.open('', '_blank');
+    try {
+      const items = [...estado.carrito.values()].map(({ producto, cantidad }) => ({ producto_id: producto.id, cantidad }));
+      const { html } = await api('/vista-previa', { method: 'POST', body: { items, notas: $('#carrito-notas-txt').value.trim() } });
+      if (previa) { previa.document.write(html); previa.document.close(); }
+    } catch (err) {
+      previa?.close();
+      avisar(err.message, true);
+    }
+    return;
+  }
 
   if (boton.id === 'enviar-pedido') {
     if (!estado.carrito.size) { avisar('Agregá al menos un producto.', true); return; }

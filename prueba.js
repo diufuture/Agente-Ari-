@@ -1234,6 +1234,11 @@ comprobar('y de verdad cambiaron (no es que ya tuvieran ese valor)',
   const conFicha = db.catalogoPublico('constructor').find((p) => p.id === z9.id);
   comprobar('la ficha técnica viaja al catálogo público para que la vea el cliente', conFicha.ficha, '/uploads/fichas/x.pdf');
 
+  db.actualizar('productos', z9.id, { notas: 'Requiere neutro. Compatible con Alexa y Google Home.' });
+  comprobar('lo cargado en "Notas" llega como características del producto en el catálogo',
+    db.catalogoPublico('constructor').find((p) => p.id === z9.id).caracteristicas,
+    'Requiere neutro. Compatible con Alexa y Google Home.');
+
   const pedido = db.crearPedidoPortal(registrado.id, {
     items: [{ producto_id: z9.id, cantidad: 2 }, { producto_id: sb9.id, cantidad: 1 }],
     notas: 'Para la obra de la calle 45',
@@ -1271,6 +1276,25 @@ comprobar('y de verdad cambiaron (no es que ya tuvieran ese valor)',
 
   comprobar('el resumen cuenta cuántos están esperando aprobación',
     db.resumen().contadores.portalPendientes, 0);   // ya no queda ninguno pendiente: aprobado×2, rechazado×1
+
+  // Ver la cotización del carrito ANTES de mandarlo: no tiene que dejar
+  // ningún rastro —ni cotización, ni cliente nuevo— hasta que de verdad se
+  // mande. Se usa al que ya se aprobó (registrado, nivel constructor) con
+  // un renglón nuevo que todavía no agregó a ningún pedido real.
+  const cotizacionesAntesDeLaPrevia = db.consultar('cotizaciones', {}).length;
+  const previa = imprimir.paginaVistaPreviaPortal(
+    db.portalUsuarioPorEmail('compras@eltornillo.co'),
+    [{ producto_id: z9.id, cantidad: 3 }],
+    'Para la bodega nueva',
+  );
+  comprobar('la vista previa no crea ninguna cotización', db.consultar('cotizaciones', {}).length, cotizacionesAntesDeLaPrevia);
+  comprobar('avisa que es una vista previa, no una cotización mandada', previa.includes('Vista previa'), true);
+  comprobar('con el precio de SU nivel (constructor: 130.000)', previa.includes('130.000'), true);
+  comprobar('la cantidad que tenía en el carrito', previa.includes('390.000'), true);   // 3 × 130.000
+  comprobar('y las notas que había escrito', previa.includes('Para la bodega nueva'), true);
+  comprobar('un carrito vacío no rompe: avisa que no hay nada', imprimir.paginaVistaPreviaPortal(
+    db.portalUsuarioPorEmail('compras@eltornillo.co'), [],
+  ).includes('Todavía no agregaste nada'), true);
 
   // Fotos: la principal más las que se van agregando, sin repetir.
   db.agregarFotoProducto(z9.id, '/uploads/productos/foto-1.jpg');

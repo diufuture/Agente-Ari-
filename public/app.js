@@ -1169,7 +1169,7 @@ const CAMPOS = {
     { n: 'precio_cliente', e: 'Precio cliente final', tipo: 'number', req: true },
     { n: 'maneja_inventario', e: 'Es un producto propio de Clic Control (llevar inventario)', tipo: 'checkbox' },
     { n: 'activo', e: 'Disponible en el catálogo (destildalo para descontinuarlo)', tipo: 'checkbox' },
-    { n: 'notas', e: 'Notas', area: true, ancho: true },
+    { n: 'notas', e: 'Notas / características adicionales (se ven en el catálogo público)', area: true, ancho: true },
   ],
 };
 

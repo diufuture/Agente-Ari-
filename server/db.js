@@ -2355,7 +2355,7 @@ export function catalogoPublico(nivel_precio) {
   // catálogo entero salía en $0 y desaparecía: el filtro de abajo descarta
   // justamente lo que no tiene precio.
   const filas = all(
-    `SELECT id, categoria, tipo, referencia, descripcion, marca, unidad, foto, fotos_extra,
+    `SELECT id, categoria, tipo, referencia, descripcion, marca, unidad, notas, foto, fotos_extra,
             ficha, ficha_nombre, precio_canal, precio_constructor, precio_cliente
        FROM productos WHERE activo = 1
        ORDER BY categoria COLLATE NOCASE ASC, descripcion COLLATE NOCASE ASC`,
@@ -2368,6 +2368,10 @@ export function catalogoPublico(nivel_precio) {
     descripcion: p.descripcion,
     marca: p.marca,
     unidad: p.unidad,
+    // Lo que se cargó en "Notas" desde la ficha del producto en el panel:
+    // son las características que no entran en la descripción corta, y acá
+    // es donde el cliente del catálogo las llega a ver.
+    caracteristicas: p.notas || null,
     foto: p.foto,
     fotos: fotosDeProducto(p),
     ficha: p.ficha || null,

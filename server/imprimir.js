@@ -182,6 +182,53 @@ export function paginaCotizacion(id) {
   const totales = db.totalesCotizacion(id);
   const aj = db.leerAjustes();
   const cliente = cot.cliente_id ? db.obtenerCliente(cot.cliente_id) : null;
+  return paginaDesdeDatos({ cot, items, totales, cliente, aj });
+}
+
+/**
+ * La misma página, pero para un carrito que TODAVÍA no se mandó: nada de
+ * esto toca la base —no arma cotización, no crea cliente—, es sólo la
+ * cuenta hecha con los mismos números que va a tener el pedido real cuando
+ * se mande. Así el cliente puede ver "su cotización" antes de decidirse a
+ * enviarla, tal como se la va a llevar después.
+ */
+export function paginaVistaPreviaPortal(usuarioPortal, itemsCarrito, notas) {
+  const aj = db.leerAjustes();
+  const items = [];
+  for (const it of itemsCarrito || []) {
+    const p = db.obtenerPorId('productos', Number(it.producto_id));
+    if (!p) continue;
+    const cantidad = Number(it.cantidad) > 0 ? Number(it.cantidad) : 1;
+    // Mismo cálculo que agregarItem() usa para un pedido real: el precio del
+    // nivel de este cliente, y la sección es la categoría del producto.
+    const precio_unitario = db.precioSegunNivel(p, usuarioPortal.nivel_precio);
+    items.push({
+      seccion: p.categoria, descripcion: p.descripcion, referencia: p.referencia,
+      marca: p.marca, foto: p.foto, area: null,
+      cantidad, precio_unitario, total: precio_unitario * cantidad,
+    });
+  }
+  const subtotal = items.reduce((s, i) => s + i.total, 0);
+  const hoy = new Date();
+  const cot = {
+    id: null,
+    titulo: `Pedido del catálogo · ${hoy.toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })}`,
+    descripcion: notas || null,
+    moneda: 'COP',
+    creado_en: `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`,
+    porcentaje_servicio: 0, porcentaje_iva: 0, validez: null, vence_en: null, condiciones: null,
+    representante: null, representante_telefono: null, representante_email: null,
+  };
+  const cliente = {
+    nombre: usuarioPortal.nombre, empresa: usuarioPortal.empresa,
+    telefono: usuarioPortal.telefono, email: usuarioPortal.email,
+  };
+  return paginaDesdeDatos({
+    cot, items, totales: { subtotal, servicio: 0, iva: 0, total: subtotal }, cliente, aj, esVistaPrevia: true,
+  });
+}
+
+function paginaDesdeDatos({ cot, items, totales, cliente, aj, esVistaPrevia = false }) {
   const grupos = porSecciones(items);
   const hayFotos = items.some((i) => i.foto);
   // El área (Sala, Cocina, Habitación…) es opcional: la columna sólo aparece
@@ -225,20 +272,26 @@ export function paginaCotizacion(id) {
     </tr>`).join('');
 
   const sinItems = `<tr><td colspan="${columnas}" style="padding:22px;text-align:center;color:var(--tenue)">
-    Esta cotización todavía no tiene renglones.</td></tr>`;
+    ${esVistaPrevia ? 'Todavía no agregaste nada al pedido.' : 'Esta cotización todavía no tiene renglones.'}</td></tr>`;
+
+  const tituloVentana = esVistaPrevia ? `Vista previa · ${esc(cot.titulo)}` : `Cotización ${esc(cot.id)} · ${esc(cot.titulo)}`;
+  const tituloOferta = esVistaPrevia ? 'Vista previa de tu pedido' : `Cotización N.º ${esc(cot.id)}`;
+  const pistaInicial = esVistaPrevia
+    ? 'Esto es una <b>vista previa</b>: todavía no se mandó nada. Volvé y tocá «Enviar pedido» para confirmarlo.'
+    : 'Usá «Imprimir» y elegí <b>Guardar como PDF</b> para mandársela al cliente.';
 
   return `<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Cotización ${esc(cot.id)} · ${esc(cot.titulo)}</title>
+  <title>${tituloVentana}</title>
   <style>${ESTILOS}</style>
 </head>
 <body>
 
   <div class="barra-acciones">
-    <span class="pista" id="pista">Usá «Imprimir» y elegí <b>Guardar como PDF</b> para mandársela al cliente.</span>
+    <span class="pista" id="pista">${pistaInicial}</span>
     <a href="/" id="volver">Volver</a>
     <button class="principal" id="btn-imprimir" onclick="window.print()">Imprimir</button>
   </div>
@@ -259,9 +312,7 @@ export function paginaCotizacion(id) {
         || window.navigator.standalone === true;
       if (!instalada) return;
       document.getElementById('btn-imprimir').style.display = 'none';
-      document.getElementById('pista').innerHTML =
-        'Para mandársela al cliente, volvé y usá <b>Guardar PDF</b> o <b>Enviar por WhatsApp</b>: '
-        + 'acá adentro el celular no abre el menú de impresión.';
+      document.getElementById('pista').innerHTML = ${esVistaPrevia ? "'Es sólo una vista previa: acá adentro el celular no abre el menú de impresión.'" : "'Para mandársela al cliente, volvé y usá <b>Guardar PDF</b> o <b>Enviar por WhatsApp</b>: ' + 'acá adentro el celular no abre el menú de impresión.'"};
     }());
   </script>
 
@@ -280,7 +331,7 @@ export function paginaCotizacion(id) {
     </div>
 
     <div class="cabecera-oferta">
-      <div class="titulo">Cotización N.º ${esc(cot.id)}</div>
+      <div class="titulo">${tituloOferta}</div>
       <table>
         <tr><td>Fecha</td><td>${esc(fechaLarga(cot.creado_en))}</td></tr>
         ${aj.ciudad ? `<tr><td>Ciudad</td><td>${esc(aj.ciudad)}</td></tr>` : ''}

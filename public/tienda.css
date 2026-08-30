@@ -102,8 +102,8 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 80px; }
    no le gane tanto espacio al resto de los datos. */
 .grilla-productos { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 205px)); gap: 16px; }
 .producto { background: var(--panel); border: 1px solid var(--borde); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
-.producto-foto { position: relative; aspect-ratio: 4/3; background: var(--fondo); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.producto-foto img { width: 100%; height: 100%; object-fit: cover; }
+.producto-foto { position: relative; aspect-ratio: 4/3; background: var(--fondo); display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 10px; }
+.producto-foto img { width: 100%; height: 100%; object-fit: contain; }
 .sin-foto { color: var(--texto-3); font-size: 12px; }
 .producto-cuerpo { padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 6px; }
 .etiqueta {
@@ -179,6 +179,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 80px; }
 .detalle-tabla { border-collapse: collapse; font-size: 13px; }
 .detalle-tabla td { padding: 3px 0; }
 .detalle-tabla td:first-child { color: var(--texto-2); padding-right: 16px; white-space: nowrap; }
+.detalle-caracteristicas { font-size: 13px; line-height: 1.55; color: var(--texto-2); white-space: pre-line; margin: 0; }
 .detalle-datos > .mini { align-self: flex-start; text-decoration: none; }
 @media (min-width: 620px) {
   .detalle-cuerpo { flex-direction: row; }
