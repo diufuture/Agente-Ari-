@@ -1190,6 +1190,92 @@ comprobar('y de verdad cambiaron (no es que ya tuvieran ese valor)',
   comprobar('y no inventa uno que no está', cual('una nevera de dos puertas'), null);
 }
 
+/* 11 · El catálogo público: registro, aprobación, un solo precio, pedido - */
+// Nadie ve un precio hasta que lo aprueban con un nivel; el registro y la
+// aprobación NO crean cliente —eso pasa recién con el primer pedido de
+// verdad—, y si ese correo ya era cliente por otro lado, se engancha ahí en
+// vez de duplicarlo.
+{
+  db.insertar('productos', {
+    referencia: 'CLICK Z9', descripcion: 'Interruptor de prueba portal', tipo: 'Switch',
+    precio_canal: 100000, precio_constructor: 130000, precio_cliente: 160000,
+  });
+  db.insertar('productos', {
+    referencia: 'CLICK SB9', descripcion: 'Relé sin precio de canal', tipo: 'Módulo',
+    precio_cliente: 250000,
+  });
+
+  const clientesAntes = db.consultar('clientes', {}).length;
+
+  const registrado = db.registrarPortalUsuario({
+    nombre: 'Ferretería El Tornillo', empresa: 'El Tornillo SAS',
+    telefono: '3105554433', email: 'compras@eltornillo.co', clave_hash: 'x:y',
+  });
+  comprobar('el registro queda pendiente', registrado.estado, 'pendiente');
+  comprobar('registrarse no crea cliente', db.consultar('clientes', {}).length, clientesAntes);
+
+  comprobar('no se puede registrar dos veces el mismo correo',
+    (() => { try { db.registrarPortalUsuario({ nombre: 'Otro', email: 'compras@eltornillo.co', clave_hash: 'x:y' }); return 'no falló'; }
+      catch (e) { return e.message; } })(),
+    'Ya hay un registro con ese correo, esperando aprobación.');
+
+  const aprobado = db.aprobarPortalUsuario(registrado.id, 'constructor');
+  comprobar('aprobado con el precio que le asignaron', aprobado.nivel_precio, 'constructor');
+  comprobar('aprobar tampoco crea cliente', db.consultar('clientes', {}).length, clientesAntes);
+
+  const catalogo = db.catalogoPublico('constructor');
+  const z9 = catalogo.find((p) => p.referencia === 'CLICK Z9');
+  const sb9 = catalogo.find((p) => p.referencia === 'CLICK SB9');
+  comprobar('ve el precio CONSTRUCTOR, no canal ni cliente', z9?.precio, 130000);
+  comprobar('el que no tiene precio constructor cae al de cliente', sb9?.precio, 250000);
+
+  const pedido = db.crearPedidoPortal(registrado.id, {
+    items: [{ producto_id: z9.id, cantidad: 2 }, { producto_id: sb9.id, cantidad: 1 }],
+    notas: 'Para la obra de la calle 45',
+  });
+  comprobar('el pedido llega como cotización marcada del portal', pedido.origen, 'portal');
+  comprobar('pendiente, esperando aprobación del dueño', pedido.estado, 'pendiente');
+  comprobar('al precio constructor: 2×130.000 + 1×250.000',
+    db.totalesCotizacion(pedido.id).subtotal, 2 * 130000 + 250000);
+
+  const clientesDespues = db.consultar('clientes', {});
+  comprobar('recién con el primer pedido aparece el cliente', clientesDespues.length, clientesAntes + 1);
+  const nuevoCliente = clientesDespues.find((c) => c.email === 'compras@eltornillo.co');
+  comprobar('con los datos del registro', nuevoCliente?.nombre, 'Ferretería El Tornillo');
+
+  const segundoPedido = db.crearPedidoPortal(registrado.id, { items: [{ producto_id: z9.id, cantidad: 1 }] });
+  comprobar('un segundo pedido no crea otro cliente', db.consultar('clientes', {}).length, clientesAntes + 1);
+  comprobar('pero cuelga otra cotización del mismo cliente', segundoPedido.cliente_id, nuevoCliente.id);
+
+  // Alguien que ya era cliente por otro lado (le cotizaron por voz, p.ej.):
+  // el pedido del portal se engancha ahí, no crea uno repetido.
+  const yaCliente = db.crearCliente({ nombre: 'Constructora Los Andes', email: 'gerencia@losandes.co' });
+  const registrado2 = db.registrarPortalUsuario({
+    nombre: 'Los Andes Compras', email: 'gerencia@losandes.co', clave_hash: 'x:y',
+  });
+  db.aprobarPortalUsuario(registrado2.id, 'cliente');
+  const pedido2 = db.crearPedidoPortal(registrado2.id, { items: [{ producto_id: sb9.id, cantidad: 1 }] });
+  comprobar('se engancha al cliente que ya existía, no lo duplica', pedido2.cliente_id, yaCliente.id);
+
+  const rechazado = db.registrarPortalUsuario({ nombre: 'Alguien Random', email: 'random@ejemplo.com', clave_hash: 'x:y' });
+  db.rechazarPortalUsuario(rechazado.id);
+  comprobar('a un rechazado no lo deja pedir',
+    (() => { try { db.crearPedidoPortal(rechazado.id, { items: [{ producto_id: z9.id, cantidad: 1 }] }); return 'no falló'; }
+      catch (e) { return e.message; } })(),
+    'No estás autorizado a comprar en el catálogo.');
+
+  comprobar('el resumen cuenta cuántos están esperando aprobación',
+    db.resumen().contadores.portalPendientes, 0);   // ya no queda ninguno pendiente: aprobado×2, rechazado×1
+
+  // Fotos: la principal más las que se van agregando, sin repetir.
+  db.agregarFotoProducto(z9.id, '/uploads/productos/foto-1.jpg');
+  db.agregarFotoProducto(z9.id, '/uploads/productos/foto-2.jpg');
+  comprobar('las fotos extra se acumulan (no hay foto principal, sólo estas dos)',
+    db.catalogoPublico('constructor').find((p) => p.id === z9.id).fotos.length, 2);
+  db.quitarFotoProducto(z9.id, '/uploads/productos/foto-1.jpg');
+  comprobar('se puede quitar una', db.catalogoPublico('constructor').find((p) => p.id === z9.id).fotos.length, 1);
+}
+
 /* ------------------------------------------------------------------ */
 
 db.db.close();

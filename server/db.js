@@ -193,6 +193,31 @@ CREATE TABLE IF NOT EXISTS movimientos_stock (
   creado_en    TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
+-- El catálogo público: quien se registra queda acá, no en clientes —
+-- todavía no compró nada, así que no es un cliente—. El dueño lo aprueba (o
+-- lo rechaza) y le asigna un nivel de precio; recién con la primera cotización
+-- que arme desde la tienda se le crea (o se le engancha) el cliente de verdad.
+CREATE TABLE IF NOT EXISTS clientes_portal (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  nombre      TEXT NOT NULL,
+  empresa     TEXT,
+  telefono    TEXT,
+  email       TEXT NOT NULL,
+  clave_hash  TEXT NOT NULL,
+  -- pendiente | aprobado | rechazado. Sólo "aprobado" puede entrar a mirar el
+  -- catálogo; los otros dos se lo dicen al intentar iniciar sesión.
+  estado      TEXT NOT NULL DEFAULT 'pendiente',
+  -- Con cuál de los tres precios ve el catálogo. Se define al aprobar, no
+  -- antes: mientras está pendiente no hay nada que mostrarle todavía.
+  nivel_precio TEXT,
+  -- El cliente de la tabla clientes al que quedaron sus pedidos, una vez que
+  -- hizo el primero. Null hasta entonces.
+  cliente_id  INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
+  creado_en   TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+  aprobado_en TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_portal_email ON clientes_portal(email COLLATE NOCASE);
+
 CREATE INDEX IF NOT EXISTS idx_citas_inicio  ON citas(inicio);
 CREATE INDEX IF NOT EXISTS idx_rec_vence     ON recordatorios(vence_en);
 CREATE INDEX IF NOT EXISTS idx_cot_cliente   ON cotizaciones(cliente_id);
@@ -242,6 +267,12 @@ try {
   // La ficha técnica del fabricante, en PDF.
   if (!prod.includes('ficha')) db.exec('ALTER TABLE productos ADD COLUMN ficha TEXT');
   if (!prod.includes('ficha_nombre')) db.exec('ALTER TABLE productos ADD COLUMN ficha_nombre TEXT');
+  // Fotos de más, para el catálogo público: la lista de precios trae una sola
+  // (o ninguna), y ahí no alcanza para que alguien decida comprar sin haberlo
+  // visto de cerca. Va como texto con un JSON adentro —un arreglo de
+  // direcciones— y no como tabla aparte: son cuando mucho un puñado por
+  // producto, y no hace falta consultarlas por separado de su dueño.
+  if (!prod.includes('fotos_extra')) db.exec('ALTER TABLE productos ADD COLUMN fotos_extra TEXT');
 
   const cot = columnasDe('cotizaciones');
   if (!cot.includes('porcentaje_servicio')) {
@@ -265,6 +296,11 @@ try {
   if (!cot.includes('representante')) db.exec('ALTER TABLE cotizaciones ADD COLUMN representante TEXT');
   if (!cot.includes('representante_telefono')) db.exec('ALTER TABLE cotizaciones ADD COLUMN representante_telefono TEXT');
   if (!cot.includes('representante_email')) db.exec('ALTER TABLE cotizaciones ADD COLUMN representante_email TEXT');
+
+  // De dónde salió la cotización: null es "la armó alguien de Clic Control",
+  // 'portal' es "la mandó un cliente desde el catálogo público". Es lo que
+  // permite marcarla en la lista sin tener que adivinar por el título.
+  if (!cot.includes('origen')) db.exec('ALTER TABLE cotizaciones ADD COLUMN origen TEXT');
 
   // "Enviada" era un estado de más: mandarle la oferta al cliente no cambia
   // nada del negocio, sigue estando pendiente de que la apruebe. Las que
@@ -318,6 +354,8 @@ try {
   // llegaran dos avisos del mismo turno a la vez, la base rechaza el segundo
   // en lugar de dejar la agenda con la cita repetida.
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_citas_origen ON citas(origen) WHERE origen IS NOT NULL');
+  // El badge de "hay registros por aprobar" filtra por esto en cada vuelta.
+  db.exec("CREATE INDEX IF NOT EXISTS idx_portal_estado ON clientes_portal(estado)");
 } catch (err) {
   console.error('[base de datos] no pude aplicar una migración:', err.message);
   console.error('  La aplicación arranca igual. Si algo nuevo no funciona, reiniciala cuando');
@@ -2212,6 +2250,7 @@ function calcularResumen() {
       citasHoy: contar("SELECT COUNT(*) n FROM citas WHERE substr(inicio,1,10) = ? AND estado='pendiente'", [d]),
       recordatorios: contar("SELECT COUNT(*) n FROM recordatorios WHERE estado='pendiente'"),
       cotizaciones: contar("SELECT COUNT(*) n FROM cotizaciones WHERE estado = 'pendiente'"),
+      portalPendientes: contar("SELECT COUNT(*) n FROM clientes_portal WHERE estado = 'pendiente'"),
       // Plata que el cliente ya se comprometió a pagar: los cobros sueltos
       // más el saldo de las cotizaciones aprobadas. Una cotización aprobada
       // es una venta cerrada, así que lo que falte de ella es cobranza; antes
@@ -2228,4 +2267,205 @@ function calcularResumen() {
         ) WHERE saldo > 0`).n,
     },
   };
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Catálogo público: registro, aprobación, pedidos
+   ══════════════════════════════════════════════════════════════════ */
+
+const PORTAL_PUBLICO = (u) => ({
+  id: u.id, nombre: u.nombre, empresa: u.empresa, telefono: u.telefono, email: u.email,
+  estado: u.estado, nivel_precio: u.nivel_precio, cliente_id: u.cliente_id, creado_en: u.creado_en,
+});
+
+/**
+ * Da de alta un pedido de registro. Cualquiera puede llegar hasta acá —no
+ * hace falta sesión de ningún tipo—, así que lo único que se guarda es lo
+ * mínimo para poder aprobarlo o rechazarlo después: nadie entra a mirar el
+ * catálogo por este camino, sólo queda pedido.
+ */
+export function registrarPortalUsuario({ nombre, empresa, telefono, email, clave_hash }) {
+  const correo = String(email ?? '').trim().toLowerCase();
+  if (!correo || !correo.includes('@')) throw new Error('Ese correo no parece válido.');
+  if (!String(nombre ?? '').trim()) throw new Error('Falta el nombre.');
+
+  const yaEsta = one('SELECT id, estado FROM clientes_portal WHERE email = ? COLLATE NOCASE', [correo]);
+  if (yaEsta) {
+    throw new Error(
+      yaEsta.estado === 'pendiente'
+        ? 'Ya hay un registro con ese correo, esperando aprobación.'
+        : 'Ese correo ya está registrado. Iniciá sesión, o escribinos si no podés entrar.',
+    );
+  }
+
+  const r = run(
+    `INSERT INTO clientes_portal (nombre, empresa, telefono, email, clave_hash)
+     VALUES (?, ?, ?, ?, ?)`,
+    [String(nombre).trim(), empresa || null, telefono || null, correo, clave_hash],
+  );
+  return PORTAL_PUBLICO(obtenerPortalUsuario(Number(r.lastInsertRowid)));
+}
+
+export const obtenerPortalUsuario = (id) => one('SELECT * FROM clientes_portal WHERE id = ?', [id]);
+
+/** Con el hash incluido: sólo para la propia comprobación de la clave al iniciar sesión. */
+export const portalUsuarioPorEmail = (email) =>
+  one('SELECT * FROM clientes_portal WHERE email = ? COLLATE NOCASE', [String(email ?? '').trim().toLowerCase()]);
+
+export const listarPortalUsuarios = (estado = null) => all(
+  estado
+    ? 'SELECT * FROM clientes_portal WHERE estado = ? ORDER BY creado_en DESC'
+    : 'SELECT * FROM clientes_portal ORDER BY creado_en DESC',
+  estado ? [estado] : [],
+).map(PORTAL_PUBLICO);
+
+const NIVELES_PRECIO = new Set(['canal', 'constructor', 'cliente']);
+
+export function aprobarPortalUsuario(id, nivel_precio) {
+  if (!NIVELES_PRECIO.has(nivel_precio)) throw new Error('El nivel de precio tiene que ser canal, constructor o cliente.');
+  const u = obtenerPortalUsuario(id);
+  if (!u) throw new Error('Ese registro no existe.');
+  run(
+    "UPDATE clientes_portal SET estado='aprobado', nivel_precio=?, aprobado_en=datetime('now','localtime') WHERE id=?",
+    [nivel_precio, id],
+  );
+  return PORTAL_PUBLICO(obtenerPortalUsuario(id));
+}
+
+export function rechazarPortalUsuario(id) {
+  const u = obtenerPortalUsuario(id);
+  if (!u) throw new Error('Ese registro no existe.');
+  run("UPDATE clientes_portal SET estado='rechazado' WHERE id=?", [id]);
+  return PORTAL_PUBLICO(obtenerPortalUsuario(id));
+}
+
+export function eliminarPortalUsuario(id) {
+  return eliminar('clientes_portal', id);
+}
+
+/**
+ * El catálogo tal como lo ve un cliente aprobado: un solo precio —el de su
+ * nivel—, nunca los otros dos. Mostrarle el de canal a un cliente final sería
+ * enseñarle el margen con el que se trabaja con los distribuidores.
+ */
+export function catalogoPublico(nivel_precio) {
+  // Los tres precios SÍ se traen —precioSegunNivel() los necesita para elegir
+  // el que corresponde—; lo que no viaja después en la respuesta son los
+  // otros dos, sólo el que le toca a este cliente. Faltaban acá y por eso el
+  // catálogo entero salía en $0 y desaparecía: el filtro de abajo descarta
+  // justamente lo que no tiene precio.
+  const filas = all(
+    `SELECT id, categoria, tipo, referencia, descripcion, marca, unidad, foto, fotos_extra,
+            precio_canal, precio_constructor, precio_cliente
+       FROM productos WHERE activo = 1
+       ORDER BY categoria COLLATE NOCASE ASC, descripcion COLLATE NOCASE ASC`,
+  );
+  return filas.map((p) => ({
+    id: p.id,
+    categoria: p.categoria,
+    tipo: p.tipo,
+    referencia: p.referencia,
+    descripcion: p.descripcion,
+    marca: p.marca,
+    unidad: p.unidad,
+    foto: p.foto,
+    fotos: fotosDeProducto(p),
+    precio: precioSegunNivel(p, nivel_precio),
+  })).filter((p) => p.precio > 0);   // sin precio para ese nivel, no se ofrece
+}
+
+/** Las fotos de un producto, la principal primero, sin repetir ni vacíos. */
+function fotosDeProducto(p) {
+  let extra = [];
+  try { extra = JSON.parse(p.fotos_extra || '[]'); } catch { extra = []; }
+  return [p.foto, ...extra].filter(Boolean).filter((f, i, arr) => arr.indexOf(f) === i);
+}
+
+export function agregarFotoProducto(id, url) {
+  const p = obtenerPorId('productos', id);
+  if (!p) throw new Error('Ese producto no existe.');
+  let extra = [];
+  try { extra = JSON.parse(p.fotos_extra || '[]'); } catch { extra = []; }
+  extra.push(url);
+  return actualizar('productos', id, { fotos_extra: JSON.stringify(extra) });
+}
+
+export function quitarFotoProducto(id, url) {
+  const p = obtenerPorId('productos', id);
+  if (!p) throw new Error('Ese producto no existe.');
+  let extra = [];
+  try { extra = JSON.parse(p.fotos_extra || '[]'); } catch { extra = []; }
+  extra = extra.filter((f) => f !== url);
+  return actualizar('productos', id, { fotos_extra: JSON.stringify(extra) });
+}
+
+/**
+ * Encuentra al cliente de un pedido del portal, o lo crea.
+ *
+ * El registro y la aprobación NO crean cliente —son sólo el permiso para
+ * mirar—; recién acá, con el primer pedido de verdad, hace falta uno. Se
+ * busca primero por el correo con el que se registró: si ya es cliente de
+ * Clic Control por otro lado (alguien le cotizó por voz, por ejemplo), el
+ * pedido se cuelga de ESE cliente en vez de crear uno repetido.
+ */
+function clienteDelPedido(portalUsuario) {
+  if (portalUsuario.cliente_id) return portalUsuario.cliente_id;
+
+  const porCorreo = one(
+    `SELECT * FROM clientes WHERE email = ? COLLATE NOCASE
+       AND email IS NOT NULL AND email <> '' ORDER BY id LIMIT 1`,
+    [portalUsuario.email],
+  );
+  const cliente = porCorreo ?? crearCliente({
+    nombre: portalUsuario.nombre,
+    empresa: portalUsuario.empresa || null,
+    telefono: portalUsuario.telefono || null,
+    email: portalUsuario.email,
+  });
+
+  run('UPDATE clientes_portal SET cliente_id = ? WHERE id = ?', [cliente.id, portalUsuario.id]);
+  return cliente.id;
+}
+
+/**
+ * El carrito que arma un cliente en la tienda se convierte en una cotización
+ * pendiente, exactamente como si Ari la hubiera dictado: mismos renglones,
+ * mismo cálculo de totales. La única diferencia es `origen='portal'`, que es
+ * lo que la marca en la lista y lo que en algún momento podría distinguir
+ * "quién puede tocar esto" si hiciera falta.
+ */
+export function crearPedidoPortal(portalUsuarioId, { items, notas } = {}) {
+  const u = obtenerPortalUsuario(portalUsuarioId);
+  if (!u || u.estado !== 'aprobado') throw new Error('No estás autorizado a comprar en el catálogo.');
+  if (!Array.isArray(items) || !items.length) throw new Error('El carrito está vacío.');
+
+  const clienteId = clienteDelPedido(u);
+
+  const fecha = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long' });
+  const cot = insertar('cotizaciones', {
+    cliente_id: clienteId,
+    titulo: `Pedido del catálogo · ${fecha}`,
+    descripcion: notas || null,
+    nivel_precio: u.nivel_precio,
+    origen: 'portal',
+  });
+
+  for (const it of items) {
+    const cantidad = Number(it.cantidad) > 0 ? Number(it.cantidad) : 1;
+    agregarItem(cot.id, { producto_id: Number(it.producto_id), cantidad });
+  }
+
+  return obtenerPorId('cotizaciones', cot.id);
+}
+
+/** Los pedidos que hizo un cliente del portal, para que los vea en "Mis pedidos". */
+export function pedidosDePortalUsuario(portalUsuarioId) {
+  const u = obtenerPortalUsuario(portalUsuarioId);
+  if (!u?.cliente_id) return [];
+  return all(
+    `${selectConCliente('cotizaciones')}
+      WHERE t.cliente_id = ? AND t.origen = 'portal'
+      ORDER BY t.id DESC`,
+    [u.cliente_id],
+  );
 }

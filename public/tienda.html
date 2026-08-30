@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Catálogo · Clic Control</title>
+<link rel="icon" href="/icono.svg" />
+<link rel="stylesheet" href="/tienda.css" />
+</head>
+<body>
+
+<header class="cab">
+  <div class="marca">
+    <svg viewBox="0 0 24 24" aria-hidden="true" width="26" height="26"><path fill="currentColor" d="M12 2 3 6v12l9 4 9-4V6l-9-4Zm0 2.2 6.5 2.9L12 10 5.5 7.1 12 4.2ZM5 8.7l6 2.7v7.9l-6-2.7V8.7Zm8 10.6v-7.9l6-2.7v7.9l-6 2.7Z"/></svg>
+    <span><b>click</b> control · catálogo</span>
+  </div>
+  <div class="cab-acciones" id="cab-acciones"><!-- se llena por script --></div>
+</header>
+
+<main id="app">
+  <div class="cargando">Cargando…</div>
+</main>
+
+<div class="telon" id="telon"></div>
+<aside class="carrito" id="carrito">
+  <div class="carrito-cab">
+    <strong>Tu pedido</strong>
+    <button class="cerrar" id="cerrar-carrito" aria-label="Cerrar">✕</button>
+  </div>
+  <div class="carrito-items" id="carrito-items"></div>
+  <div class="carrito-pie">
+    <div class="carrito-total"><span>Total</span><b id="carrito-total">$ 0</b></div>
+    <label class="carrito-notas"><span>Notas para el pedido (opcional)</span>
+      <textarea id="carrito-notas-txt" rows="2" placeholder="Para dónde es, cuándo lo necesitás…"></textarea>
+    </label>
+    <button class="btn-primario ancho" id="enviar-pedido">Enviar pedido</button>
+  </div>
+</aside>
+
+<script type="module" src="/tienda.js"></script>
+</body>
+</html>

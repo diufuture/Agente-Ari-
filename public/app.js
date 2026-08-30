@@ -21,6 +21,7 @@ const estado = {
   buscarCotizaciones: '',  // texto del buscador de cotizaciones
   nuevoProducto: false,    // el formulario de alta manual de producto está abierto
   subiendoFotoPara: null,  // id del producto al que se le está por asignar una foto
+  subiendoGaleriaPara: null, // id del producto al que se le están agregando fotos de más
   cotizandoProducto: null, // id del producto al que se le está poniendo cantidad para meterlo en la cotización en curso
   itemEditando: null,      // id del renglón de cotización abierto para editar
   nuevoCliente: false,     // el formulario de alta manual de cliente está abierto
@@ -28,6 +29,7 @@ const estado = {
   verHechos: false,        // en Pendientes, ver los que ya se marcaron como hechos
   verHistorialCot: false,  // en Cotizaciones, ver las cerradas en vez de las abiertas
   filtroEstadoCot: null,   // 'pendiente' | 'aprobada' | null (todas)
+  filtroPortal: 'pendiente', // en Tienda, qué registros mostrar
   clienteCotizaciones: null, // {id, nombre} cuando se miran las de un cliente puntual
   recordatorioEditando: null, // id del pendiente abierto para corregir
   tipoProducto: null,      // filtro del catálogo por tipo (Display, Switch EU…)
@@ -397,6 +399,7 @@ const TITULOS = {
   cotizaciones: 'Cotizaciones',
   cobros: 'Cobros',
   recordatorios: 'Recordatorios',
+  tienda: 'Tienda',
   ajustes: 'Datos de la empresa',
 };
 
@@ -1316,6 +1319,11 @@ function nombreCortoDeProducto(descripcion, limite = 70) {
   return `${texto.slice(0, limite).trim()}…`;
 }
 
+/** Las fotos de más de un producto, ya el arreglo (llegan como JSON en texto). */
+function fotosExtra(p) {
+  try { return JSON.parse(p.fotos_extra || '[]'); } catch { return []; }
+}
+
 function detalleProducto(p, movimientos = []) {
   const stockBajo = p.maneja_inventario && Number(p.stock) <= 0;
 
@@ -1384,6 +1392,23 @@ function detalleProducto(p, movimientos = []) {
             <input name="url" type="url" placeholder="https://…/foto-del-producto.jpg" /></label>
           <button type="submit">Traer</button>
         </form>
+      </div>`)}
+
+    ${bloque('Más fotos (para el catálogo público)', `
+      <div class="tarjeta" data-id="${p.id}">
+        <p class="ayuda" style="margin:0 0 12px">
+          La foto de arriba es la principal; estas son las que se suman en la
+          <b>tienda</b> para que el cliente vea el producto de cerca antes de pedirlo.
+        </p>
+        <div class="galeria-fotos">
+          ${fotosExtra(p).map((url) => `
+            <div class="galeria-foto">
+              <img src="${escapar(url)}" alt="" loading="lazy" />
+              <button class="mini peligro" data-accion="quitar-foto-galeria" data-id="${p.id}" data-url="${escapar(url)}">Quitar</button>
+            </div>`).join('')}
+          <button class="galeria-agregar" data-accion="agregar-foto-galeria" data-id="${p.id}">
+            + Agregar<br>foto${fotosExtra(p).length ? '' : 's'}</button>
+        </div>
       </div>`)}
 
     ${bloque('Ficha técnica', `
@@ -1513,6 +1538,55 @@ if (window.matchMedia) {
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     if (temaElegido() === 'auto') aplicarTema('auto');
   });
+}
+
+/* ─────────── Tienda: quién puede entrar al catálogo público ─────────── */
+
+const ETIQUETA_NIVEL = { canal: 'Precio canal', constructor: 'Precio constructor', cliente: 'Precio cliente final' };
+
+function vistaTienda(filas) {
+  const filtro = (valor, rotulo) => `<button class="chip${estado.filtroPortal === valor ? ' activo' : ''}"
+    data-accion="filtrar-portal" data-estado="${valor}">${rotulo}</button>`;
+
+  const filas_html = filas.length ? filas.map((u) => `
+    <div class="tarjeta portal-fila">
+      <div class="portal-datos">
+        <strong>${escapar(u.nombre)}</strong>${u.empresa ? ` <span class="portal-empresa">· ${escapar(u.empresa)}</span>` : ''}
+        <span class="portal-contacto">${escapar(u.email)}${u.telefono ? ` · ${escapar(u.telefono)}` : ''}</span>
+        <span class="portal-fecha">Pidió acceso el ${escapar(fmtFecha(u.creado_en.slice(0, 10)))}</span>
+        ${u.nivel_precio ? `<span class="pastilla aprobado">ve el ${escapar(ETIQUETA_NIVEL[u.nivel_precio] || u.nivel_precio).toLowerCase()}</span>` : ''}
+      </div>
+      ${u.estado === 'pendiente' ? `
+        <form class="portal-aprobar" data-id="${u.id}">
+          <select name="nivel_precio" required>
+            <option value="">Con qué precio lo dejo ver…</option>
+            <option value="canal">Precio canal</option>
+            <option value="constructor">Precio constructor</option>
+            <option value="cliente">Precio cliente final</option>
+          </select>
+          <div class="portal-botones">
+            <button type="submit" class="mini destacado">Aprobar</button>
+            <button type="button" class="mini peligro" data-accion="rechazar-portal" data-id="${u.id}">Rechazar</button>
+          </div>
+        </form>` : ''}
+    </div>`).join('') : `<div class="tarjeta"><div class="vacio">
+      <strong>Nada por acá</strong>${
+        estado.filtroPortal === 'pendiente' ? 'Nadie está esperando aprobación ahora mismo.' : 'No hay registros en este estado.'}
+    </div></div>`;
+
+  return `
+    <p class="ayuda" style="margin:0 0 16px">
+      Quien entra a <code>/tienda.html</code> se registra y queda <b>pendiente</b> hasta que
+      lo aprobás acá, con el precio que le corresponde —canal, constructor o cliente final—.
+      Sólo entonces puede mirar el catálogo y armar un pedido; el pedido llega como una
+      cotización más, marcada «Desde el catálogo».
+    </p>
+    <div class="barra-productos">
+      ${filtro('pendiente', 'Pendientes')}
+      ${filtro('aprobado', 'Aprobados')}
+      ${filtro('rechazado', 'Rechazados')}
+    </div>
+    <div class="portal-lista">${filas_html}</div>`;
 }
 
 function vistaAjustes(aj) {
@@ -2052,6 +2126,21 @@ async function pintar() {
     return;
   }
 
+  // Quién pidió entrar al catálogo, para aprobarlo o rechazarlo. Nadie ve un
+  // precio hasta que este paso pasa por acá. Va ANTES del mapa de abajo a
+  // propósito: 'tienda' no tiene entrada ahí, y el guardia que sigue
+  // ("Vista desconocida") corta cualquier vista que no esté en ese mapa.
+  if (v === 'tienda') {
+    contenedor.innerHTML = '<div class="vacio">Cargando…</div>';
+    try {
+      const { filas } = await api(`/portal/usuarios?estado=${estado.filtroPortal}`);
+      contenedor.innerHTML = vistaTienda(filas);
+    } catch (e) {
+      contenedor.innerHTML = `<div class="vacio">${escapar(e.message)}</div>`;
+    }
+    return;
+  }
+
   const CONSULTAS = {
     agenda: { entidad: 'citas', filtros: 'rango=proximos', columnas: ['inicio', 'titulo', 'cliente', 'lugar', 'notas', 'estado'] },
     clientes: { entidad: 'clientes', filtros: '', columnas: ['nombre', 'telefono', 'email', 'n_cotizaciones', 'cotizado', 'abonado', 'saldo'] },
@@ -2381,7 +2470,7 @@ function listaCotizaciones(filas) {
       <div class="cot-fila" data-accion="abrir-cotizacion" data-id="${q.id}" role="button" tabindex="0">
         <div class="cot-texto">
           <strong class="es-cliente">${escapar(q.cliente || 'Sin cliente')}</strong>
-          <span>${escapar(q.titulo)}</span>
+          <span>${q.origen === 'portal' ? '<span class="pastilla portal">🛒 Desde el catálogo</span> ' : ''}${escapar(q.titulo)}</span>
         </div>
         <div class="cot-cifra">
           <b class="total">${fmtDinero(q.monto, q.moneda)}</b>
@@ -3747,6 +3836,20 @@ $('#contenido').addEventListener('click', async (e) => {
     $('#input-foto').click();
     return;
   }
+  if (accion === 'agregar-foto-galeria') {
+    estado.subiendoGaleriaPara = Number(id);
+    $('#input-foto-galeria').click();
+    return;
+  }
+  if (accion === 'quitar-foto-galeria') {
+    try {
+      await api(`/productos/${id}/fotos`, { method: 'DELETE', body: { url: boton.dataset.url } });
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
   if (accion === 'editar-item') {
     estado.itemEditando = estado.itemEditando === Number(id) ? null : Number(id);
     await pintar();
@@ -3807,6 +3910,23 @@ $('#contenido').addEventListener('click', async (e) => {
   if (accion === 'quitar-filtro-cliente') {
     estado.clienteCotizaciones = null;
     await pintar();
+    return;
+  }
+  if (accion === 'filtrar-portal') {
+    estado.filtroPortal = e.target.closest('[data-accion]').dataset.estado || 'pendiente';
+    await pintar();
+    return;
+  }
+  if (accion === 'rechazar-portal') {
+    if (!confirm('¿Rechazar este registro? No va a poder entrar al catálogo.')) return;
+    try {
+      await api(`/portal/usuarios/${id}/rechazar`, { method: 'POST', body: {} });
+      avisar('Registro rechazado');
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
     return;
   }
   if (accion === 'filtrar-estado-cot') {
@@ -4290,6 +4410,26 @@ $('#contenido').addEventListener('submit', async (e) => {
     } catch (err) {
       avisar(err.message, true);
       if (boton) { boton.disabled = false; boton.textContent = 'Agregar a la cotización'; }
+    }
+    return;
+  }
+
+  // Aprobar un registro del portal, con el nivel de precio que le corresponde.
+  if (e.target.classList.contains('portal-aprobar')) {
+    e.preventDefault();
+    const nivel_precio = new FormData(e.target).get('nivel_precio');
+    if (!nivel_precio) { avisar('Elegí con qué precio lo vas a dejar ver.', true); return; }
+    const idPortal = e.target.dataset.id;
+    const boton = e.target.querySelector('button[type="submit"]');
+    if (boton) { boton.disabled = true; boton.textContent = 'Aprobando…'; }
+    try {
+      await api(`/portal/usuarios/${idPortal}/aprobar`, { method: 'POST', body: { nivel_precio } });
+      avisar('Cliente aprobado ✓ Ya puede entrar al catálogo.');
+      await refrescarResumen();
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+      if (boton) { boton.disabled = false; boton.textContent = 'Aprobar'; }
     }
     return;
   }
@@ -4790,6 +4930,25 @@ $('#input-foto').addEventListener('change', async (e) => {
     avisar(bytesAntes > bytes * 1.5
       ? `Foto actualizada ✓ (achicada de ${pesoLegible(bytesAntes)} a ${pesoLegible(bytes)})`
       : 'Foto actualizada ✓');
+    await pintar();
+  } catch (err) {
+    avisar(err.message, true);
+  }
+});
+
+// Fotos de más para el catálogo público: se suben de a varias, una atrás de
+// otra, para no obligar a repetir el toque por cada una.
+$('#input-foto-galeria').addEventListener('change', async (e) => {
+  const archivos = [...e.target.files];
+  e.target.value = '';
+  if (!archivos.length || !estado.subiendoGaleriaPara) return;
+  const id = estado.subiendoGaleriaPara;
+  try {
+    for (const archivo of archivos) {
+      const { dataUrl } = await encoger(archivo);
+      await api(`/productos/${id}/fotos`, { method: 'POST', body: { imagen_base64: dataUrl } });
+    }
+    avisar(`${archivos.length > 1 ? `${archivos.length} fotos agregadas` : 'Foto agregada'} ✓`);
     await pintar();
   } catch (err) {
     avisar(err.message, true);

@@ -29,7 +29,7 @@ const PUERTO = process.env.PORT || 3000;
 // este archivo con require(), que no admite top-level await en el módulo.
 async function iniciar() {
 
-const [db, tools, asistente, auth, xlsx, imprimir, remoto, trabajos, ofertaPdf] = await Promise.all([
+const [db, tools, asistente, auth, xlsx, imprimir, remoto, trabajos, ofertaPdf, portalAuth] = await Promise.all([
   import('./db.js'),
   import('./tools.js'),
   import('./assistant.js'),
@@ -39,6 +39,7 @@ const [db, tools, asistente, auth, xlsx, imprimir, remoto, trabajos, ofertaPdf] 
   import('./remoto.js'),
   import('./trabajos.js'),
   import('./oferta-pdf.js'),
+  import('./portal-auth.js'),
 ]);
 
 const CARPETA_FOTOS = join(PUBLICO, 'uploads', 'productos');
@@ -412,6 +413,150 @@ async function api(req, res, url) {
       return json(res, 200, { ok: true, ...resultado });
     } catch (err) {
       return json(res, 400, { ok: false, error: err.message });
+    }
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Catálogo público: acá entra cualquiera, con SU propia sesión —la  */
+  /* cookie del portal, nada que ver con la del panel—.                 */
+  /* ---------------------------------------------------------------- */
+
+  // POST /api/portal/registro -> cualquiera puede pedir acceso a la tienda.
+  // No entra a mirar nada todavía: queda "pendiente" hasta que el dueño lo
+  // apruebe desde el panel.
+  if (recurso === 'portal' && partes[1] === 'registro' && req.method === 'POST') {
+    try {
+      const { nombre, empresa, telefono, email, clave } = await leerJson(req);
+      if (!String(clave ?? '').trim() || String(clave).length < 6) {
+        return json(res, 400, { error: 'La contraseña tiene que tener al menos 6 caracteres.' });
+      }
+      const u = db.registrarPortalUsuario({
+        nombre, empresa, telefono, email, clave_hash: portalAuth.hashClave(clave),
+      });
+      return json(res, 201, { ok: true, usuario: u });
+    } catch (err) {
+      return json(res, 400, { error: err.message });
+    }
+  }
+
+  // POST /api/portal/login
+  if (recurso === 'portal' && partes[1] === 'login' && req.method === 'POST') {
+    const ip = portalAuth.origen(req);
+    if (portalAuth.bloqueado(ip)) {
+      return json(res, 429, { error: 'Demasiados intentos fallidos. Esperá unos minutos.' });
+    }
+
+    const { email, clave } = await leerJson(req);
+    const u = db.portalUsuarioPorEmail(email);
+    if (!u || !portalAuth.claveValida(clave, u.clave_hash)) {
+      portalAuth.registrarFallo(ip);
+      return json(res, 401, { error: 'Correo o contraseña incorrectos.' });
+    }
+    portalAuth.limpiarIntentos(ip);
+
+    if (u.estado === 'pendiente') {
+      return json(res, 403, {
+        error: 'Tu registro todavía está esperando aprobación. Te avisamos apenas quede listo.',
+        estado: 'pendiente',
+      });
+    }
+    if (u.estado === 'rechazado') {
+      return json(res, 403, { error: 'No tenés acceso al catálogo. Escribinos si creés que es un error.', estado: 'rechazado' });
+    }
+
+    res.setHeader('Set-Cookie', portalAuth.cookieSesion(req, portalAuth.crearToken(u.id)));
+    return json(res, 200, { ok: true, usuario: { nombre: u.nombre, email: u.email } });
+  }
+
+  // POST /api/portal/logout
+  if (recurso === 'portal' && partes[1] === 'logout' && req.method === 'POST') {
+    res.setHeader('Set-Cookie', portalAuth.cookieBorrada(req));
+    return json(res, 200, { ok: true });
+  }
+
+  // Lo de acá abajo sí necesita estar aprobado.
+  if (recurso === 'portal' && ['catalogo', 'pedido', 'mis-pedidos', 'quien-soy'].includes(partes[1])) {
+    const idPortal = portalAuth.idDeSesion(req);
+    const usuarioPortal = idPortal ? db.obtenerPortalUsuario(idPortal) : null;
+    if (!usuarioPortal || usuarioPortal.estado !== 'aprobado') {
+      return json(res, 401, { error: 'Iniciá sesión para ver el catálogo.' });
+    }
+
+    if (partes[1] === 'quien-soy' && req.method === 'GET') {
+      return json(res, 200, { nombre: usuarioPortal.nombre, email: usuarioPortal.email, nivel_precio: usuarioPortal.nivel_precio });
+    }
+
+    if (partes[1] === 'catalogo' && req.method === 'GET') {
+      return json(res, 200, { filas: db.catalogoPublico(usuarioPortal.nivel_precio) });
+    }
+
+    if (partes[1] === 'pedido' && req.method === 'POST') {
+      try {
+        const cot = db.crearPedidoPortal(usuarioPortal.id, await leerJson(req));
+        return json(res, 201, { ok: true, cotizacion_id: cot.id });
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+    }
+
+    if (partes[1] === 'mis-pedidos' && req.method === 'GET') {
+      return json(res, 200, { filas: db.pedidosDePortalUsuario(usuarioPortal.id) });
+    }
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Administración del catálogo público, YA con sesión del panel      */
+  /* ---------------------------------------------------------------- */
+  if (recurso === 'portal' && partes[1] === 'usuarios') {
+    if (!auth.sesionValida(req)) return json(res, 401, { error: 'Sesión expirada. Volvé a entrar.' });
+
+    if (!partes[2] && req.method === 'GET') {
+      const f = Object.fromEntries(url.searchParams);
+      return json(res, 200, { filas: db.listarPortalUsuarios(f.estado || null) });
+    }
+    if (partes[2] && partes[3] === 'aprobar' && req.method === 'POST') {
+      try {
+        const { nivel_precio } = await leerJson(req);
+        return json(res, 200, db.aprobarPortalUsuario(Number(partes[2]), nivel_precio));
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+    }
+    if (partes[2] && partes[3] === 'rechazar' && req.method === 'POST') {
+      try {
+        return json(res, 200, db.rechazarPortalUsuario(Number(partes[2])));
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+    }
+    if (partes[2] && !partes[3] && req.method === 'DELETE') {
+      return json(res, db.eliminarPortalUsuario(Number(partes[2])) ? 200 : 404, { ok: true });
+    }
+  }
+
+  // POST /api/productos/:id/fotos -> agrega una foto más a la galería (no
+  // reemplaza la principal, que sigue siendo /foto). DELETE con la misma
+  // dirección en el cuerpo la saca.
+  if (recurso === 'productos' && id && partes[2] === 'fotos') {
+    if (!auth.sesionValida(req)) return json(res, 401, { error: 'Sesión expirada. Volvé a entrar.' });
+    try {
+      if (req.method === 'POST') {
+        const { imagen_base64 } = await leerJson(req, 8_000_000);
+        const img = leerImagenBase64(imagen_base64);
+        const nombre = `${id}-${Date.now()}.${img.ext}`;
+        writeFileSync(join(CARPETA_FOTOS, nombre), img.buffer);
+        const p = db.agregarFotoProducto(Number(id), `/uploads/productos/${nombre}`);
+        return json(res, 200, p);
+      }
+      if (req.method === 'DELETE') {
+        const { url: urlFoto } = await leerJson(req);
+        const nombre = String(urlFoto || '').split('/').pop();
+        if (nombre) rmSync(join(CARPETA_FOTOS, nombre), { force: true });
+        const p = db.quitarFotoProducto(Number(id), urlFoto);
+        return json(res, 200, p);
+      }
+    } catch (err) {
+      return json(res, 400, { error: err.message });
     }
   }
 
@@ -1077,12 +1222,24 @@ async function api(req, res, url) {
 
 // Lo que se puede servir sin haber entrado: la propia pantalla de acceso y lo
 // que necesita para verse bien.
-const LIBRES = new Set(['/login.html', '/styles.css', '/icono.svg', '/manifest.webmanifest', '/favicon.ico']);
+// La tienda es una página distinta de la aplicación del panel: no pide la
+// sesión de Ari —quien la abre puede ser cualquiera de la calle—, tiene su
+// propia puerta más abajo (el login del portal, contra clientes_portal).
+const LIBRES = new Set([
+  '/login.html', '/styles.css', '/icono.svg', '/manifest.webmanifest', '/favicon.ico',
+  '/tienda.html', '/tienda.js', '/tienda.css',
+]);
 
 async function estatico(req, res, url) {
   let ruta = url.pathname === '/' ? '/index.html' : url.pathname;
 
-  if (!auth.sesionValida(req) && !LIBRES.has(ruta)) {
+  // Las fotos del catálogo son justamente lo que la tienda tiene que poder
+  // mostrarle a cualquiera que la visite, con sesión o sin ella. El resto de
+  // lo subido (los PDF de cotizaciones, las fichas técnicas, el logo) sigue
+  // exigiendo la sesión del panel: no cambia nada de lo que ya funcionaba.
+  const esFotoDeCatalogo = ruta.startsWith('/uploads/productos/');
+
+  if (!auth.sesionValida(req) && !LIBRES.has(ruta) && !esFotoDeCatalogo) {
     ruta = '/login.html'; // cualquier página lleva al acceso
   }
 

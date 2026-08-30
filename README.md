@@ -135,11 +135,16 @@ server/
   remoto.js     Listas de precios que viven en línea (CSV/xlsx por dirección)
   imprimir.js   Página A4 de una cotización, para «Guardar como PDF»
   assistant.js  El bucle de conversación con Claude
+  auth.js       Sesión del panel (una sola clave, para el dueño)
+  portal-auth.js  Sesión del catálogo público (registro y clave por cliente)
 public/
-  index.html    Interfaz
-  styles.css    Estilos (claro y oscuro automáticos)
+  index.html    Interfaz del panel
+  styles.css    Estilos del panel (claro y oscuro automáticos)
   app.js        Dashboard, voz y conversación
   foto.js       Achica las fotos antes de guardarlas
+  tienda.html   Catálogo público, aparte del panel
+  tienda.css    Estilos de la tienda
+  tienda.js     Registro, catálogo, carrito y pedido
 prueba.js       Recorrido completo del sistema (npm test)
 ```
 
@@ -186,6 +191,16 @@ totales), `PATCH|DELETE /api/cotizacion_items/:id`, `POST
 `GET|PATCH /api/ajustes` (datos de la empresa). Fuera de la API,
 `GET /imprimir/cotizacion/:id` devuelve la página imprimible —pide sesión igual
 que todo lo demás—.
+
+Del catálogo público (`/tienda.html`), con su propia sesión: `POST
+/api/portal/registro`, `POST /api/portal/login`, `POST /api/portal/logout`, y
+—sólo para un registro ya aprobado— `GET /api/portal/catalogo`, `GET
+/api/portal/quien-soy`, `GET /api/portal/mis-pedidos` y `POST
+/api/portal/pedido` (arma la cotización a partir del carrito). Para
+administrarlo desde el panel: `GET /api/portal/usuarios?estado=`, `POST
+/api/portal/usuarios/:id/aprobar` (con el nivel de precio), `POST
+/api/portal/usuarios/:id/rechazar`, y `POST|DELETE
+/api/productos/:id/fotos` para la galería de fotos extra de un producto.
 
 ## Cotizaciones con renglones
 
@@ -805,6 +820,82 @@ Arma el PDF de todas las fichas del catálogo, con el nombre de archivo igual
 a la referencia —listos para subirlos por **Importar fichas técnicas**—, en
 `dist-fichas/`. El generador (`server/ficha-tecnica-pdf.js`) es del mismo
 motor sin dependencias que arma las cotizaciones (`server/pdf.js`).
+
+## Catálogo público (tienda para clientes)
+
+Además del panel de Ari, hay una página aparte —`/tienda.html`— donde
+**cualquiera puede entrar a mirar el catálogo, armar un carrito y mandar un
+pedido**, sin saber nada de Ari por dentro. No comparte pantallas ni sesión
+con el panel: es su propio HTML, su propio `tienda.js` y su propia hoja de
+estilos, pensada para que un cliente la abra desde el celular.
+
+### Cómo entra alguien nuevo
+
+1. La persona entra a `/tienda.html` y se **registra** con nombre, correo y
+   una clave. Eso no la deja ver nada todavía: queda **pendiente**.
+2. En el panel, **Tienda** (en el menú de la izquierda, con el número de
+   pendientes) muestra el registro. Ahí se decide **con qué precio** va a ver
+   el catálogo esa persona —**canal, constructor o cliente final**— y se
+   aprueba, o se rechaza.
+3. Recién ahí puede iniciar sesión y entrar a mirar. Un rechazado nunca entra,
+   aunque tenga la clave correcta.
+
+Cada cliente aprobado ve **un solo precio, el que le asignaste**: nunca los
+tres. Un cliente final no tiene por qué ver el precio de canal —sería
+mostrarle el margen con el que se trabaja con los distribuidores—, así que ni
+siquiera viaja al navegador el que no le corresponde.
+
+### Registrarse y que te aprueben no te hace cliente
+
+Esto es a propósito: un registro pendiente, o incluso ya aprobado, **no crea
+un cliente en Ari**. Sólo es el permiso para entrar a mirar precios. Recién
+cuando esa persona **manda su primer pedido de verdad** aparece como cliente
+—con el nombre, teléfono y correo con que se registró—, exactamente igual
+que si alguien lo hubiera cotizado por voz.
+
+Si ese correo **ya era cliente** por otro lado —Ari le dictó una cotización
+antes, por ejemplo—, el pedido se cuelga de ese cliente en vez de crear uno
+repetido. El segundo pedido de la misma persona tampoco duplica nada: ya
+quedó enganchado desde el primero.
+
+### El pedido llega como una cotización más
+
+Armar el carrito y mandarlo **crea una cotización pendiente**, con los mismos
+renglones, el mismo cálculo de totales y el mismo precio por nivel que si la
+hubiera dictado Ari. La única diferencia es que en la lista de
+**Cotizaciones** aparece marcada con **🛒 Desde el catálogo**, para
+distinguir de un vistazo cuáles llegaron solas y cuáles se armaron a mano.
+
+De ahí en más es una cotización cualquiera: se revisa, se aprueba o no, se
+cobra, se despacha — no hay ninguna pantalla nueva que aprender para
+procesarla. No se manda ningún correo ni mensaje: el aviso es que aparece ahí,
+pendiente, con el badge.
+
+### Más fotos y mejores descripciones
+
+Antes cada producto llevaba una sola foto, la de la lista de precios. Desde
+la ficha del producto ahora se pueden **agregar varias más** (además de esa
+principal), pensado para este catálogo: alguien que está armando su propia
+ficha técnica y quiere una foto del producto instalado, o desde otro ángulo,
+no sólo la de estudio que trae el proveedor. Se suben y se borran una por una
+desde la ficha; la tienda las muestra todas.
+
+> Mejorar el **texto** de las descripciones —para que se puedan copiar y
+> pegar en una ficha técnica de un cliente— es trabajo pendiente, aparte de
+> esto: lo de acá es la parte técnica (que se puedan cargar más fotos), no la
+> redacción producto por producto.
+
+### Detalles para quien vaya a tocar esto
+
+- Las fotos del catálogo (`/uploads/productos/...`) son las únicas que se
+  sirven **sin sesión** de ningún tipo — ni la del panel, ni la del portal—,
+  porque un visitante anónimo tiene que poder verlas antes de registrarse.
+  Todo lo demás del servidor sigue exigiendo sesión válida.
+- El portal tiene su **propia cookie de sesión** (`ari_portal_sesion`),
+  totalmente separada de la del panel (`ari_sesion`): iniciar sesión en uno
+  no te mete al otro, ni al revés.
+- Las claves del portal se guardan con `scryptSync` (núcleo de Node, sin
+  librerías nuevas), igual de fuerte que bcrypt para este uso.
 
 ## Logo
 
