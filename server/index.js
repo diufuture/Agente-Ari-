@@ -1233,13 +1233,14 @@ const LIBRES = new Set([
 async function estatico(req, res, url) {
   let ruta = url.pathname === '/' ? '/index.html' : url.pathname;
 
-  // Las fotos del catálogo son justamente lo que la tienda tiene que poder
-  // mostrarle a cualquiera que la visite, con sesión o sin ella. El resto de
-  // lo subido (los PDF de cotizaciones, las fichas técnicas, el logo) sigue
-  // exigiendo la sesión del panel: no cambia nada de lo que ya funcionaba.
-  const esFotoDeCatalogo = ruta.startsWith('/uploads/productos/');
+  // Las fotos y fichas técnicas del catálogo son justamente lo que la tienda
+  // tiene que poder mostrarle a cualquiera que la visite, con sesión o sin
+  // ella —ninguna de las dos revela nada que el fabricante no publique ya—.
+  // El resto de lo subido (los PDF de cotizaciones, el logo) sigue exigiendo
+  // la sesión del panel: no cambia nada de lo que ya funcionaba.
+  const esArchivoDeCatalogo = ruta.startsWith('/uploads/productos/') || ruta.startsWith('/uploads/fichas/');
 
-  if (!auth.sesionValida(req) && !LIBRES.has(ruta) && !esFotoDeCatalogo) {
+  if (!auth.sesionValida(req) && !LIBRES.has(ruta) && !esArchivoDeCatalogo) {
     ruta = '/login.html'; // cualquier página lleva al acceso
   }
 
@@ -1327,15 +1328,33 @@ async function estatico(req, res, url) {
  * GET /imprimir/cotizacion/:id -> página suelta lista para "Guardar como PDF".
  * Va fuera de /api porque es una página que se abre en una pestaña, no un
  * recurso JSON; pero pide sesión igual que todo lo demás.
+ *
+ * Con una salvedad: un cliente del catálogo también puede entrar acá, pero
+ * SÓLO a sus propias cotizaciones —es la misma página que se le manda por
+ * fuera, así que tiene sentido que la vea armar su propio pedido—. Se
+ * comprueba comparando el cliente de la cotización contra el que quedó
+ * enganchado a su cuenta del portal; nunca contra el id que venga en la URL.
  */
 async function paginaImpresion(req, res, url) {
-  if (!auth.sesionValida(req)) {
-    res.writeHead(302, { Location: '/login.html' }).end();
+  const id = Number(url.pathname.split('/').filter(Boolean)[2]);
+  const cot = Number.isFinite(id) ? db.obtenerPorId('cotizaciones', id) : null;
+
+  let autorizado = auth.sesionValida(req);
+  if (!autorizado && cot) {
+    const idPortal = portalAuth.idDeSesion(req);
+    const usuarioPortal = idPortal ? db.obtenerPortalUsuario(idPortal) : null;
+    autorizado = Boolean(
+      usuarioPortal?.estado === 'aprobado' && usuarioPortal.cliente_id
+      && usuarioPortal.cliente_id === cot.cliente_id,
+    );
+  }
+  if (!autorizado) {
+    const esVisitaDelPortal = String(req.headers.cookie || '').includes('ari_portal_sesion=');
+    res.writeHead(302, { Location: esVisitaDelPortal ? '/tienda.html' : '/login.html' }).end();
     return;
   }
 
-  const id = Number(url.pathname.split('/').filter(Boolean)[2]);
-  const html = Number.isFinite(id) ? imprimir.paginaCotizacion(id) : null;
+  const html = cot ? imprimir.paginaCotizacion(id) : null;
 
   if (!html) {
     res.writeHead(404, { 'Content-Type': MIME['.html'] });

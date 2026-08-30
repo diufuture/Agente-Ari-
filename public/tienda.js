@@ -14,6 +14,16 @@ const fmtDinero = (n) =>
 const escapar = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+/** '2026-08-07 10:00:00' -> '7 de ago.' */
+function fechaCorta(v) {
+  const f = String(v ?? '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return f;
+  const [a, m, d] = f.split('-').map(Number);
+  return new Date(a, m - 1, d).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+}
+
+const ETIQUETA_ESTADO = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'No aprobada' };
+
 async function api(ruta, opciones = {}) {
   const r = await fetch(`/api/portal${ruta}`, {
     headers: { 'Content-Type': 'application/json' },
@@ -30,13 +40,16 @@ async function api(ruta, opciones = {}) {
 }
 
 const estado = {
-  vista: 'cargando',   // cargando | acceso | catalogo
+  vista: 'cargando',   // cargando | acceso | catalogo | pedidos
   usuario: null,
   modoAcceso: 'login',  // login | registro
   catalogo: [],
   buscar: '',
   filtroTipo: '',
-  carrito: new Map(),   // producto_id -> {producto, cantidad}
+  carrito: new Map(),    // producto_id -> {producto, cantidad}
+  detalle: null,         // id del producto abierto en la ficha, o null
+  fotoActual: new Map(), // producto_id -> índice de la foto que se está mostrando
+  pedidos: null,         // se trae la primera vez que se abre "Mis pedidos"
 };
 
 function avisar(texto, esError = false) {
@@ -108,8 +121,16 @@ function vistaAcceso() {
 
 /* ─────────── Catálogo ─────────── */
 
+// Los tipos con cuántos productos tiene cada uno, para filtrar de un solo
+// toque —como en Productos, dentro del panel—, en vez de un desplegable que
+// hay que abrir y volver a cerrar para cada intento.
 function tiposDisponibles() {
-  return [...new Set(estado.catalogo.map((p) => p.tipo).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  const cuenta = new Map();
+  for (const p of estado.catalogo) {
+    if (!p.tipo) continue;
+    cuenta.set(p.tipo, (cuenta.get(p.tipo) || 0) + 1);
+  }
+  return [...cuenta.entries()].sort((a, b) => a[0].localeCompare(b[0], 'es'));
 }
 
 function catalogoFiltrado() {
@@ -122,28 +143,50 @@ function catalogoFiltrado() {
   });
 }
 
+/** Puntos para pasar de una foto a otra, sólo si el producto tiene más de una. */
+function puntosDeFotos(p, idxActual) {
+  if ((p.fotos?.length ?? 0) < 2) return '';
+  return `<div class="foto-puntos">
+    ${p.fotos.map((_, i) => `<button type="button" class="punto${i === idxActual ? ' activo' : ''}"
+      data-accion="foto-punto" data-id="${p.id}" data-indice="${i}" aria-label="Foto ${i + 1} de ${p.fotos.length}"></button>`).join('')}
+  </div>`;
+}
+
+/** El bloque de "cuántos llevo" — antes de agregar, con cantidad elegible; ya agregado, con +/−. */
+function controlCantidad(p, enCarrito, botonAgregar) {
+  if (enCarrito) {
+    return `<div class="cantidad-en-carrito">
+      <button type="button" data-accion="restar" data-id="${p.id}">−</button>
+      <span>${enCarrito.cantidad}</span>
+      <button type="button" data-accion="sumar" data-id="${p.id}">+</button>
+    </div>`;
+  }
+  return `<div class="agregar-fila">
+    <div class="cant-elegir">
+      <button type="button" data-accion="pre-restar" data-id="${p.id}" aria-label="Menos">−</button>
+      <input type="number" class="cant-input" data-id="${p.id}" value="1" min="1" inputmode="numeric" aria-label="Cantidad" />
+      <button type="button" data-accion="pre-sumar" data-id="${p.id}" aria-label="Más">+</button>
+    </div>
+    <button type="button" class="${botonAgregar.clase}" data-accion="${botonAgregar.accion}" data-id="${p.id}">${botonAgregar.texto}</button>
+  </div>`;
+}
+
 function tarjetaProducto(p) {
   const enCarrito = estado.carrito.get(p.id);
-  const foto = p.fotos?.[0];
+  const idx = estado.fotoActual.get(p.id) || 0;
+  const foto = p.fotos?.[idx] ?? p.fotos?.[0];
   return `
     <div class="producto">
-      <div class="producto-foto">
-        ${foto
-          ? `<img src="${escapar(foto)}" alt="" loading="lazy" />`
-          : '<span class="sin-foto">Sin foto</span>'}
+      <div class="producto-foto" data-accion="ver-detalle" data-id="${p.id}">
+        ${foto ? `<img src="${escapar(foto)}" alt="" loading="lazy" />` : '<span class="sin-foto">Sin foto</span>'}
+        ${puntosDeFotos(p, idx)}
       </div>
       <div class="producto-cuerpo">
         ${p.tipo ? `<span class="etiqueta">${escapar(p.tipo)}</span>` : ''}
-        <p class="producto-desc">${escapar(p.descripcion)}</p>
+        <p class="producto-desc" data-accion="ver-detalle" data-id="${p.id}">${escapar(p.descripcion)}</p>
         ${p.referencia ? `<p class="producto-ref">Ref. ${escapar(p.referencia)}</p>` : ''}
         <p class="producto-precio">${fmtDinero(p.precio)}</p>
-        ${enCarrito
-          ? `<div class="cantidad-en-carrito">
-               <button data-accion="restar" data-id="${p.id}">−</button>
-               <span>${enCarrito.cantidad}</span>
-               <button data-accion="sumar" data-id="${p.id}">+</button>
-             </div>`
-          : `<button class="btn-agregar" data-accion="agregar" data-id="${p.id}">Agregar al pedido</button>`}
+        ${controlCantidad(p, enCarrito, { accion: 'agregar', clase: 'btn-agregar', texto: 'Agregar' })}
       </div>
     </div>`;
 }
@@ -154,14 +197,94 @@ function vistaCatalogo() {
   return `
     <div class="barra-catalogo">
       <input type="search" id="buscar" placeholder="Buscar por nombre, referencia…" value="${escapar(estado.buscar)}" />
-      ${tipos.length ? `<select id="filtro-tipo">
-        <option value="">Todos los tipos</option>
-        ${tipos.map((t) => `<option value="${escapar(t)}"${t === estado.filtroTipo ? ' selected' : ''}>${escapar(t)}</option>`).join('')}
-      </select>` : ''}
     </div>
+    ${tipos.length ? `<div class="filtros-tipo">
+      <button type="button" class="chip${estado.filtroTipo ? '' : ' activo'}" data-accion="filtrar-tipo" data-tipo="">Todos <em>${estado.catalogo.length}</em></button>
+      ${tipos.map(([t, n]) => `<button type="button" class="chip${estado.filtroTipo === t ? ' activo' : ''}"
+        data-accion="filtrar-tipo" data-tipo="${escapar(t)}">${escapar(t)} <em>${n}</em></button>`).join('')}
+    </div>` : ''}
     <div class="grilla-productos">
       ${filas.length ? filas.map(tarjetaProducto).join('') : '<p class="vacio">No hay productos que coincidan con la búsqueda.</p>'}
     </div>`;
+}
+
+/* ─────────── Ficha del producto ─────────── */
+
+function vistaDetalle() {
+  const p = estado.catalogo.find((x) => x.id === estado.detalle);
+  if (!p) return '';
+  const enCarrito = estado.carrito.get(p.id);
+  const idx = estado.fotoActual.get(p.id) || 0;
+  const foto = p.fotos?.[idx] ?? p.fotos?.[0];
+  return `
+    <div class="detalle-cuerpo">
+      <div class="detalle-foto">
+        ${foto ? `<img src="${escapar(foto)}" alt="" />` : '<span class="sin-foto">Sin foto</span>'}
+        ${puntosDeFotos(p, idx)}
+      </div>
+      <div class="detalle-datos">
+        ${p.tipo ? `<span class="etiqueta">${escapar(p.tipo)}</span>` : ''}
+        <h2>${escapar(p.descripcion)}</h2>
+        <table class="detalle-tabla">
+          ${p.referencia ? `<tr><td>Referencia</td><td>${escapar(p.referencia)}</td></tr>` : ''}
+          ${p.marca ? `<tr><td>Marca</td><td>${escapar(p.marca)}</td></tr>` : ''}
+          ${p.categoria ? `<tr><td>Categoría</td><td>${escapar(p.categoria)}</td></tr>` : ''}
+          ${p.unidad ? `<tr><td>Unidad</td><td>${escapar(p.unidad)}</td></tr>` : ''}
+        </table>
+        ${p.ficha ? `<a class="mini" href="${escapar(p.ficha)}" target="_blank" rel="noopener">📄 Ver ficha técnica</a>` : ''}
+        <p class="producto-precio grande">${fmtDinero(p.precio)}</p>
+        ${controlCantidad(p, enCarrito, { accion: 'agregar-y-cerrar', clase: 'btn-primario ancho', texto: 'Agregar al pedido' })}
+      </div>
+    </div>`;
+}
+
+function abrirDetalle(id) {
+  estado.detalle = id;
+  pintarDetalle();
+  $('#detalle').classList.add('abierto');
+  $('#telon').classList.add('visible');
+}
+function cerrarDetalle() {
+  $('#detalle').classList.remove('abierto');
+  if (!$('#carrito').classList.contains('abierto')) $('#telon').classList.remove('visible');
+  estado.detalle = null;
+}
+function pintarDetalle() {
+  if (estado.detalle) $('#detalle-contenido').innerHTML = vistaDetalle();
+}
+
+/* ─────────── Mis pedidos ─────────── */
+
+async function irAPedidos() {
+  estado.vista = 'pedidos';
+  pintar();
+  try {
+    const { filas } = await api('/mis-pedidos');
+    estado.pedidos = filas;
+  } catch (err) {
+    estado.pedidos = [];
+    avisar(err.message, true);
+  }
+  pintar();
+}
+
+function vistaPedidos() {
+  if (!estado.pedidos) return '<div class="cargando">Cargando…</div>';
+  if (!estado.pedidos.length) {
+    return '<p class="vacio">Todavía no mandaste ningún pedido. Armalo desde el catálogo.</p>';
+  }
+  return `<div class="lista-pedidos">
+    ${estado.pedidos.map((p) => `
+      <div class="pedido-fila">
+        <div>
+          <strong>${escapar(p.titulo)}</strong>
+          <span>${fechaCorta(p.creado_en)}</span>
+        </div>
+        <span class="pastilla-pedido ${escapar(p.estado)}">${escapar(ETIQUETA_ESTADO[p.estado] || p.estado)}</span>
+        <b>${fmtDinero(p.monto)}</b>
+        <a class="mini" href="/imprimir/cotizacion/${p.id}" target="_blank" rel="noopener">Ver cotización</a>
+      </div>`).join('')}
+  </div>`;
 }
 
 /* ─────────── Carrito ─────────── */
@@ -181,9 +304,9 @@ function pintarCarrito() {
         <span>${fmtDinero(producto.precio)} c/u</span>
       </div>
       <div class="carrito-item-cant">
-        <button data-accion="restar" data-id="${producto.id}">−</button>
+        <button type="button" data-accion="restar" data-id="${producto.id}">−</button>
         <span>${cantidad}</span>
-        <button data-accion="sumar" data-id="${producto.id}">+</button>
+        <button type="button" data-accion="sumar" data-id="${producto.id}">+</button>
       </div>
     </div>`).join('') : '<p class="vacio">Todavía no agregaste nada.</p>';
   $('#carrito-total').textContent = fmtDinero(totalCarrito());
@@ -202,7 +325,7 @@ function abrirCarrito() {
 }
 function cerrarCarrito() {
   $('#carrito').classList.remove('abierto');
-  $('#telon').classList.remove('visible');
+  if (!$('#detalle').classList.contains('abierto')) $('#telon').classList.remove('visible');
 }
 
 function agregar(id, delta) {
@@ -214,15 +337,24 @@ function agregar(id, delta) {
   else estado.carrito.set(id, { producto: p, cantidad });
 }
 
+/** Repinta la grilla (y el carrito, y la ficha si está abierta) sin perder scroll ni foco. */
+function refrescar() {
+  pintar();
+  pintarDetalle();
+}
+
 /* ─────────── Cabecera y render general ─────────── */
 
 function pintarCabecera() {
-  $('#cab-acciones').innerHTML = estado.vista === 'catalogo' && estado.usuario
+  const logueado = Boolean(estado.usuario) && (estado.vista === 'catalogo' || estado.vista === 'pedidos');
+  $('#cab-acciones').innerHTML = logueado
     ? `<span class="quien-soy">Hola, ${escapar(estado.usuario.nombre)}</span>
-       <button class="btn-carrito" id="mostrar-carrito">
+       <button type="button" class="mini${estado.vista === 'catalogo' ? ' activo' : ''}" id="ver-catalogo">Catálogo</button>
+       <button type="button" class="mini${estado.vista === 'pedidos' ? ' activo' : ''}" id="ver-pedidos">Mis pedidos</button>
+       <button type="button" class="btn-carrito" id="mostrar-carrito">
          🛒 <em class="carrito-badge" hidden>0</em>
        </button>
-       <button class="mini" id="cerrar-sesion">Salir</button>`
+       <button type="button" class="mini" id="cerrar-sesion">Salir</button>`
     : '';
   $('#carrito').hidden = !(estado.vista === 'catalogo' && estado.usuario);
 }
@@ -232,6 +364,7 @@ function pintar() {
   const app = $('#app');
   if (estado.vista === 'cargando') { app.innerHTML = '<div class="cargando">Cargando…</div>'; return; }
   if (estado.vista === 'acceso') { app.innerHTML = vistaAcceso(); return; }
+  if (estado.vista === 'pedidos') { app.innerHTML = vistaPedidos(); return; }
   app.innerHTML = vistaCatalogo();
   pintarCarrito();
 }
@@ -273,42 +406,82 @@ document.addEventListener('submit', async (e) => {
 });
 
 document.addEventListener('click', async (e) => {
-  const boton = e.target.closest('[data-accion], button, #cerrar-carrito, #mostrar-carrito, #cerrar-sesion, #enviar-pedido, #telon');
+  const boton = e.target.closest('[data-accion], button, #cerrar-carrito, #cerrar-detalle, #mostrar-carrito, #ver-catalogo, #ver-pedidos, #cerrar-sesion, #enviar-pedido, #telon');
   if (!boton) return;
 
-  if (boton.id === 'ir-registro' || boton.dataset.accion === 'ir-registro') {
-    estado.modoAcceso = 'registro'; pintar(); return;
-  }
-  if (boton.id === 'ir-login' || boton.dataset.accion === 'ir-login') {
-    estado.modoAcceso = 'login'; pintar(); return;
-  }
+  if (boton.dataset.accion === 'ir-registro') { estado.modoAcceso = 'registro'; pintar(); return; }
+  if (boton.dataset.accion === 'ir-login') { estado.modoAcceso = 'login'; pintar(); return; }
   if (boton.id === 'cerrar-sesion') {
     await api('/logout', { method: 'POST' });
-    estado.usuario = null; estado.carrito.clear(); estado.vista = 'acceso'; estado.modoAcceso = 'login';
+    estado.usuario = null; estado.carrito.clear(); estado.pedidos = null;
+    estado.vista = 'acceso'; estado.modoAcceso = 'login';
     pintar();
     return;
   }
+  if (boton.id === 'ver-catalogo') { estado.vista = 'catalogo'; pintar(); return; }
+  if (boton.id === 'ver-pedidos') { irAPedidos(); return; }
   if (boton.id === 'mostrar-carrito') { abrirCarrito(); return; }
-  if (boton.id === 'cerrar-carrito' || boton.id === 'telon') { cerrarCarrito(); return; }
+  if (boton.id === 'cerrar-carrito') { cerrarCarrito(); return; }
+  if (boton.id === 'cerrar-detalle') { cerrarDetalle(); return; }
+  if (boton.id === 'telon') { cerrarCarrito(); cerrarDetalle(); return; }
 
   const accion = boton.dataset.accion;
   const id = Number(boton.dataset.id);
-  if (accion === 'agregar' || accion === 'sumar') { agregar(id, 1); pintar(); return; }
-  if (accion === 'restar') { agregar(id, -1); pintar(); return; }
+
+  if (accion === 'ver-detalle') { abrirDetalle(id); return; }
+
+  if (accion === 'filtrar-tipo') { estado.filtroTipo = boton.dataset.tipo || ''; pintar(); return; }
+
+  if (accion === 'foto-punto') {
+    estado.fotoActual.set(id, Number(boton.dataset.indice) || 0);
+    refrescar();
+    return;
+  }
+
+  if (accion === 'pre-sumar' || accion === 'pre-restar') {
+    const input = boton.closest('.producto, .detalle-cuerpo')?.querySelector('.cant-input');
+    if (input) {
+      const actual = Math.max(1, parseInt(input.value, 10) || 1);
+      input.value = accion === 'pre-sumar' ? actual + 1 : Math.max(1, actual - 1);
+    }
+    return;
+  }
+
+  if (accion === 'agregar' || accion === 'agregar-y-cerrar') {
+    const input = boton.closest('.producto, .detalle-cuerpo')?.querySelector('.cant-input');
+    const cantidad = Math.max(1, parseInt(input?.value, 10) || 1);
+    agregar(id, cantidad);
+    if (accion === 'agregar-y-cerrar') { cerrarDetalle(); avisar('Agregado al pedido.'); }
+    refrescar();
+    return;
+  }
+  if (accion === 'sumar') { agregar(id, 1); refrescar(); return; }
+  if (accion === 'restar') { agregar(id, -1); refrescar(); return; }
 
   if (boton.id === 'enviar-pedido') {
     if (!estado.carrito.size) { avisar('Agregá al menos un producto.', true); return; }
     boton.disabled = true;
     boton.textContent = 'Enviando…';
+    // Se abre YA, antes del await: si se abre después, Safari (y el modo
+    // instalado de varios celulares) lo toma como un pop-up no pedido por el
+    // usuario y lo bloquea en silencio.
+    const previa = window.open('', '_blank');
     try {
       const items = [...estado.carrito.values()].map(({ producto, cantidad }) => ({ producto_id: producto.id, cantidad }));
-      await api('/pedido', { method: 'POST', body: { items, notas: $('#carrito-notas-txt').value.trim() } });
+      const { cotizacion_id } = await api('/pedido', { method: 'POST', body: { items, notas: $('#carrito-notas-txt').value.trim() } });
       estado.carrito.clear();
       $('#carrito-notas-txt').value = '';
       cerrarCarrito();
+      estado.pedidos = null;   // para que "Mis pedidos" la traiga de nuevo la próxima vez
       pintar();
-      avisar('¡Pedido enviado! Te contactamos para coordinar. ✓');
+      if (previa) {
+        previa.location = `/imprimir/cotizacion/${cotizacion_id}`;
+        avisar('¡Pedido enviado! Tu cotización se abrió en una pestaña nueva. ✓');
+      } else {
+        avisar('¡Pedido enviado! Mirá «Mis pedidos» para ver tu cotización. ✓');
+      }
     } catch (err) {
+      previa?.close();
       avisar(err.message, true);
     } finally {
       boton.disabled = false;
@@ -327,9 +500,6 @@ document.addEventListener('input', (e) => {
       ? catalogoFiltrado().map(tarjetaProducto).join('')
       : '<p class="vacio">No hay productos que coincidan con la búsqueda.</p>';
   }
-});
-document.addEventListener('change', (e) => {
-  if (e.target.id === 'filtro-tipo') { estado.filtroTipo = e.target.value; pintar(); }
 });
 
 arrancar();

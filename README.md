@@ -871,6 +871,37 @@ cobra, se despacha — no hay ninguna pantalla nueva que aprender para
 procesarla. No se manda ningún correo ni mensaje: el aviso es que aparece ahí,
 pendiente, con el badge.
 
+### Cómo se ve el catálogo
+
+- **Filtrar por tipo es de un solo toque**: arriba de la grilla hay una fila
+  de chips (Switch, Display…), igual que en **Productos** dentro del panel —
+  se toca uno y filtra ahí mismo, sin abrir ningún menú.
+- **La cantidad se elige antes de agregar**: cada tarjeta tiene un − / número
+  / + junto al botón de agregar. Sirve tanto para tocar el + varias veces
+  como para escribir la cantidad directo (20, 50…) sin tener que apretar de a
+  una.
+- **Tocar la foto o la descripción abre la ficha del producto**, con la
+  imagen más grande, la referencia, la marca, la categoría, la unidad y —si
+  el producto la tiene cargada— un botón para **abrir la ficha técnica en
+  PDF**. Se agrega igual desde ahí, con su propia cantidad.
+- **Si un producto tiene más de una foto**, aparecen unos puntitos abajo de
+  la imagen —en la tarjeta y en la ficha— para pasar de una a otra sin salir
+  de la pantalla.
+
+### Su propia cotización, igual a la que le mandás vos
+
+Apenas manda el pedido, se le **abre en una pestaña nueva la misma página
+que usás para mandarle una cotización a cualquier cliente** —el mismo PDF
+imprimible, con el logo, los renglones y el total—: no hace falta que se la
+armes ni se la mandes vos, ya la tiene ahí mismo, para guardarla o
+imprimirla.
+
+Esa cotización también queda accesible después, desde **Mis pedidos** en su
+propia sesión de la tienda: la lista de todo lo que mandó, con su estado
+(pendiente / aprobada / no aprobada) y un botón **Ver cotización** por cada
+una. Sólo ve las suyas —las que quedaron a nombre de su cliente—, nunca las
+de otro.
+
 ### Más fotos y mejores descripciones
 
 Antes cada producto llevaba una sola foto, la de la lista de precios. Desde
@@ -887,13 +918,21 @@ desde la ficha; la tienda las muestra todas.
 
 ### Detalles para quien vaya a tocar esto
 
-- Las fotos del catálogo (`/uploads/productos/...`) son las únicas que se
-  sirven **sin sesión** de ningún tipo — ni la del panel, ni la del portal—,
-  porque un visitante anónimo tiene que poder verlas antes de registrarse.
-  Todo lo demás del servidor sigue exigiendo sesión válida.
+- Las fotos y las fichas técnicas del catálogo (`/uploads/productos/...` y
+  `/uploads/fichas/...`) son las únicas que se sirven **sin sesión** de
+  ningún tipo — ni la del panel, ni la del portal—, porque un visitante
+  anónimo tiene que poder verlas antes de registrarse, y ninguna de las dos
+  revela nada que el fabricante no publique ya. Todo lo demás del servidor
+  sigue exigiendo sesión válida.
 - El portal tiene su **propia cookie de sesión** (`ari_portal_sesion`),
   totalmente separada de la del panel (`ari_sesion`): iniciar sesión en uno
   no te mete al otro, ni al revés.
+- `GET /imprimir/cotizacion/:id` —la página imprimible— acepta **también**
+  la sesión del portal, pero sólo para la cotización que sea del cliente que
+  la pide: se compara el `cliente_id` de la cotización contra el que quedó
+  enganchado a esa cuenta del portal, nunca contra lo que venga en la URL.
+  Es lo que le permite a un cliente ver o reimprimir su propia cotización sin
+  poder ver la de otro.
 - Las claves del portal se guardan con `scryptSync` (núcleo de Node, sin
   librerías nuevas), igual de fuerte que bcrypt para este uso.
 

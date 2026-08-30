@@ -2356,7 +2356,7 @@ export function catalogoPublico(nivel_precio) {
   // justamente lo que no tiene precio.
   const filas = all(
     `SELECT id, categoria, tipo, referencia, descripcion, marca, unidad, foto, fotos_extra,
-            precio_canal, precio_constructor, precio_cliente
+            ficha, ficha_nombre, precio_canal, precio_constructor, precio_cliente
        FROM productos WHERE activo = 1
        ORDER BY categoria COLLATE NOCASE ASC, descripcion COLLATE NOCASE ASC`,
   );
@@ -2370,6 +2370,8 @@ export function catalogoPublico(nivel_precio) {
     unidad: p.unidad,
     foto: p.foto,
     fotos: fotosDeProducto(p),
+    ficha: p.ficha || null,
+    ficha_nombre: p.ficha_nombre || null,
     precio: precioSegunNivel(p, nivel_precio),
   })).filter((p) => p.precio > 0);   // sin precio para ese nivel, no se ofrece
 }

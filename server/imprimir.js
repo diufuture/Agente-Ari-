@@ -239,10 +239,16 @@ export function paginaCotizacion(id) {
 
   <div class="barra-acciones">
     <span class="pista" id="pista">Usá «Imprimir» y elegí <b>Guardar como PDF</b> para mandársela al cliente.</span>
-    <a href="/">Volver</a>
+    <a href="/" id="volver">Volver</a>
     <button class="principal" id="btn-imprimir" onclick="window.print()">Imprimir</button>
   </div>
   <script>
+    // "Volver" apunta al panel por defecto, pero un cliente del catálogo que
+    // llega hasta acá con su propia sesión no tiene panel al que volver: si
+    // detecta esa cookie, va de vuelta a la tienda.
+    if (document.cookie.includes('ari_portal_sesion=')) {
+      document.getElementById('volver').href = '/tienda.html';
+    }
     // En la aplicación instalada en el celular, iOS no da diálogo de
     // impresión: el botón no hace absolutamente nada y no hay manera de
     // saberlo desde acá una vez apretado. Se detecta antes y se manda a la

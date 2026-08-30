@@ -1228,6 +1228,11 @@ comprobar('y de verdad cambiaron (no es que ya tuvieran ese valor)',
   const sb9 = catalogo.find((p) => p.referencia === 'CLICK SB9');
   comprobar('ve el precio CONSTRUCTOR, no canal ni cliente', z9?.precio, 130000);
   comprobar('el que no tiene precio constructor cae al de cliente', sb9?.precio, 250000);
+  comprobar('sin ficha técnica todavía, no rompe: viene null', z9.ficha, null);
+
+  db.actualizar('productos', z9.id, { ficha: '/uploads/fichas/x.pdf', ficha_nombre: 'CLICK Z9.pdf' });
+  const conFicha = db.catalogoPublico('constructor').find((p) => p.id === z9.id);
+  comprobar('la ficha técnica viaja al catálogo público para que la vea el cliente', conFicha.ficha, '/uploads/fichas/x.pdf');
 
   const pedido = db.crearPedidoPortal(registrado.id, {
     items: [{ producto_id: z9.id, cantidad: 2 }, { producto_id: sb9.id, cantidad: 1 }],

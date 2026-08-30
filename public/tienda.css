@@ -39,6 +39,7 @@ body {
   cursor: pointer; font-family: inherit;
 }
 .mini:hover { border-color: var(--acento); }
+.mini.activo { border-color: var(--acento); color: var(--acento); font-weight: 600; }
 
 .btn-primario {
   background: var(--acento); color: #fff; border: none; border-radius: 10px;
@@ -77,16 +78,31 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 80px; }
 .cambiar-modo button { background: none; border: none; color: var(--acento); cursor: pointer; font: inherit; padding: 0; }
 
 /* ── Catálogo ── */
-.barra-catalogo { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
-.barra-catalogo input, .barra-catalogo select {
+.barra-catalogo { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.barra-catalogo input {
   font-size: 14px; padding: 10px 14px; border-radius: 10px;
   border: 1px solid var(--borde); background: var(--panel); color: var(--texto); font-family: inherit;
 }
 .barra-catalogo input { flex: 1; min-width: 220px; }
 
-.grilla-productos { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+/* Un toque, no un menú: filtrar por tipo es lo primero que se hace al
+   entrar, así que conviene que sea tan rápido como picar un botón. */
+.filtros-tipo { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+.chip {
+  font-size: 12.5px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--borde);
+  background: var(--panel); color: var(--texto-2); cursor: pointer; font-family: inherit;
+}
+.chip:hover { border-color: var(--acento); }
+.chip em { font-style: normal; color: var(--texto-3); margin-left: 3px; }
+.chip.activo { border-color: var(--acento); color: var(--acento); background: color-mix(in srgb, var(--acento) 12%, transparent); }
+.chip.activo em { color: inherit; }
+
+/* Tarjetas más chicas que antes —la foto ocupaba media pantalla en
+   monitores anchos— y con la relación de aspecto 4:3, no cuadrada, para que
+   no le gane tanto espacio al resto de los datos. */
+.grilla-productos { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 205px)); gap: 16px; }
 .producto { background: var(--panel); border: 1px solid var(--borde); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
-.producto-foto { aspect-ratio: 1; background: var(--fondo); display: flex; align-items: center; justify-content: center; }
+.producto-foto { position: relative; aspect-ratio: 4/3; background: var(--fondo); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .producto-foto img { width: 100%; height: 100%; object-fit: cover; }
 .sin-foto { color: var(--texto-3); font-size: 12px; }
 .producto-cuerpo { padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 6px; }
@@ -95,16 +111,42 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 80px; }
   letter-spacing: .4px; color: var(--acento); background: color-mix(in srgb, var(--acento) 14%, transparent);
   padding: 3px 8px; border-radius: 999px;
 }
-.producto-desc { font-size: 13.5px; line-height: 1.35; margin: 0; min-height: 2.7em; }
+.producto-desc { font-size: 13.5px; line-height: 1.35; margin: 0; min-height: 2.7em; cursor: pointer; }
 .producto-ref { font-size: 11.5px; color: var(--texto-3); margin: 0; }
 .producto-precio { font-size: 17px; font-weight: 700; color: var(--acento); margin: 4px 0 2px; }
+.producto-precio.grande { font-size: 21px; margin-top: 8px; }
 .vacio { grid-column: 1/-1; text-align: center; color: var(--texto-3); padding: 40px 0; }
+
+/* Puntos para pasar de una foto a otra, sobre la esquina inferior de la
+   imagen —sólo aparecen cuando hay más de una foto cargada—. */
+.foto-puntos { position: absolute; left: 0; right: 0; bottom: 7px; display: flex; justify-content: center; gap: 5px; }
+.punto {
+  width: 6px; height: 6px; border-radius: 999px; border: none; padding: 0; cursor: pointer;
+  background: rgba(0,0,0,.2); box-shadow: 0 0 0 1px rgba(255,255,255,.65);
+}
+.punto.activo { background: var(--acento); }
 
 .btn-agregar {
   border: 1px solid var(--acento); background: transparent; color: var(--acento);
-  border-radius: 9px; padding: 9px 0; font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+  border-radius: 9px; padding: 9px 10px; font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+  flex: 1;
 }
 .btn-agregar:hover { background: var(--acento); color: #fff; }
+
+/* Elegir cuántos ANTES de agregar, no sólo de a uno después. */
+.agregar-fila { display: flex; align-items: center; gap: 8px; }
+.cant-elegir {
+  display: flex; align-items: center; gap: 4px; border: 1px solid var(--borde); border-radius: 9px; padding: 4px 5px;
+}
+.cant-elegir button {
+  border: none; background: none; color: var(--acento); font-size: 15px; font-weight: 700; cursor: pointer;
+  width: 20px; line-height: 1;
+}
+.cant-input {
+  width: 32px; border: none; background: none; color: var(--texto); font: inherit; font-size: 13px;
+  text-align: center; -moz-appearance: textfield;
+}
+.cant-input::-webkit-outer-spin-button, .cant-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 .cantidad-en-carrito, .carrito-item-cant {
   display: flex; align-items: center; justify-content: center; gap: 14px;
@@ -114,6 +156,53 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 80px; }
   border: none; background: none; color: var(--acento); font-size: 17px; font-weight: 700; cursor: pointer;
   width: 26px; line-height: 1;
 }
+
+/* ── Ficha del producto ── */
+.detalle {
+  position: fixed; inset: 0; z-index: 32; display: none; align-items: center; justify-content: center; padding: 18px;
+}
+.detalle.abierto { display: flex; }
+.detalle-caja {
+  background: var(--panel); border-radius: 16px; max-width: 660px; width: 100%;
+  max-height: 88vh; overflow-y: auto; position: relative;
+}
+.detalle-cerrar {
+  position: absolute; top: 10px; right: 10px; z-index: 2; border: none; background: var(--panel);
+  color: var(--texto-2); width: 30px; height: 30px; border-radius: 999px; cursor: pointer; font-size: 14px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.15);
+}
+.detalle-cuerpo { display: flex; flex-direction: column; }
+.detalle-foto { position: relative; aspect-ratio: 4/3; background: var(--fondo); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.detalle-foto img { width: 100%; height: 100%; object-fit: contain; }
+.detalle-datos { padding: 20px 22px 24px; display: flex; flex-direction: column; gap: 10px; }
+.detalle-datos h2 { font-size: 17px; margin: 4px 0 0; line-height: 1.35; font-weight: 700; }
+.detalle-tabla { border-collapse: collapse; font-size: 13px; }
+.detalle-tabla td { padding: 3px 0; }
+.detalle-tabla td:first-child { color: var(--texto-2); padding-right: 16px; white-space: nowrap; }
+.detalle-datos > .mini { align-self: flex-start; text-decoration: none; }
+@media (min-width: 620px) {
+  .detalle-cuerpo { flex-direction: row; }
+  .detalle-foto { width: 44%; flex-shrink: 0; aspect-ratio: auto; }
+  .detalle-datos { flex: 1; }
+}
+
+/* ── Mis pedidos ── */
+.lista-pedidos { display: flex; flex-direction: column; gap: 10px; }
+.pedido-fila {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--borde); border-radius: 12px; padding: 14px 16px;
+}
+.pedido-fila > div:first-child { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 2px; }
+.pedido-fila strong { font-size: 13.5px; }
+.pedido-fila > div:first-child span { font-size: 12px; color: var(--texto-3); }
+.pastilla-pedido {
+  font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+  text-transform: uppercase; letter-spacing: .3px; white-space: nowrap;
+}
+.pastilla-pedido.pendiente { background: color-mix(in srgb, #d99a2b 18%, transparent); color: #b5790f; }
+.pastilla-pedido.aprobada { background: color-mix(in srgb, var(--acento) 16%, transparent); color: var(--acento-2); }
+.pastilla-pedido.rechazada { background: color-mix(in srgb, var(--alerta) 14%, transparent); color: var(--alerta); }
+.pedido-fila .mini { text-decoration: none; }
 
 /* ── Carrito ── */
 .telon {
@@ -156,4 +245,6 @@ main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 80px; }
 @media (max-width: 480px) {
   .grilla-productos { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .carrito { width: 100vw; }
+  .detalle { padding: 0; }
+  .detalle-caja { max-width: 100vw; max-height: 100vh; height: 100vh; border-radius: 0; }
 }
