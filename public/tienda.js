@@ -41,8 +41,8 @@ async function api(ruta, opciones = {}) {
 
 const estado = {
   vista: 'cargando',   // cargando | acceso | catalogo | pedidos
-  usuario: null,
-  modoAcceso: 'login',  // login | registro
+  usuario: null,        // { nombre, email, nivel_precio } o, para el dueño mirando desde el panel, { esAdmin: true, nombre, nivel_precio }
+  modoAcceso: 'login',  // login | registro | olvide
   catalogo: [],
   buscar: '',
   filtroTipo: '',
@@ -80,13 +80,29 @@ async function arrancar() {
 }
 
 async function cargarCatalogo() {
-  const { filas } = await api('/catalogo');
+  const nivel = estado.usuario?.esAdmin ? `?nivel=${encodeURIComponent(estado.usuario.nivel_precio)}` : '';
+  const { filas } = await api(`/catalogo${nivel}`);
   estado.catalogo = filas;
 }
 
-/* ─────────── Pantalla de acceso: login o registro ─────────── */
+/* ─────────── Pantalla de acceso: login, registro u olvidé mi clave ─────────── */
 
 function vistaAcceso() {
+  if (estado.modoAcceso === 'olvide') {
+    return `
+      <div class="caja-acceso">
+        <h1>Recuperar tu contraseña</h1>
+        <p class="ayuda">
+          Acá no se manda ningún correo automático: escribí el correo con el que te
+          registraste y le avisamos al equipo para que te ayude a entrar de nuevo.
+        </p>
+        <form id="form-olvide">
+          <label><span>Correo</span><input name="email" type="email" required autocomplete="email" /></label>
+          <button class="btn-primario ancho" type="submit">Avisarle al equipo</button>
+        </form>
+        <p class="cambiar-modo">¿Ya te acordaste? <button data-accion="ir-login">Iniciá sesión</button></p>
+      </div>`;
+  }
   if (estado.modoAcceso === 'login') {
     return `
       <div class="caja-acceso">
@@ -98,6 +114,7 @@ function vistaAcceso() {
           <button class="btn-primario ancho" type="submit">Entrar</button>
         </form>
         <p class="cambiar-modo">¿No tenés cuenta? <button data-accion="ir-registro">Registrate acá</button></p>
+        <p class="cambiar-modo"><button data-accion="ir-olvide">¿Olvidaste tu contraseña?</button></p>
       </div>`;
   }
   return `
@@ -175,6 +192,9 @@ function puntosDeFotos(p, idxActual) {
 
 /** El bloque de "cuántos llevo" — antes de agregar, con cantidad elegible; ya agregado, con +/−. */
 function controlCantidad(p, enCarrito, botonAgregar) {
+  // El dueño mirando desde el panel no tiene cuenta de cliente: no hay
+  // pedido que armar acá, sólo catálogo para revisar.
+  if (estado.usuario?.esAdmin) return '';
   if (enCarrito) {
     return `<div class="cantidad-en-carrito">
       <button type="button" data-accion="restar" data-id="${p.id}">−</button>
@@ -369,16 +389,35 @@ function refrescar() {
 
 function pintarCabecera() {
   const logueado = Boolean(estado.usuario) && (estado.vista === 'catalogo' || estado.vista === 'pedidos');
-  $('#cab-acciones').innerHTML = logueado
-    ? `<span class="quien-soy">Hola, ${escapar(estado.usuario.nombre)}</span>
-       <button type="button" class="mini${estado.vista === 'catalogo' ? ' activo' : ''}" id="ver-catalogo">Catálogo</button>
-       <button type="button" class="mini${estado.vista === 'pedidos' ? ' activo' : ''}" id="ver-pedidos">Mis pedidos</button>
-       <button type="button" class="btn-carrito" id="mostrar-carrito">
-         🛒 <em class="carrito-badge" hidden>0</em>
-       </button>
-       <button type="button" class="mini" id="cerrar-sesion">Salir</button>`
-    : '';
-  $('#carrito').hidden = !(estado.vista === 'catalogo' && estado.usuario);
+  if (!logueado) {
+    $('#cab-acciones').innerHTML = '';
+    $('#carrito').hidden = true;
+    return;
+  }
+  if (estado.usuario.esAdmin) {
+    // El dueño mirando desde el panel: revisa cómo se ve, con el precio que
+    // elija, pero no puede comprar —no hay carrito ni "Mis pedidos"— porque
+    // esto no es una cuenta de cliente real.
+    $('#cab-acciones').innerHTML = `
+      <span class="quien-soy">👁️ Vista de administrador</span>
+      <select id="nivel-admin" class="mini">
+        <option value="canal"${estado.usuario.nivel_precio === 'canal' ? ' selected' : ''}>Precio canal</option>
+        <option value="constructor"${estado.usuario.nivel_precio === 'constructor' ? ' selected' : ''}>Precio constructor</option>
+        <option value="cliente"${estado.usuario.nivel_precio === 'cliente' ? ' selected' : ''}>Precio cliente final</option>
+      </select>
+      <a class="mini" href="/">Volver al panel</a>`;
+    $('#carrito').hidden = true;
+    return;
+  }
+  $('#cab-acciones').innerHTML = `
+    <span class="quien-soy">Hola, ${escapar(estado.usuario.nombre)}</span>
+    <button type="button" class="mini${estado.vista === 'catalogo' ? ' activo' : ''}" id="ver-catalogo">Catálogo</button>
+    <button type="button" class="mini${estado.vista === 'pedidos' ? ' activo' : ''}" id="ver-pedidos">Mis pedidos</button>
+    <button type="button" class="btn-carrito" id="mostrar-carrito">
+      🛒 <em class="carrito-badge" hidden>0</em>
+    </button>
+    <button type="button" class="mini" id="cerrar-sesion">Salir</button>`;
+  $('#carrito').hidden = estado.vista !== 'catalogo';
 }
 
 function pintar() {
@@ -402,6 +441,19 @@ document.addEventListener('submit', async (e) => {
       estado.usuario = await api('/quien-soy');
       estado.vista = 'catalogo';
       await cargarCatalogo();
+      pintar();
+    } catch (err) {
+      avisar(err.message, true);
+    }
+    return;
+  }
+  if (e.target.id === 'form-olvide') {
+    e.preventDefault();
+    const datos = Object.fromEntries(new FormData(e.target));
+    try {
+      const { mensaje } = await api('/olvide-clave', { method: 'POST', body: { email: datos.email } });
+      avisar(mensaje);
+      estado.modoAcceso = 'login';
       pintar();
     } catch (err) {
       avisar(err.message, true);
@@ -433,6 +485,7 @@ document.addEventListener('click', async (e) => {
 
   if (boton.dataset.accion === 'ir-registro') { estado.modoAcceso = 'registro'; pintar(); return; }
   if (boton.dataset.accion === 'ir-login') { estado.modoAcceso = 'login'; pintar(); return; }
+  if (boton.dataset.accion === 'ir-olvide') { estado.modoAcceso = 'olvide'; pintar(); return; }
   if (boton.id === 'cerrar-sesion') {
     await api('/logout', { method: 'POST' });
     estado.usuario = null; estado.carrito.clear(); estado.pedidos = null;
@@ -537,6 +590,17 @@ document.addEventListener('input', (e) => {
     $('.grilla-productos').innerHTML = catalogoFiltrado().length
       ? catalogoFiltrado().map(tarjetaProducto).join('')
       : '<p class="vacio">No hay productos que coincidan con la búsqueda.</p>';
+  }
+});
+
+// Sólo existe en la vista de administrador: cambiar el nivel vuelve a traer
+// el catálogo con los precios de ese nivel, para revisar los tres sin tener
+// que ser tres cuentas distintas.
+document.addEventListener('change', async (e) => {
+  if (e.target.id === 'nivel-admin') {
+    estado.usuario.nivel_precio = e.target.value;
+    await cargarCatalogo();
+    pintar();
   }
 });
 

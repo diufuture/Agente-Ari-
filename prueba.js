@@ -71,6 +71,7 @@ function comprobar(que, real, esperado) {
 const db = await import('./server/db.js');
 const tools = await import('./server/tools.js');
 const imprimir = await import('./server/imprimir.js');
+const portalAuth = await import('./server/portal-auth.js');
 const t = (n, a) => tools.ejecutar(n, a);
 
 /* 1 · Catálogo ---------------------------------------------------- */
@@ -1295,6 +1296,44 @@ comprobar('y de verdad cambiaron (no es que ya tuvieran ese valor)',
   comprobar('un carrito vacío no rompe: avisa que no hay nada', imprimir.paginaVistaPreviaPortal(
     db.portalUsuarioPorEmail('compras@eltornillo.co'), [],
   ).includes('Todavía no agregaste nada'), true);
+
+  // Recuperar la clave: acá no hay correo, así que sólo queda una marca
+  // para que el dueño la vea y le ponga una nueva. Lo crítico es lo que NO
+  // tiene que pasar: ni pedirla ni restablecerla cambian el estado, así que
+  // alguien pendiente o rechazado sigue sin poder entrar después.
+  const pendienteQuePideRecuperar = db.registrarPortalUsuario({
+    nombre: 'Todavía Sin Aprobar', email: 'pendiente@ejemplo.com', clave_hash: 'x:y',
+  });
+  db.pedirRecuperarClavePortal('pendiente@ejemplo.com');
+  comprobar('pedirla no lo aprueba solo', db.obtenerPortalUsuario(pendienteQuePideRecuperar.id).estado, 'pendiente');
+  comprobar('pedir con un correo que no existe no rompe ni avisa nada raro',
+    (() => { try { db.pedirRecuperarClavePortal('no-existe@ejemplo.com'); return 'ok'; } catch { return 'rompió'; } })(), 'ok');
+
+  const nuevaClaveHash = portalAuth.hashClave('OtraClaveNueva123');
+  db.restablecerClavePortal(pendienteQuePideRecuperar.id, nuevaClaveHash);
+  const trasRestablecer = db.obtenerPortalUsuario(pendienteQuePideRecuperar.id);
+  comprobar('restablecer la clave TAMPOCO lo aprueba solo', trasRestablecer.estado, 'pendiente');
+  comprobar('la marca de "pidió recuperar" se limpia al resolverse', trasRestablecer.recuperar_clave_en, null);
+  comprobar('y la clave sí quedó la nueva', portalAuth.claveValida('OtraClaveNueva123', trasRestablecer.clave_hash), true);
+
+  // El mismo restablecimiento, ahora sobre alguien rechazado: tampoco lo
+  // reinstala —para eso está "Aprobar", no la contraseña—.
+  const nivelAntes = db.obtenerPortalUsuario(rechazado.id).nivel_precio;
+  db.restablecerClavePortal(rechazado.id, portalAuth.hashClave('OtraClaveMas123'));
+  const rechazadoTrasRestablecer = db.obtenerPortalUsuario(rechazado.id);
+  comprobar('restablecerle la clave a un rechazado no lo reaprueba', rechazadoTrasRestablecer.estado, 'rechazado');
+  comprobar('ni le toca el nivel de precio', rechazadoTrasRestablecer.nivel_precio, nivelAntes);
+
+  // El estado y el nivel se pueden cambiar las veces que haga falta, no
+  // sólo la primera vez que se aprueba.
+  db.aprobarPortalUsuario(rechazado.id, 'canal');
+  comprobar('un rechazado se puede reinstalar más tarde', db.obtenerPortalUsuario(rechazado.id).estado, 'aprobado');
+  db.aprobarPortalUsuario(rechazado.id, 'constructor');
+  comprobar('y cambiarle el nivel después, sin tener que rechazarlo primero',
+    db.obtenerPortalUsuario(rechazado.id).nivel_precio, 'constructor');
+  db.rechazarPortalUsuario(rechazado.id);
+  comprobar('y a un aprobado se le puede quitar el acceso cuando haga falta',
+    db.obtenerPortalUsuario(rechazado.id).estado, 'rechazado');
 
   // Fotos: la principal más las que se van agregando, sin repetir.
   db.agregarFotoProducto(z9.id, '/uploads/productos/foto-1.jpg');

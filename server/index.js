@@ -315,6 +315,10 @@ const ENTIDADES_VALIDAS = new Set(Object.keys(db.ENTIDADES));
 /* Rutas de API                                                        */
 /* ------------------------------------------------------------------ */
 
+// Los tres niveles de precio del catálogo. Válidos tanto para aprobar un
+// registro como para el "nivel" con el que el dueño previsualiza la tienda.
+const NIVELES_VALIDOS = new Set(['canal', 'constructor', 'cliente']);
+
 async function api(req, res, url) {
   const partes = url.pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
   const [recurso, id] = partes;
@@ -468,26 +472,59 @@ async function api(req, res, url) {
     return json(res, 200, { ok: true, usuario: { nombre: u.nombre, email: u.email } });
   }
 
+  // POST /api/portal/olvide-clave -> pide que le restablezcan la clave. Acá
+  // no se manda ningún correo: sólo queda marcado para que el dueño lo vea
+  // en Tienda y le ponga una contraseña nueva. La respuesta es SIEMPRE la
+  // misma exista o no ese correo, para no delatar qué correos están
+  // registrados; y esto nunca cambia el estado de aprobación de nadie.
+  if (recurso === 'portal' && partes[1] === 'olvide-clave' && req.method === 'POST') {
+    const { email } = await leerJson(req);
+    db.pedirRecuperarClavePortal(email);
+    return json(res, 200, {
+      ok: true,
+      mensaje: 'Si ese correo está registrado, ya se lo hicimos saber al equipo. Te van a contactar para ayudarte a entrar.',
+    });
+  }
+
   // POST /api/portal/logout
   if (recurso === 'portal' && partes[1] === 'logout' && req.method === 'POST') {
     res.setHeader('Set-Cookie', portalAuth.cookieBorrada(req));
     return json(res, 200, { ok: true });
   }
 
-  // Lo de acá abajo sí necesita estar aprobado.
-  if (recurso === 'portal' && ['catalogo', 'pedido', 'mis-pedidos', 'quien-soy', 'vista-previa'].includes(partes[1])) {
+  // "quien-soy" y "catalogo" son de sólo lectura, así que además de un
+  // cliente aprobado también los puede pedir el dueño con SU sesión del
+  // panel —sin tener que registrarse como un cliente más—: es lo que le deja
+  // entrar a /tienda.html a revisar cómo se ve el catálogo (fotos,
+  // descripciones, precios de cada nivel) para hacer gestión sobre él.
+  // Nunca alcanza para comprar: pedido/vista-previa/mis-pedidos siguen
+  // pidiendo la cuenta real de un cliente aprobado, más abajo.
+  if (recurso === 'portal' && (partes[1] === 'quien-soy' || partes[1] === 'catalogo') && req.method === 'GET') {
+    const idPortal = portalAuth.idDeSesion(req);
+    const usuarioPortal = idPortal ? db.obtenerPortalUsuario(idPortal) : null;
+    if (usuarioPortal?.estado === 'aprobado') {
+      if (partes[1] === 'quien-soy') {
+        return json(res, 200, { nombre: usuarioPortal.nombre, email: usuarioPortal.email, nivel_precio: usuarioPortal.nivel_precio });
+      }
+      return json(res, 200, { filas: db.catalogoPublico(usuarioPortal.nivel_precio) });
+    }
+    if (auth.sesionValida(req)) {
+      const nivel = NIVELES_VALIDOS.has(url.searchParams.get('nivel')) ? url.searchParams.get('nivel') : 'cliente';
+      if (partes[1] === 'quien-soy') {
+        return json(res, 200, { nombre: 'Vista de administrador', esAdmin: true, nivel_precio: nivel });
+      }
+      return json(res, 200, { filas: db.catalogoPublico(nivel) });
+    }
+    return json(res, 401, { error: 'Iniciá sesión para ver el catálogo.' });
+  }
+
+  // Lo de acá abajo es para comprar de verdad: hace falta ser un cliente
+  // aprobado, la sesión del panel no alcanza.
+  if (recurso === 'portal' && ['pedido', 'mis-pedidos', 'vista-previa'].includes(partes[1])) {
     const idPortal = portalAuth.idDeSesion(req);
     const usuarioPortal = idPortal ? db.obtenerPortalUsuario(idPortal) : null;
     if (!usuarioPortal || usuarioPortal.estado !== 'aprobado') {
       return json(res, 401, { error: 'Iniciá sesión para ver el catálogo.' });
-    }
-
-    if (partes[1] === 'quien-soy' && req.method === 'GET') {
-      return json(res, 200, { nombre: usuarioPortal.nombre, email: usuarioPortal.email, nivel_precio: usuarioPortal.nivel_precio });
-    }
-
-    if (partes[1] === 'catalogo' && req.method === 'GET') {
-      return json(res, 200, { filas: db.catalogoPublico(usuarioPortal.nivel_precio) });
     }
 
     if (partes[1] === 'pedido' && req.method === 'POST') {
@@ -537,6 +574,19 @@ async function api(req, res, url) {
     if (partes[2] && partes[3] === 'rechazar' && req.method === 'POST') {
       try {
         return json(res, 200, db.rechazarPortalUsuario(Number(partes[2])));
+      } catch (err) {
+        return json(res, 400, { error: err.message });
+      }
+    }
+    // POST /api/portal/usuarios/:id/clave -> el dueño le pone una clave
+    // nueva a mano (o una generada), sin tocar su estado ni su nivel.
+    if (partes[2] && partes[3] === 'clave' && req.method === 'POST') {
+      try {
+        const { clave } = await leerJson(req);
+        if (!String(clave ?? '').trim() || String(clave).length < 6) {
+          return json(res, 400, { error: 'La contraseña tiene que tener al menos 6 caracteres.' });
+        }
+        return json(res, 200, db.restablecerClavePortal(Number(partes[2]), portalAuth.hashClave(clave)));
       } catch (err) {
         return json(res, 400, { error: err.message });
       }

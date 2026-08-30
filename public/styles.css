@@ -253,6 +253,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: now
 .pastilla.vencido    { color: var(--alerta);  border-color: color-mix(in srgb, var(--alerta) 40%, transparent); }
 .pastilla.enviada,
 .pastilla.portal     { color: var(--acento);  border-color: color-mix(in srgb, var(--acento) 40%, transparent); }
+.pastilla.portal-recupera { color: var(--ambar); border-color: color-mix(in srgb, var(--ambar) 40%, transparent); }
 .pastilla.alta       { color: var(--alerta); }
 .pastilla.baja       { color: var(--texto-3); }
 
@@ -1545,7 +1546,16 @@ a.cajon-btn { text-decoration: none; }
   border: 1px solid var(--borde); background: var(--panel); color: var(--texto);
   font-family: inherit;
 }
-.portal-botones { display: flex; gap: 8px; }
+.portal-botones { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.portal-clave-form {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  flex-basis: 100%; margin-top: 2px;
+}
+.portal-clave-form input {
+  font-size: 13px; padding: 7px 10px; border-radius: 8px; min-width: 220px;
+  border: 1px solid var(--borde); background: var(--panel); color: var(--texto); font-family: inherit;
+}
 
 /* ─────────── Cargar el catálogo en la cotización ─────────── */
 

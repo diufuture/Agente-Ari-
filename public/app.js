@@ -30,6 +30,7 @@ const estado = {
   verHistorialCot: false,  // en Cotizaciones, ver las cerradas en vez de las abiertas
   filtroEstadoCot: null,   // 'pendiente' | 'aprobada' | null (todas)
   filtroPortal: 'pendiente', // en Tienda, qué registros mostrar
+  portalClaveAbierta: null, // id del registro del portal al que se le está restableciendo la clave
   clienteCotizaciones: null, // {id, nombre} cuando se miran las de un cliente puntual
   recordatorioEditando: null, // id del pendiente abierto para corregir
   tipoProducto: null,      // filtro del catálogo por tipo (Display, Switch EU…)
@@ -1548,6 +1549,9 @@ function vistaTienda(filas) {
   const filtro = (valor, rotulo) => `<button class="chip${estado.filtroPortal === valor ? ' activo' : ''}"
     data-accion="filtrar-portal" data-estado="${valor}">${rotulo}</button>`;
 
+  const opcionesNivel = (actual) => ['canal', 'constructor', 'cliente']
+    .map((n) => `<option value="${n}"${actual === n ? ' selected' : ''}>${ETIQUETA_NIVEL[n]}</option>`).join('');
+
   const filas_html = filas.length ? filas.map((u) => `
     <div class="tarjeta portal-fila">
       <div class="portal-datos">
@@ -1555,18 +1559,31 @@ function vistaTienda(filas) {
         <span class="portal-contacto">${escapar(u.email)}${u.telefono ? ` · ${escapar(u.telefono)}` : ''}</span>
         <span class="portal-fecha">Pidió acceso el ${escapar(fmtFecha(u.creado_en.slice(0, 10)))}</span>
         ${u.nivel_precio ? `<span class="pastilla aprobado">ve el ${escapar(ETIQUETA_NIVEL[u.nivel_precio] || u.nivel_precio).toLowerCase()}</span>` : ''}
+        ${u.recuperar_clave_en ? `<span class="pastilla portal-recupera">🔑 Pidió recuperar su clave el ${escapar(fmtFecha(u.recuperar_clave_en.slice(0, 10)))}</span>` : ''}
       </div>
-      ${u.estado === 'pendiente' ? `
-        <form class="portal-aprobar" data-id="${u.id}">
-          <select name="nivel_precio" required>
-            <option value="">Con qué precio lo dejo ver…</option>
-            <option value="canal">Precio canal</option>
-            <option value="constructor">Precio constructor</option>
-            <option value="cliente">Precio cliente final</option>
-          </select>
+
+      <form class="portal-aprobar" data-id="${u.id}">
+        <select name="nivel_precio" required>
+          <option value="">Con qué precio lo dejo ver…</option>
+          ${opcionesNivel(u.nivel_precio)}
+        </select>
+        <div class="portal-botones">
+          <button type="submit" class="mini destacado">${u.estado === 'aprobado' ? 'Guardar nivel' : 'Aprobar'}</button>
+          ${u.estado !== 'rechazado'
+            ? `<button type="button" class="mini peligro" data-accion="rechazar-portal" data-id="${u.id}">Rechazar</button>` : ''}
+          <button type="button" class="mini" data-accion="alternar-clave-portal" data-id="${u.id}">
+            ${estado.portalClaveAbierta === u.id ? 'Cancelar' : 'Restablecer contraseña'}
+          </button>
+        </div>
+      </form>
+
+      ${estado.portalClaveAbierta === u.id ? `
+        <form class="portal-clave-form" data-id="${u.id}">
+          <input type="text" name="clave" placeholder="Contraseña nueva (mínimo 6 caracteres)"
+                 minlength="6" required autocomplete="off" />
           <div class="portal-botones">
-            <button type="submit" class="mini destacado">Aprobar</button>
-            <button type="button" class="mini peligro" data-accion="rechazar-portal" data-id="${u.id}">Rechazar</button>
+            <button type="button" class="mini" data-accion="generar-clave-portal" data-id="${u.id}">Generar una</button>
+            <button type="submit" class="mini destacado">Guardar contraseña</button>
           </div>
         </form>` : ''}
     </div>`).join('') : `<div class="tarjeta"><div class="vacio">
@@ -1579,12 +1596,15 @@ function vistaTienda(filas) {
       Quien entra a <code>/tienda.html</code> se registra y queda <b>pendiente</b> hasta que
       lo aprobás acá, con el precio que le corresponde —canal, constructor o cliente final—.
       Sólo entonces puede mirar el catálogo y armar un pedido; el pedido llega como una
-      cotización más, marcada «Desde el catálogo».
+      cotización más, marcada «Desde el catálogo». El nivel y el estado de cualquiera se
+      pueden cambiar cuando quieras, no sólo la primera vez; y si alguien se queda sin poder
+      entrar, acá mismo se le pone una contraseña nueva —no hace falta la vieja—.
     </p>
     <div class="barra-productos">
       ${filtro('pendiente', 'Pendientes')}
       ${filtro('aprobado', 'Aprobados')}
       ${filtro('rechazado', 'Rechazados')}
+      <a class="mini" href="/tienda.html" target="_blank" rel="noopener">Ver la tienda ↗</a>
     </div>
     <div class="portal-lista">${filas_html}</div>`;
 }
@@ -3929,6 +3949,20 @@ $('#contenido').addEventListener('click', async (e) => {
     }
     return;
   }
+  if (accion === 'alternar-clave-portal') {
+    estado.portalClaveAbierta = estado.portalClaveAbierta === Number(id) ? null : Number(id);
+    await pintar();
+    return;
+  }
+  if (accion === 'generar-clave-portal') {
+    // Fácil de leer y de dictar por teléfono: sin 0/O ni 1/l/I, que se
+    // confunden al copiarla a mano.
+    const ALFABETO = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    const clave = Array.from({ length: 8 }, () => ALFABETO[Math.floor(Math.random() * ALFABETO.length)]).join('');
+    const input = boton.closest('.portal-clave-form')?.querySelector('[name="clave"]');
+    if (input) { input.value = clave; input.type = 'text'; input.select(); }
+    return;
+  }
   if (accion === 'filtrar-estado-cot') {
     estado.filtroEstadoCot = e.target.closest('[data-accion]').dataset.estado || null;
     await pintar();
@@ -4430,6 +4464,27 @@ $('#contenido').addEventListener('submit', async (e) => {
     } catch (err) {
       avisar(err.message, true);
       if (boton) { boton.disabled = false; boton.textContent = 'Aprobar'; }
+    }
+    return;
+  }
+
+  // Ponerle una contraseña nueva a alguien del portal —a mano, o la que
+  // generó el botón de arriba—. No hace falta la vieja, y no cambia si
+  // puede entrar o con qué precio: sólo la clave.
+  if (e.target.classList.contains('portal-clave-form')) {
+    e.preventDefault();
+    const idPortal = e.target.dataset.id;
+    const clave = new FormData(e.target).get('clave');
+    const boton = e.target.querySelector('button[type="submit"]');
+    if (boton) { boton.disabled = true; boton.textContent = 'Guardando…'; }
+    try {
+      await api(`/portal/usuarios/${idPortal}/clave`, { method: 'POST', body: { clave } });
+      avisar('Contraseña actualizada ✓');
+      estado.portalClaveAbierta = null;
+      await pintar();
+    } catch (err) {
+      avisar(err.message, true);
+      if (boton) { boton.disabled = false; boton.textContent = 'Guardar contraseña'; }
     }
     return;
   }

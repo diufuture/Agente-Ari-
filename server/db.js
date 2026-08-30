@@ -341,6 +341,15 @@ try {
     db.exec('ALTER TABLE movimientos_stock ADD COLUMN cotizacion_id INTEGER REFERENCES cotizaciones(id) ON DELETE SET NULL');
   }
 
+  // Cuándo pidió recuperar la clave, para que se vea en el panel quién
+  // necesita que le restablezcan la contraseña. No manda ningún correo —acá
+  // no hay servidor de correo—: sólo deja la marca para que el dueño la
+  // atienda desde Tienda, con la contraseña que él mismo le ponga.
+  const portal = columnasDe('clientes_portal');
+  if (!portal.includes('recuperar_clave_en')) {
+    db.exec('ALTER TABLE clientes_portal ADD COLUMN recuperar_clave_en TEXT');
+  }
+
   // Estos dos filtros son los que más se repiten (toda lista de cotizaciones
   // pide archivada = 0; todo filtro por tipo de producto es sobre los
   // activos), así que van compuestos en vez de sueltos. Se crean acá, no en
@@ -2276,6 +2285,7 @@ function calcularResumen() {
 const PORTAL_PUBLICO = (u) => ({
   id: u.id, nombre: u.nombre, empresa: u.empresa, telefono: u.telefono, email: u.email,
   estado: u.estado, nivel_precio: u.nivel_precio, cliente_id: u.cliente_id, creado_en: u.creado_en,
+  recuperar_clave_en: u.recuperar_clave_en,
 });
 
 /**
@@ -2341,6 +2351,37 @@ export function rechazarPortalUsuario(id) {
 
 export function eliminarPortalUsuario(id) {
   return eliminar('clientes_portal', id);
+}
+
+/**
+ * Alguien de la tienda pide recuperar su clave. Acá no hay servidor de
+ * correo para mandarle un enlace, así que lo único que pasa es que queda
+ * marcado para que el dueño lo vea en Tienda y le ponga una contraseña
+ * nueva —no cambia el estado ni el nivel de precio: seguir pendiente o
+ * rechazado no se arregla por acá, sólo la clave—.
+ *
+ * Se responde siempre igual exista o no ese correo (eso lo decide quien
+ * llama a esta función, no acá), para no delatar qué correos están
+ * registrados.
+ */
+export function pedirRecuperarClavePortal(email) {
+  const u = portalUsuarioPorEmail(email);
+  if (!u) return false;
+  run("UPDATE clientes_portal SET recuperar_clave_en = datetime('now','localtime') WHERE id = ?", [u.id]);
+  return true;
+}
+
+/**
+ * El dueño le pone una clave nueva desde el panel —a mano, o generada—.
+ * Sólo cambia la clave: el estado (aprobado/pendiente/rechazado) y el nivel
+ * de precio siguen intactos, así que esto nunca es una puerta trasera para
+ * entrar sin aprobación.
+ */
+export function restablecerClavePortal(id, clave_hash) {
+  const u = obtenerPortalUsuario(id);
+  if (!u) throw new Error('Ese registro no existe.');
+  run("UPDATE clientes_portal SET clave_hash = ?, recuperar_clave_en = NULL WHERE id = ?", [clave_hash, id]);
+  return PORTAL_PUBLICO(obtenerPortalUsuario(id));
 }
 
 /**

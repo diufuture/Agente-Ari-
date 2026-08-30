@@ -193,16 +193,21 @@ totales), `PATCH|DELETE /api/cotizacion_items/:id`, `POST
 que todo lo demás—.
 
 Del catálogo público (`/tienda.html`), con su propia sesión: `POST
-/api/portal/registro`, `POST /api/portal/login`, `POST /api/portal/logout`, y
-—sólo para un registro ya aprobado— `GET /api/portal/catalogo`, `GET
-/api/portal/quien-soy`, `GET /api/portal/mis-pedidos`, `POST
-/api/portal/vista-previa` (arma la página imprimible del carrito, sin tocar
-la base — para mirar antes de decidirse) y `POST /api/portal/pedido` (arma
-la cotización de verdad, a partir del carrito). Para
-administrarlo desde el panel: `GET /api/portal/usuarios?estado=`, `POST
-/api/portal/usuarios/:id/aprobar` (con el nivel de precio), `POST
-/api/portal/usuarios/:id/rechazar`, y `POST|DELETE
-/api/productos/:id/fotos` para la galería de fotos extra de un producto.
+/api/portal/registro`, `POST /api/portal/login`, `POST /api/portal/logout`,
+`POST /api/portal/olvide-clave` (deja la marca para que el dueño le
+restablezca la contraseña — no manda correo), y —sólo para un registro ya
+aprobado— `GET /api/portal/mis-pedidos`, `POST /api/portal/vista-previa`
+(arma la página imprimible del carrito, sin tocar la base — para mirar antes
+de decidirse) y `POST /api/portal/pedido` (arma la cotización de verdad, a
+partir del carrito). `GET /api/portal/catalogo` y `GET /api/portal/quien-soy`
+son las dos excepciones: además de un cliente aprobado, también responden con
+la sesión del panel —es lo que deja entrar a Ver la tienda—. Para administrar
+el catálogo desde el panel: `GET /api/portal/usuarios?estado=`, `POST
+/api/portal/usuarios/:id/aprobar` (con el nivel de precio — sirve también
+para cambiárselo a uno ya aprobado), `POST /api/portal/usuarios/:id/rechazar`,
+`POST /api/portal/usuarios/:id/clave` (le pone una contraseña nueva), y
+`POST|DELETE /api/productos/:id/fotos` para la galería de fotos extra de un
+producto.
 
 ## Cotizaciones con renglones
 
@@ -846,6 +851,44 @@ Cada cliente aprobado ve **un solo precio, el que le asignaste**: nunca los
 tres. Un cliente final no tiene por qué ver el precio de canal —sería
 mostrarle el margen con el que se trabaja con los distribuidores—, así que ni
 siquiera viaja al navegador el que no le corresponde.
+
+### Si alguien se olvida la contraseña
+
+En la pantalla de acceso hay un **«¿Olvidaste tu contraseña?»**. Como acá no
+hay servidor de correo para mandar un enlace, lo que hace es dejar una marca
+—**🔑 Pidió recuperar su clave**— junto a esa persona en **Tienda**, para que
+la veas y le pongas una contraseña nueva vos (siguiente sección). No delata
+si ese correo existe o no: el aviso es siempre el mismo, exista o no una
+cuenta con ese correo.
+
+Pedir la recuperación —o que se la restablezcas— **nunca aprueba a nadie ni
+le cambia el nivel de precio**: sólo toca la contraseña. Alguien pendiente o
+rechazado sigue sin poder entrar aunque le hayas puesto una clave nueva; para
+eso está aprobarlo, que es una decisión aparte.
+
+### Gestionar a alguien que ya está aprobado (o rechazado)
+
+Todo esto se hace desde la ficha de cada uno en **Tienda**, en cualquiera de
+las tres pestañas —Pendientes, Aprobados, Rechazados—, no sólo la primera vez:
+
+- **Cambiar el nivel de precio**: elegís el nuevo en el desplegable y
+  **Guardar nivel**. Sirve para cuando un cliente pasa de comprar como
+  particular a tener cuenta de constructor, por ejemplo.
+- **Aprobar / Rechazar**: se puede ir y volver las veces que haga falta —un
+  rechazado se puede aprobar más tarde, y a un aprobado se le puede quitar el
+  acceso cuando ya no corresponda—.
+- **Restablecer contraseña**: le ponés una nueva a mano, o tocás **Generar
+  una** para que arme una al azar (fácil de dictar por teléfono: sin 0/O ni
+  1/l/I, que se confunden). No hace falta la contraseña vieja.
+
+### Ver la tienda como la ve un cliente
+
+El botón **Ver la tienda ↗** en Tienda abre `/tienda.html` con tu propia
+sesión del panel —no hace falta registrarte como un cliente más—. Entrás
+directo al catálogo, marcado **«Vista de administrador»**, con un selector
+para mirarlo con cualquiera de los tres precios y revisar cómo quedaron las
+fotos y las descripciones. No hay carrito ni «Mis pedidos» ahí: es sólo para
+mirar, no es una cuenta de cliente real y no se puede comprar desde ahí.
 
 ### Registrarse y que te aprueben no te hace cliente
 
