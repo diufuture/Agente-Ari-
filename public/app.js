@@ -272,6 +272,40 @@ async function guardarPdfDeCotizacion(cot) {
   return { bajado: true };
 }
 
+/**
+ * Comparte un PDF ya guardado (una ficha técnica, una oferta subida) desde
+ * el visor propio de la aplicación.
+ *
+ * Compartir sólo la dirección manda el link pelado -en WhatsApp llega como
+ * un mensaje de texto, no como el documento adjunto-, así que primero se
+ * baja el PDF y se arma un archivo de verdad, igual que con "Guardar PDF".
+ * Si algo falla al bajarlo (sin conexión, lo que sea) se cae al link, que
+ * sigue siendo mejor que dejar el botón sin hacer nada.
+ */
+async function compartirDocumento(url, titulo) {
+  let archivo = null;
+  try {
+    const r = await fetch(url);
+    if (r.ok) {
+      const nombre = /\.pdf$/i.test(titulo) ? titulo : `${titulo}.pdf`;
+      archivo = new File([await r.blob()], nombre, { type: 'application/pdf' });
+    }
+  } catch { /* sigue con el link */ }
+
+  try {
+    if (archivo && navigator.canShare?.({ files: [archivo] })) {
+      await navigator.share({ files: [archivo], title: titulo });
+    } else {
+      await navigator.share({ url, title: titulo });
+    }
+    return { compartido: true };
+  } catch (err) {
+    // Cerrar el menú a propósito no es un error que haya que mostrar.
+    if (err?.name === 'AbortError') return { cancelado: true };
+    throw err;
+  }
+}
+
 function abrirVisorPdf(url, titulo = 'Documento') {
   const visor = $('#visor-pdf');
   $('#visor-titulo').textContent = titulo;
@@ -5238,11 +5272,20 @@ document.addEventListener('click', (e) => {
 });
 
 $('#visor-cerrar').addEventListener('click', () => cerrarVisorPdf());
-$('#visor-compartir').addEventListener('click', (e) => {
-  const { url, titulo } = e.currentTarget.dataset;
-  // Si cancela la hoja de compartir, el navegador rechaza la promesa con
-  // AbortError: no es un error real, no hay nada que avisar.
-  navigator.share({ url, title: titulo }).catch(() => {});
+$('#visor-compartir').addEventListener('click', async (e) => {
+  const boton = e.currentTarget;
+  const { url, titulo } = boton.dataset;
+  const rotulo = boton.textContent;
+  boton.disabled = true;
+  boton.textContent = 'Preparando…';
+  try {
+    await compartirDocumento(url, titulo);
+  } catch (err) {
+    avisar(err.message || 'No se pudo compartir.', true);
+  } finally {
+    boton.disabled = false;
+    boton.textContent = rotulo;
+  }
 });
 
 // Que un bloque plegado siga plegado la próxima vez que se entre.

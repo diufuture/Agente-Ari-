@@ -1165,6 +1165,13 @@ abre la hoja de compartir del sistema (WhatsApp, Mail, Guardar en
 Archivos...) con el PDF ya puesto. Sólo aparece en los navegadores que
 la soportan; donde no, sigue estando "Abrir aparte" como antes.
 
+Antes de abrir esa hoja, el botón baja el PDF y arma un archivo de verdad
+—no manda sólo la dirección—: mandar sólo el link hace que en WhatsApp
+llegue como un mensaje de texto, no como el documento adjunto. Si por lo
+que sea no se puede bajar (sin conexión) o el navegador es de los que
+sólo saben compartir texto, se cae solo al link, para no dejar el botón
+sin hacer nada.
+
 ## Agendamientos que llegan de la web
 
 El formulario de entregas de la web (el que se apoya en una hoja de Google)
