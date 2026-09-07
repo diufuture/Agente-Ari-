@@ -1150,6 +1150,21 @@ armado, y recién después se le pone la dirección: abrirla más tarde —cuand
 ya terminó de armarse— ya no cuenta como algo que pidió la persona, y el
 navegador la bloquea como si fuera publicidad.
 
+### Compartir una ficha técnica (u otro PDF ya guardado) desde el celular
+
+Los PDF que ya están guardados —la ficha técnica de un producto, una
+cotización subida como archivo— se abren en el **visor propio** de la
+aplicación (adentro de un recuadro, no en una pestaña del navegador), para
+que "Cerrar" te devuelva a donde estabas sin perder la lista.
+
+En el celular con la aplicación instalada (ícono en la pantalla de inicio),
+adentro de ese visor no existe ningún botón nativo para compartir el
+documento: no es Safari, es la propia app, así que no hay barra de
+navegador con su botón de compartir. El botón **Compartir** del visor
+abre la hoja de compartir del sistema (WhatsApp, Mail, Guardar en
+Archivos...) con el PDF ya puesto. Sólo aparece en los navegadores que
+la soportan; donde no, sigue estando "Abrir aparte" como antes.
+
 ## Agendamientos que llegan de la web
 
 El formulario de entregas de la web (el que se apoya en una hoja de Google)

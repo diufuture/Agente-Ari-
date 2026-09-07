@@ -1354,12 +1354,12 @@ body.con-visor { overflow: hidden; }
   flex: 1; min-width: 0; font-size: 14px; font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.visor-aparte {
+.visor-aparte, .visor-compartir {
   flex-shrink: 0; font-size: 12px; text-decoration: none; color: var(--acento);
   border: 1px solid color-mix(in srgb, var(--acento) 40%, var(--borde));
-  border-radius: 8px; padding: 7px 12px;
+  border-radius: 8px; padding: 7px 12px; background: none; font-family: inherit; cursor: pointer;
 }
-.visor-aparte:hover { background: color-mix(in srgb, var(--acento) 14%, transparent); }
+.visor-aparte:hover, .visor-compartir:hover { background: color-mix(in srgb, var(--acento) 14%, transparent); }
 
 .visor-marco {
   flex: 1; width: 100%; border: none; background: #fff;

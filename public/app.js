@@ -278,6 +278,15 @@ function abrirVisorPdf(url, titulo = 'Documento') {
   $('#visor-aparte').hidden = false;
   $('#visor-aparte').href = url;
   $('#visor-marco').src = url;
+  // Instalada en el celular (ícono agregado a la pantalla de inicio), un PDF
+  // abierto adentro no tiene el botón nativo de compartir — ni Safari ni el
+  // visor de por sí dan esa opción ahí. El botón "Compartir" usa la hoja de
+  // compartir del propio celular (WhatsApp, Mail, Guardar en Archivos...),
+  // que sí funciona instalada. Sólo se muestra donde el navegador lo soporta.
+  const compartir = $('#visor-compartir');
+  compartir.hidden = !navigator.share;
+  compartir.dataset.url = new URL(url, location.origin).href;
+  compartir.dataset.titulo = titulo;
   visor.hidden = false;
   document.body.classList.add('con-visor');
   if (!visorEnHistorial) {
@@ -5229,6 +5238,12 @@ document.addEventListener('click', (e) => {
 });
 
 $('#visor-cerrar').addEventListener('click', () => cerrarVisorPdf());
+$('#visor-compartir').addEventListener('click', (e) => {
+  const { url, titulo } = e.currentTarget.dataset;
+  // Si cancela la hoja de compartir, el navegador rechaza la promesa con
+  // AbortError: no es un error real, no hay nada que avisar.
+  navigator.share({ url, title: titulo }).catch(() => {});
+});
 
 // Que un bloque plegado siga plegado la próxima vez que se entre.
 $('#contenido').addEventListener('toggle', (e) => {
