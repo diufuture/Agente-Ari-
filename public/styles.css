@@ -1250,6 +1250,11 @@ td.vencido { color: var(--alerta); font-weight: 600; }
 }
 .chip em { font-style: normal; opacity: .55; margin-left: 3px; font-size: 11px; }
 
+.resumen-cliente-cobro {
+  margin: -8px 0 18px; font-size: 14px; color: var(--texto-2);
+}
+.resumen-cliente-cobro .dinero { color: var(--acento-2); font-weight: 700; }
+
 .etiqueta-tipo {
   display: inline-block; font-size: 11px; font-weight: 600; white-space: nowrap;
   padding: 2px 8px; border-radius: 999px;

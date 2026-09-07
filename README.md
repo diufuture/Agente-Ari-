@@ -458,6 +458,14 @@ cotización aprobada sin un cobro registrado aparte no contaba como "por
 cobrar" en ningún lado salvo en Cobros. Ahora es un solo cálculo, en el
 servidor, y las pantallas lo usan igual.
 
+### Agrupar por cliente
+
+Cuando hay pendientes de varios clientes a la vez, arriba de la lista
+aparecen chips con cada uno —igual que el filtro por tipo en Productos—,
+con lo que debe al lado. Tocar uno deja sólo lo suyo (cobros sueltos y
+saldo de cotizaciones aprobadas juntos) y muestra cuánto debe en total, sin
+sumar renglón por renglón; "Todos" vuelve a mostrarlos a todos.
+
 ## Ficha del cliente
 
 Al tocar un cliente en la lista se abre su ficha, que reúne todo lo suyo en una

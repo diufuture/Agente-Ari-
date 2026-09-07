@@ -1,6 +1,6 @@
 {
   "name": "clic-control-ari",
-  "version": "2026.09.07.2",
+  "version": "2026.09.07.3",
   "description": "Ari — asistente de voz para Clic Control: agenda, clientes, cotizaciones, cobros y recordatorios.",
   "type": "module",
   "main": "server/index.js",

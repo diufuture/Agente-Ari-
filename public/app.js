@@ -34,6 +34,7 @@ const estado = {
   clienteCotizaciones: null, // {id, nombre} cuando se miran las de un cliente puntual
   recordatorioEditando: null, // id del pendiente abierto para corregir
   tipoProducto: null,      // filtro del catálogo por tipo (Display, Switch EU…)
+  filtroClienteCobro: null, // en Cobros, agrupa por este cliente puntual (nombre) o null (todos)
   tiposConocidos: [],      // los tipos ya usados, para sugerirlos al editar
   subiendoFichaPara: null, // id del producto al que se le va a adjuntar la ficha
   subiendoOferta: false,   // formulario para subir una cotización ya hecha en PDF
@@ -2436,7 +2437,7 @@ function barraClientes(filas) {
 function vistaCobros(pendientes, total, cerrados) {
   const hoyStr = new Date().toLocaleDateString('sv-SE');
 
-  const filas = pendientes.map((c) => {
+  const filaDe = (c) => {
     const vencido = c.vence_en && String(c.vence_en).slice(0, 10) < hoyStr;
     return `<tr>
       <td data-rotulo="Vence" class="${vencido ? 'vencido' : ''}">${
@@ -2461,16 +2462,39 @@ function vistaCobros(pendientes, total, cerrados) {
              <button class="mini peligro" data-accion="borrar" data-entidad="cobros" data-id="${c.id}">Borrar</button>`}
       </div></td>
     </tr>`;
-  }).join('');
+  };
 
-  const lista = pendientes.length
+  const tablaDe = (filas, vacio) => filas.length
     ? `<div class="tarjeta"><div class="tabla-envoltura"><table>
         <thead><tr><th>Vence</th><th>Concepto</th><th>Cliente</th><th class="num">Falta</th><th></th></tr></thead>
-        <tbody>${filas}</tbody>
+        <tbody>${filas.map(filaDe).join('')}</tbody>
       </table></div></div>`
-    : `<div class="tarjeta"><div class="vacio">
-        <strong>Nada por cobrar</strong>Las cotizaciones que apruebes aparecen acá con su saldo, sin tener que cargarlas de nuevo.
-      </div></div>`;
+    : `<div class="tarjeta"><div class="vacio">${vacio}</div></div>`;
+
+  // Un cliente puede tener varias ofertas aprobadas o cobros sueltos a la
+  // vez; agrupados acá es la única forma de saber de un vistazo cuánto debe
+  // en total, sin sumar renglón por renglón.
+  const porCliente = new Map();
+  for (const c of pendientes) {
+    if (!c.cliente) continue;
+    const acc = porCliente.get(c.cliente) || { nombre: c.cliente, monto: 0, n: 0 };
+    acc.monto += Number(c.monto) || 0;
+    acc.n += 1;
+    porCliente.set(c.cliente, acc);
+  }
+  const clientes = [...porCliente.values()].sort((a, b) => b.monto - a.monto);
+
+  const chipsClientes = clientes.length > 1 ? `<div class="filtros-tipo">
+    <button class="chip${estado.filtroClienteCobro ? '' : ' activo'}" data-accion="filtrar-cliente-cobro" data-cliente="">Todos</button>
+    ${clientes.map((cl) => `<button class="chip${estado.filtroClienteCobro === cl.nombre ? ' activo' : ''}"
+      data-accion="filtrar-cliente-cobro" data-cliente="${escapar(cl.nombre)}">${escapar(cl.nombre)}
+      <em>${fmtDinero(cl.monto)}</em></button>`).join('')}
+  </div>` : '';
+
+  const filtro = estado.filtroClienteCobro;
+  const pendientesVistos = filtro ? pendientes.filter((c) => c.cliente === filtro) : pendientes;
+  const cerradosVistos = filtro ? cerrados.filter((c) => c.cliente === filtro) : cerrados;
+  const clienteActivo = filtro ? porCliente.get(filtro) : null;
 
   return `
     <div class="metricas">
@@ -2478,8 +2502,17 @@ function vistaCobros(pendientes, total, cerrados) {
       ${metrica(pendientes.filter((c) => c.origen === 'cotizacion').length, 'Cotizaciones aprobadas')}
       ${metrica(pendientes.filter((c) => c.origen === 'cobro').length, 'Cobros sueltos')}
     </div>
-    ${bloque(`Por cobrar · ${pendientes.length}`, lista)}
-    ${cerrados.length ? bloque('Ya cobrados', tabla('cobros', ['vence_en', 'concepto', 'cliente', 'monto', 'estado'], cerrados, { compacta: true })) : ''}`;
+    ${chipsClientes}
+    ${clienteActivo ? `<div class="tarjeta resumen-cliente-cobro">
+      <strong>${escapar(clienteActivo.nombre)}</strong> debe
+      <span class="dinero">${fmtDinero(clienteActivo.monto)}</span>
+      en ${clienteActivo.n} ${clienteActivo.n === 1 ? 'cobro' : 'cobros'} pendiente${clienteActivo.n === 1 ? '' : 's'}.
+    </div>` : ''}
+    ${bloque(`Por cobrar · ${pendientesVistos.length}`, tablaDe(pendientesVistos,
+      filtro
+        ? `<strong>Nada por cobrar</strong>${escapar(filtro)} no tiene cobros pendientes ahora mismo.`
+        : `<strong>Nada por cobrar</strong>Las cotizaciones que apruebes aparecen acá con su saldo, sin tener que cargarlas de nuevo.`))}
+    ${cerradosVistos.length ? bloque('Ya cobrados', tabla('cobros', ['vence_en', 'concepto', 'cliente', 'monto', 'estado'], cerradosVistos, { compacta: true })) : ''}`;
 }
 
 /**
@@ -4098,6 +4131,12 @@ $('#contenido').addEventListener('click', async (e) => {
   if (accion === 'filtrar-tipo') {
     const t = e.target.closest('[data-accion]').dataset.tipo;
     estado.tipoProducto = t || null;
+    await pintar();
+    return;
+  }
+  if (accion === 'filtrar-cliente-cobro') {
+    const cliente = e.target.closest('[data-accion]').dataset.cliente;
+    estado.filtroClienteCobro = cliente || null;
     await pintar();
     return;
   }
