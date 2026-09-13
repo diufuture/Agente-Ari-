@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- Uno solo, sin atar al sistema: el color lo pone el tema elegido. Con dos
+       etiquetas gobernadas por prefers-color-scheme, la barra de estado seguía
+       al celular y contradecía la elección. -->
+  <meta name="theme-color" content="#071a2e" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Ari" />
+  <title>Click Control · Ari</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icono.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icono.svg" />
+  <script>
+    // El tema elegido se aplica ACÁ, antes de que se dibuje nada. Si esperara
+    // a app.js —que carga como módulo, o sea después— la pantalla aparecería
+    // oscura y cambiaría a clara de golpe delante de los ojos.
+    //
+    // "auto" no se guarda como tal en el atributo: se resuelve ahora contra lo
+    // que diga el sistema. Así el CSS sólo tiene que conocer dos temas, en vez
+    // de repetir la paleta clara para el caso automático y para el elegido.
+    (function () {
+      try {
+        var elegido = localStorage.getItem('ari_tema') || 'auto';
+        var oscuroDelSistema = !window.matchMedia
+          || window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var tema = elegido === 'auto' ? (oscuroDelSistema ? 'oscuro' : 'claro') : elegido;
+        document.documentElement.dataset.tema = tema;
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', tema === 'claro' ? '#eef4f9' : '#071a2e');
+      } catch (e) {
+        document.documentElement.dataset.tema = 'oscuro';
+      }
+    }());
+  </script>
+</head>
+<body>
+  <div class="app">
+
+    <!-- ───────────── Barra lateral ───────────── -->
+    <aside class="sidebar">
+      <div class="marca">
+        <img class="marca-img" src="/logo.png" alt="Click Control"
+             onerror="if (this.dataset.n) { this.remove(); } else { this.dataset.n = 1; this.src = '/logo.svg'; }" />
+        <div class="marca-logo">
+          <svg class="marca-mark" viewBox="0 0 192 192" aria-hidden="true">
+            <g fill="none" stroke="currentColor" stroke-linecap="round">
+              <path d="M96 34a62 62 0 0 1 62 62" stroke-width="7"/>
+              <path d="M96 158a62 62 0 0 1-62-62" stroke-width="7"/>
+              <path d="M96 54a42 42 0 0 1 42 42" stroke-width="6"/>
+              <path d="M96 138a42 42 0 0 1-42-42" stroke-width="6"/>
+              <path d="M96 73a23 23 0 0 1 23 23" stroke-width="5"/>
+              <path d="M96 119a23 23 0 0 1-23-23" stroke-width="5"/>
+            </g>
+            <circle cx="96" cy="96" r="8" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <strong class="marca-nombre"><i>click</i> control</strong>
+          <span>asistente Ari</span>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav">
+        <button class="nav-item activo" data-vista="inicio">
+          <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8Z"/></svg></span><span class="etiqueta">Inicio</span>
+        </button>
+        <button class="nav-item" data-vista="agenda">
+          <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V10h14v10Z"/></svg></span><span class="etiqueta">Agenda</span>
+          <em class="badge" data-badge="citasHoy"></em>
+        </button>
+        <button class="nav-item" data-vista="clientes">
+          <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3.33 0-8 1.67-8 4v2h16v-2c0-2.33-4.67-4-8-4Z"/></svg></span><span class="etiqueta">Clientes</span>
+          <em class="badge" data-badge="clientes"></em>
+        </button>
+        <button class="nav-item" data-vista="productos">
+          <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 3 6v12l9 4 9-4V6l-9-4Zm0 2.2 6.5 2.9L12 10 5.5 7.1 12 4.2ZM5 8.7l6 2.7v7.9l-6-2.7V8.7Zm8 10.6v-7.9l6-2.7v7.9l-6 2.7Z"/></svg></span><span class="etiqueta">Productos</span>
+        </button>
+        <button class="nav-item" data-vista="cotizaciones">
+          <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm2 16H8v-2h8v2Zm0-4H8v-2h8v2Zm-3-5V3.5L18.5 9H13Z"/></svg></span><span class="etiqueta">Cotizaciones</span>
+          <em class="badge" data-badge="cotizaciones"></em>
+        </button>
+        <button class="nav-item" data-vista="cobros">
+          <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm.9 15.4v1.3h-1.6v-1.3c-1.6-.2-2.7-1.1-2.9-2.6h1.7c.1.7.7 1.2 1.9 1.2 1.1 0 1.6-.5 1.6-1.1 0-.7-.5-1-2-1.4-1.9-.4-3-1.1-3-2.7 0-1.3 1-2.2 2.6-2.4V7.1h1.6v1.3c1.5.3 2.4 1.2 2.5 2.5h-1.7c-.1-.7-.6-1.1-1.6-1.1s-1.5.4-1.5 1c0 .6.5.9 1.9 1.2 2 .5 3.1 1.2 3.1 2.8 0 1.4-1 2.3-2.6 2.6Z"/></svg></span><span class="etiqueta">Cobros</span>
+        </button>
+        <button class="nav-item" data-vista="recordatorios">
+          <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-2 15-5-5 1.4-1.4L10 14.2l7.6-7.6L19 8l-9 9Z"/></svg></span><span class="etiqueta">Pendientes</span>
+          <em class="badge" data-badge="recordatorios"></em>
+        </button>
+        <button class="nav-item" data-vista="tienda">
+          <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16l-1.5 9h-13L4 4Zm0 0-.4-2H2m4 20a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm11 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM6.5 13h11"/></svg></span><span class="etiqueta">Tienda</span>
+          <em class="badge" data-badge="portalPendientes"></em>
+        </button>
+      </nav>
+
+      <div class="sidebar-pie">
+        <button class="enlace-ajustes" data-vista="ajustes">⚙ Datos de la empresa</button>
+        <div class="estado" id="estado-modelo">conectando…</div>
+        <button class="salir" id="salir" hidden>Cerrar sesión</button>
+      </div>
+    </aside>
+
+    <!-- ───────────── Contenido ───────────── -->
+    <main class="principal">
+      <header class="cabecera">
+        <div>
+          <h1 id="titulo-vista">Hoy</h1>
+          <p class="fecha" id="fecha-hoy"></p>
+        </div>
+        <div class="acciones-cabecera">
+          <!-- En el celular la barra de abajo no tiene lugar para los ajustes,
+               así que sin este botón no había manera de llegar a ellos desde
+               el teléfono: ni al representante de ventas, ni al logo. -->
+          <button class="btn-fantasma" id="btn-ajustes" title="Ajustes" aria-label="Ajustes">⚙</button>
+          <button class="btn-fantasma" id="btn-refrescar" title="Actualizar">↻</button>
+        </div>
+      </header>
+
+      <!-- Aviso de la cotización que se está dictando -->
+      <div class="en-curso" id="en-curso" hidden>
+        <span class="punto"></span>
+        <div class="en-curso-texto">
+          <strong id="en-curso-titulo"></strong>
+          <span id="en-curso-detalle"></span>
+        </div>
+        <button class="mini" data-accion="ver-en-curso">Ver</button>
+        <button class="mini destacado" data-accion="finalizar-en-curso">Finalizar</button>
+      </div>
+
+      <section class="contenido" id="contenido"><!-- render dinámico --></section>
+    </main>
+
+    <!-- ───────────── Panel de voz ───────────── -->
+    <aside class="voz">
+      <div class="voz-cabecera">
+        <span class="agarre" aria-hidden="true"></span>
+        <h2>Ari</h2>
+        <label class="switch" title="Leer las respuestas en voz alta">
+          <input type="checkbox" id="tts" checked />
+          <span>voz</span>
+        </label>
+        <label class="switch" id="switch-manos-libres"
+               title="Vuelve a escuchar solo después de cada respuesta, para dictar sin tocar el teléfono">
+          <input type="checkbox" id="manos-libres" />
+          <span>manos libres</span>
+        </label>
+        <button class="cerrar-hoja" id="cerrar-hoja" aria-label="Cerrar conversación">✕</button>
+      </div>
+
+      <div class="conversacion" id="conversacion">
+        <div class="burbuja ari bienvenida">
+          <p>Hola 👋 Soy Ari. Hablame normal:</p>
+          <ul>
+            <li>«Creá un cliente nuevo: Ferretería El Tornillo, teléfono 3105554433»</li>
+            <li>«Agendame mañana a las 3 visita a El Tornillo»</li>
+            <li>«El Tornillo me quedó de dar 800 mil el viernes»</li>
+            <li>«Mostrame las cotizaciones pendientes»</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="entrada">
+        <button class="mic" id="mic" title="Mantené presionado o hacé clic para hablar">
+          <span class="mic-ondas"></span>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Z"/>
+            <path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V21a1 1 0 1 0 2 0v-3.08A7 7 0 0 0 19 11Z"/>
+          </svg>
+        </button>
+        <div class="caja-texto">
+          <input id="texto" type="text" placeholder="…o escribí acá y presioná Enter" autocomplete="off" />
+          <button id="enviar" title="Enviar">↑</button>
+        </div>
+      </div>
+      <p class="pista" id="pista"></p>
+    </aside>
+  </div>
+
+  <!-- Botones flotantes: sólo en celular -->
+  <div class="fabs">
+    <button class="fab fab-teclado" id="fab-teclado" aria-label="Escribirle a Ari">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm-9 3h2v2h-2V8Zm-3 0h2v2H8V8ZM5 8h2v2H5V8Zm3 3h2v2H8v-2Zm-3 0h2v2H5v-2Zm11 5H8v-2h8v2Zm0-3h-2v-2h2v2Zm0-3h-2V8h2v2Zm3 3h-2v-2h2v2Zm0-3h-2V8h2v2Z"/></svg>
+    </button>
+    <button class="fab fab-mic" id="fab-mic" aria-label="Hablarle a Ari">
+      <span class="mic-ondas"></span>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Z"/>
+        <path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V21a1 1 0 1 0 2 0v-3.08A7 7 0 0 0 19 11Z"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Visor de PDF propio. Abrirlos con target="_blank" en la aplicación
+       instalada los muestra a pantalla completa sin barra ni botón de volver:
+       no había cómo cerrarlos salvo cerrando la aplicación entera. -->
+  <div class="visor-pdf" id="visor-pdf" hidden>
+    <div class="visor-barra">
+      <button class="visor-cerrar" id="visor-cerrar" aria-label="Cerrar el PDF">✕</button>
+      <span class="visor-titulo" id="visor-titulo"></span>
+      <button class="visor-compartir" id="visor-compartir" type="button" hidden>Compartir</button>
+      <a class="visor-aparte" id="visor-aparte" href="#" target="_blank" rel="noopener">Abrir aparte</a>
+    </div>
+    <iframe class="visor-marco" id="visor-marco" title="Documento" src="about:blank"></iframe>
+  </div>
+
+  <div class="telon" id="telon"></div>
+  <div class="aviso" id="aviso"></div>
+  <input type="file" id="input-excel" accept=".xlsx" hidden />
+  <input type="file" id="input-foto" accept="image/png,image/jpeg,image/webp" hidden />
+  <input type="file" id="input-foto-galeria" accept="image/png,image/jpeg,image/webp" multiple hidden />
+  <input type="file" id="input-logo" accept="image/png,image/jpeg,image/webp" hidden />
+  <input type="file" id="input-pdf" accept="application/pdf,.pdf" hidden />
+  <input type="file" id="input-ficha" accept="application/pdf,.pdf" hidden />
+  <input type="file" id="input-fichas" accept="application/pdf,.pdf" multiple hidden />
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

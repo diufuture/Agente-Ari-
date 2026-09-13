@@ -1,0 +1,1630 @@
+/* ══════════════════════════════════════════════════════════════════
+   Clic Control · Ari
+   ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Paleta tomada del logo de Click Control: azul marino de fondo,
+     cian de la palabra "click" y blanco de "control". */
+  --marino:       #071a2e;
+  --cian:         #5fc9f3;
+
+  --fondo:        #071a2e;
+  --fondo-2:      #0b2340;
+  --panel:        #0e2b4c;
+  --panel-alto:   #14375e;
+  --borde:        #1d4a75;
+  --texto:        #f2f6f9;
+  --texto-2:      #9db8d0;
+  --texto-3:      #6a89a8;
+  --acento:       #5fc9f3;
+  --acento-2:     #4fd9c0;
+  --alerta:       #ff7085;
+  --ambar:        #ffb454;
+  --verde:        #45d99a;
+  /* Un color por sección de la barra. Son los mismos en los dos temas salvo
+     los que sobre fondo blanco quedaban lavados, más abajo. */
+  --c-inicio:       #4aa8ff;
+  --c-agenda:       #ffa63d;
+  --c-clientes:     #34d399;
+  --c-productos:    #a78bfa;
+  --c-cotizaciones: #22d3ee;
+  --c-cobros:       #fbbf24;
+  --c-pendientes:   #fb7185;
+  --radio:        16px;
+  --sombra:       0 10px 40px rgba(0, 0, 0, .45);
+  --tipo:         'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* El tema claro.
+   Antes esto vivía en un @media (prefers-color-scheme: light), o sea que lo
+   mandaba el sistema y no había forma de elegirlo. Ahora la elección se guarda
+   y se escribe en el atributo data-tema del <html>; el "automático" lo resuelve
+   un script en el <head> antes de dibujar nada, así que acá sólo hay dos temas
+   y no hace falta repetir esta paleta para el caso automático. */
+:root[data-tema="claro"] {
+  --fondo:      #eef4f9;
+  --fondo-2:    #e5eef6;
+  --panel:      #ffffff;
+  --panel-alto: #f3f8fc;
+  --borde:      #d3e2ee;
+  --texto:      #071a2e;
+  --texto-2:    #4a6b85;
+  --texto-3:    #7d97ad;
+  --acento:     #1a9fd4;
+  --acento-2:   #10b48f;
+  --sombra:     0 10px 30px rgba(23, 32, 58, .10);
+  /* Sobre blanco, el amarillo y el cian se pierden: van un tono más abajo. */
+  --c-agenda:       #e07c0a;
+  --c-clientes:     #0f9d6b;
+  --c-cotizaciones: #0a9fbb;
+  --c-cobros:       #d19100;
+  color-scheme: light;
+}
+
+:root[data-tema="oscuro"] { color-scheme: dark; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--tipo);
+  background:
+    radial-gradient(1100px 600px at 12% -10%, rgba(95, 201, 243, .14), transparent 60%),
+    radial-gradient(900px 500px at 92% 8%, rgba(79, 217, 192, .08), transparent 60%),
+    var(--fondo);
+  color: var(--texto);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; border: none; background: none; }
+
+/* ─────────── Estructura ─────────── */
+
+.app {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr) 380px;
+  height: 100vh;
+  gap: 0;
+}
+
+/* ─────────── Barra lateral ─────────── */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  padding: 22px 14px;
+  border-right: 1px solid var(--borde);
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.marca { display: flex; align-items: center; gap: 11px; padding: 0 8px 22px; }
+.marca-logo {
+  width: 38px; height: 38px; border-radius: 11px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--acento), var(--acento-2));
+  color: var(--marino); font-weight: 800; font-size: 14px; letter-spacing: -.5px;
+}
+.marca strong { display: block; font-size: 14.5px; letter-spacing: -.2px; }
+.marca span   { display: block; font-size: 11.5px; color: var(--texto-3); }
+
+.nav { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.nav-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 12px; border-radius: 11px;
+  color: var(--texto-2); font-size: 14px; font-weight: 500;
+  transition: background .15s, color .15s;
+  text-align: left; width: 100%;
+}
+.nav-item:hover { background: var(--panel-alto); color: var(--texto); }
+.nav-item.activo {
+  background: color-mix(in srgb, var(--acento) 16%, transparent);
+  color: var(--texto);
+  box-shadow: inset 2px 0 0 var(--acento);
+}
+/* Cada sección con su color. En una barra de siete botones iguales, el color
+   es lo que se reconoce de reojo; el rótulo se lee después. */
+.nav-item .ico { width: 18px; height: 18px; display: grid; place-items: center; }
+.nav-item .ico svg { width: 100%; height: 100%; fill: currentColor; }
+.nav-item[data-vista="inicio"]        .ico { color: var(--c-inicio); }
+.nav-item[data-vista="agenda"]        .ico { color: var(--c-agenda); }
+.nav-item[data-vista="clientes"]      .ico { color: var(--c-clientes); }
+.nav-item[data-vista="productos"]     .ico { color: var(--c-productos); }
+.nav-item[data-vista="cotizaciones"]  .ico { color: var(--c-cotizaciones); }
+.nav-item[data-vista="cobros"]        .ico { color: var(--c-cobros); }
+.nav-item[data-vista="recordatorios"] .ico { color: var(--c-pendientes); }
+/* Sin tocar, un poco apagados; el de la sección donde uno está, a full. */
+.nav-item .ico { opacity: .72; transition: opacity .15s; }
+.nav-item.activo .ico, .nav-item:hover .ico { opacity: 1; }
+.badge {
+  margin-left: auto; font-style: normal; font-size: 11px; font-weight: 700;
+  min-width: 20px; padding: 2px 6px; border-radius: 20px; text-align: center;
+  background: var(--panel-alto); color: var(--texto-2);
+}
+.badge:empty { display: none; }
+.nav-item.activo .badge { background: var(--acento); color: var(--marino); }
+
+.sidebar-pie { padding: 12px 10px 0; border-top: 1px solid var(--borde); }
+.estado { font-size: 11px; color: var(--texto-3); line-height: 1.5; word-break: break-all; }
+
+/* ─────────── Principal ─────────── */
+
+.principal { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+
+.cabecera {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  padding: 26px 32px 18px;
+}
+.cabecera h1 { font-size: 26px; font-weight: 700; letter-spacing: -.6px; }
+.fecha { font-size: 13px; color: var(--texto-3); margin-top: 3px; }
+.fecha::first-letter { text-transform: uppercase; }
+.btn-fantasma {
+  width: 36px; height: 36px; border-radius: 10px; font-size: 17px;
+  color: var(--texto-2); border: 1px solid var(--borde);
+  transition: .15s;
+}
+.btn-fantasma:hover { background: var(--panel-alto); color: var(--texto); }
+/* El giro es para el de actualizar, que es una flecha en círculo. En el
+   piñón de ajustes quedaba raro, como si estuviera cargando algo. */
+#btn-refrescar:hover { transform: rotate(90deg); }
+.acciones-cabecera { display: flex; gap: 8px; align-items: center; }
+
+.contenido { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 32px 40px; }
+
+/* ─────────── Tarjetas de métricas ─────────── */
+
+.metricas {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 12px; margin-bottom: 26px;
+}
+.metrica {
+  background: var(--panel); border: 1px solid var(--borde);
+  border-radius: var(--radio); padding: 16px 18px;
+  position: relative; overflow: hidden;
+  transition: transform .18s, border-color .18s;
+}
+.metrica:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--acento) 45%, var(--borde)); }
+.metrica::after {
+  content: ''; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: linear-gradient(90deg, var(--acento), transparent);
+  opacity: .7;
+}
+.metrica .valor { font-size: 27px; font-weight: 700; letter-spacing: -1px; line-height: 1.1; }
+.metrica .rotulo { font-size: 11.5px; color: var(--texto-3); text-transform: uppercase; letter-spacing: .6px; margin-top: 5px; }
+.metrica.alerta .valor { color: var(--alerta); }
+.metrica.alerta::after { background: linear-gradient(90deg, var(--alerta), transparent); }
+.metrica.dinero .valor { color: var(--acento-2); font-size: 22px; }
+.metrica.dinero::after { background: linear-gradient(90deg, var(--acento-2), transparent); }
+
+/* ─────────── Bloques y tablas ─────────── */
+
+.bloque { margin-bottom: 26px; }
+.bloque-titulo {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 12.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .9px; color: var(--texto-3); margin-bottom: 11px;
+}
+.bloque-titulo::after { content: ''; flex: 1; height: 1px; background: var(--borde); }
+
+.tarjeta {
+  background: var(--panel); border: 1px solid var(--borde);
+  border-radius: var(--radio); overflow: hidden;
+}
+
+.tabla-envoltura { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 480px; }
+thead th {
+  text-align: left; padding: 11px 16px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .7px; color: var(--texto-3);
+  background: var(--panel-alto); border-bottom: 1px solid var(--borde);
+  white-space: nowrap;
+}
+tbody td { padding: 12px 16px; border-bottom: 1px solid color-mix(in srgb, var(--borde) 55%, transparent); vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr { transition: background .12s; }
+tbody tr:hover { background: var(--panel-alto); }
+td.principal-col { font-weight: 600; color: var(--texto); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.acciones-fila { display: flex; gap: 6px; justify-content: flex-end; }
+.mini {
+  font-size: 11px; padding: 4px 9px; border-radius: 7px;
+  border: 1px solid var(--borde); color: var(--texto-2); white-space: nowrap;
+  transition: .13s;
+}
+.mini:hover { background: var(--panel-alto); color: var(--texto); border-color: var(--acento); }
+.mini.peligro:hover { color: var(--alerta); border-color: var(--alerta); }
+
+.pastilla {
+  display: inline-block; font-size: 11px; font-weight: 600;
+  padding: 3px 9px; border-radius: 20px; white-space: nowrap;
+  background: var(--panel-alto); color: var(--texto-2);
+  border: 1px solid var(--borde);
+}
+.pastilla.pendiente  { color: var(--ambar);   border-color: color-mix(in srgb, var(--ambar) 40%, transparent); }
+.pastilla.completada,
+.pastilla.pagado,
+.pastilla.aprobado,
+.pastilla.aprobada   { color: var(--verde);   border-color: color-mix(in srgb, var(--verde) 40%, transparent); }
+.pastilla.cancelada,
+.pastilla.rechazado,
+.pastilla.rechazada,
+.pastilla.vencido    { color: var(--alerta);  border-color: color-mix(in srgb, var(--alerta) 40%, transparent); }
+.pastilla.enviada,
+.pastilla.portal     { color: var(--acento);  border-color: color-mix(in srgb, var(--acento) 40%, transparent); }
+.pastilla.portal-recupera { color: var(--ambar); border-color: color-mix(in srgb, var(--ambar) 40%, transparent); }
+.pastilla.alta       { color: var(--alerta); }
+.pastilla.baja       { color: var(--texto-3); }
+
+.vacio { padding: 34px 20px; text-align: center; color: var(--texto-3); font-size: 13.5px; }
+.vacio strong { display: block; font-size: 15px; color: var(--texto-2); margin-bottom: 5px; }
+
+/* Lista de la agenda del día */
+.linea-tiempo { display: flex; flex-direction: column; }
+.evento {
+  display: grid; grid-template-columns: 64px 1fr auto; gap: 14px;
+  padding: 13px 18px; align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--borde) 55%, transparent);
+}
+.evento:last-child { border-bottom: none; }
+.evento .hora { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--acento); }
+.evento .que { font-size: 14px; font-weight: 600; }
+.evento .quien { font-size: 12px; color: var(--texto-3); margin-top: 2px; }
+
+/* ─────────── Panel de voz ─────────── */
+
+.voz {
+  display: flex; flex-direction: column;
+  min-height: 0;   /* sin esto el panel crece con el chat en vez de scrollear */
+  border-left: 1px solid var(--borde);
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+  backdrop-filter: blur(12px);
+  min-width: 0;
+}
+.voz-cabecera {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 22px 22px 14px; border-bottom: 1px solid var(--borde);
+  flex-shrink: 0;
+}
+.voz-cabecera h2 { font-size: 16px; letter-spacing: -.3px; }
+.switch { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--texto-3); cursor: pointer; }
+.switch input { accent-color: var(--acento); cursor: pointer; }
+
+.conversacion {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 18px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+
+.burbuja {
+  padding: 11px 14px; border-radius: 14px; font-size: 13.5px; line-height: 1.55;
+  max-width: 92%; animation: aparecer .22s ease-out;
+}
+@keyframes aparecer { from { opacity: 0; transform: translateY(6px); } }
+.burbuja.yo {
+  align-self: flex-end; background: var(--acento); color: var(--marino);
+  font-weight: 500; border-bottom-right-radius: 5px;
+}
+.burbuja.ari {
+  align-self: flex-start; background: var(--panel); border: 1px solid var(--borde);
+  border-bottom-left-radius: 5px;
+}
+.burbuja.error { border-color: var(--alerta); color: var(--alerta); }
+.burbuja.bienvenida { max-width: 100%; color: var(--texto-2); }
+.burbuja.bienvenida ul { margin: 9px 0 0; padding-left: 16px; display: grid; gap: 5px; }
+.burbuja.bienvenida li { font-size: 12.5px; color: var(--texto-3); }
+
+.hechos { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.hecho {
+  font-size: 11px; color: var(--acento-2);
+  background: color-mix(in srgb, var(--acento-2) 10%, transparent);
+  border-radius: 7px; padding: 4px 8px;
+}
+
+.pensando { display: flex; gap: 4px; align-items: center; padding: 12px 14px; }
+.pensando i {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--texto-3);
+  animation: latir 1.2s infinite;
+}
+.pensando i:nth-child(2) { animation-delay: .18s; }
+.pensando i:nth-child(3) { animation-delay: .36s; }
+@keyframes latir { 0%, 60%, 100% { opacity: .25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+
+/* Entrada */
+.entrada { padding: 14px 18px 6px; display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--borde); flex-shrink: 0; }
+
+.mic {
+  position: relative; flex-shrink: 0;
+  width: 52px; height: 52px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: linear-gradient(140deg, var(--acento), #2f9fd8);
+  box-shadow: 0 6px 22px color-mix(in srgb, var(--acento) 40%, transparent);
+  transition: transform .16s;
+}
+.mic:hover { transform: scale(1.06); }
+.mic:active { transform: scale(.95); }
+.mic svg { width: 23px; height: 23px; fill: #fff; position: relative; z-index: 1; }
+.mic.grabando { background: linear-gradient(140deg, var(--alerta), #ff9a5b); }
+.mic-ondas { position: absolute; inset: 0; border-radius: 50%; }
+.mic.grabando .mic-ondas {
+  animation: pulso 1.4s ease-out infinite;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--alerta) 60%, transparent);
+}
+@keyframes pulso {
+  to { box-shadow: 0 0 0 18px transparent; }
+}
+.mic[disabled] { opacity: .4; cursor: not-allowed; }
+
+.caja-texto {
+  flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0;
+  background: var(--panel); border: 1px solid var(--borde);
+  border-radius: 12px; padding: 4px 4px 4px 12px;
+  transition: border-color .15s;
+}
+.caja-texto:focus-within { border-color: var(--acento); }
+.caja-texto input { flex: 1; min-width: 0; border: none; background: none; outline: none; font-size: 13.5px; padding: 8px 0; }
+.caja-texto input::placeholder { color: var(--texto-3); }
+.caja-texto button {
+  width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+  background: var(--panel-alto); color: var(--texto-2); font-size: 15px;
+}
+.caja-texto button:hover { background: var(--acento); color: var(--marino); }
+
+.pista { padding: 2px 18px 16px; font-size: 11px; color: var(--texto-3); min-height: 26px; flex-shrink: 0; }
+
+/* Aviso flotante */
+.aviso {
+  position: fixed; bottom: 22px; left: 50%; transform: translate(-50%, 100px);
+  background: var(--panel); border: 1px solid var(--borde);
+  box-shadow: var(--sombra); border-radius: 12px;
+  padding: 11px 18px; font-size: 13px; z-index: 50;
+  opacity: 0; visibility: hidden;
+  transition: transform .3s cubic-bezier(.2, .9, .3, 1.2), opacity .2s, visibility .3s;
+}
+.aviso.visible { transform: translate(-50%, 0); opacity: 1; visibility: visible; }
+.aviso.error { border-color: var(--alerta); color: var(--alerta); }
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: var(--borde); border-radius: 9px; }
+::-webkit-scrollbar-thumb:hover { background: var(--texto-3); }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ─────────── Elementos exclusivos de celular (ocultos en escritorio) ─────────── */
+
+.agarre, .cerrar-hoja, .fabs, .telon { display: none; }
+
+/* ─────────── Responsive ─────────── */
+
+/* Escritorio angosto: la barra lateral se reduce a iconos */
+@media (max-width: 1180px) and (min-width: 901px) {
+  .app { grid-template-columns: 74px minmax(0, 1fr) 330px; }
+  .marca span, .marca strong, .nav-item .etiqueta, .estado { display: none; }
+  .nav-item { justify-content: center; padding: 12px 0; position: relative; }
+  .marca { justify-content: center; padding-bottom: 18px; }
+  .badge { position: absolute; margin: 0; top: 4px; right: 12px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Celular y tablet en vertical: app de una columna con barra inferior,
+   micrófono flotante y la conversación como hoja deslizante.
+   ══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 900px) {
+  html, body { overflow: hidden; overscroll-behavior: none; }
+
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  /* ── Barra de navegación inferior ── */
+  .sidebar {
+    order: 2;
+    flex-direction: row;
+    align-items: stretch;
+    border-right: none;
+    border-top: 1px solid var(--borde);
+    background: color-mix(in srgb, var(--fondo-2) 94%, transparent);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    overflow-x: auto;
+    scrollbar-width: none;
+    position: relative;
+    z-index: 30;
+  }
+  .sidebar::-webkit-scrollbar { display: none; }
+  .marca, .sidebar-pie { display: none; }
+
+  .nav { flex-direction: row; gap: 2px; width: 100%; }
+  .nav-item {
+    flex: 1 0 auto; min-width: 60px;
+    flex-direction: column; gap: 3px;
+    padding: 7px 4px; border-radius: 12px;
+    font-size: 10px; font-weight: 600; text-align: center;
+    position: relative; width: auto;
+  }
+  .nav-item .ico { width: 22px; height: 22px; opacity: .8; }
+  .nav-item .etiqueta { display: block; white-space: nowrap; }
+  .nav-item.activo { box-shadow: none; }
+  .nav-item:hover { background: none; }
+  .nav-item.activo:hover { background: color-mix(in srgb, var(--acento) 16%, transparent); }
+  .badge {
+    position: absolute; top: 1px; right: 9px; margin: 0;
+    font-size: 9.5px; min-width: 16px; padding: 1px 5px;
+  }
+
+  /* ── Contenido ── */
+  .principal { order: 1; min-height: 0; }
+  .cabecera {
+    padding: 14px 16px 10px;
+    padding-top: calc(14px + env(safe-area-inset-top));
+  }
+  .cabecera h1 { font-size: 21px; }
+  .contenido { padding: 0 16px 150px; -webkit-overflow-scrolling: touch; }
+  .bloque { margin-bottom: 20px; }
+
+  /* ── La conversación pasa a ser una hoja inferior ── */
+  .voz {
+    position: fixed; inset: auto 0 0 0; z-index: 45;
+    border-left: none; border-top: 1px solid var(--borde);
+    border-radius: 20px 20px 0 0;
+    background: var(--fondo-2);
+    box-shadow: 0 -18px 44px rgba(0, 0, 0, .38);
+    max-height: 82dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+    transform: translateY(103%);
+    transition: transform .28s cubic-bezier(.2, .9, .3, 1);
+    backdrop-filter: none;
+  }
+  .voz.abierta { transform: none; }
+
+  .agarre {
+    display: block; position: absolute; top: 7px; left: 50%;
+    transform: translateX(-50%);
+    width: 38px; height: 4px; border-radius: 4px; background: var(--borde);
+  }
+  .voz-cabecera { padding: 18px 16px 10px; gap: 10px; }
+  .voz-cabecera h2 { flex: 1; }
+  .cerrar-hoja {
+    display: grid; place-items: center;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--panel-alto); color: var(--texto-2); font-size: 13px;
+  }
+
+  .conversacion { padding: 12px 16px; max-height: 48dvh; }
+  .burbuja { max-width: 88%; font-size: 14px; }
+  .entrada { padding: 10px 16px 8px; }
+  /* Con la hoja de la conversación abierta, el micrófono flotante queda
+     escondido detrás de ella. Si acá tampoco hay uno, no hay ninguno: había
+     que esperar a que la hoja se cerrara sola para poder volver a hablar, que
+     es justo lo que se sentía como "el micrófono no responde". Así que en el
+     celular el micrófono de la hoja SÍ se ve, un poco más chico, al lado de
+     donde se escribe. */
+  .entrada .mic { width: 46px; height: 46px; }
+  .entrada .mic svg { width: 20px; height: 20px; }
+  .caja-texto { padding: 4px 4px 4px 14px; }
+  .caja-texto input { font-size: 16px; }     /* 16px evita que iOS haga zoom al enfocar */
+  .caja-texto button { width: 36px; height: 36px; }
+  .pista { padding: 0 16px 10px; min-height: 0; }
+
+  /* ── Telón ── */
+  .telon {
+    display: block; position: fixed; inset: 0; z-index: 40;
+    background: rgba(4, 8, 18, .55);
+    opacity: 0; pointer-events: none; transition: opacity .25s;
+  }
+  .telon.visible { opacity: 1; pointer-events: auto; }
+
+  /* ── Botones flotantes ── */
+  .fabs {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    position: fixed; right: 16px; z-index: 35;
+    bottom: calc(80px + env(safe-area-inset-bottom));
+    transition: opacity .2s, transform .2s;
+  }
+  .fabs.oculto { opacity: 0; pointer-events: none; transform: translateY(14px); }
+
+  .fab { display: grid; place-items: center; border-radius: 50%; position: relative; }
+  .fab svg { position: relative; z-index: 1; }
+  .fab:active { transform: scale(.94); }
+
+  .fab-mic {
+    width: 60px; height: 60px;
+    background: linear-gradient(140deg, var(--acento), #2f9fd8);
+    box-shadow: 0 8px 26px color-mix(in srgb, var(--acento) 45%, transparent);
+  }
+  .fab-mic svg { width: 27px; height: 27px; fill: #fff; }
+  .fab-mic.grabando { background: linear-gradient(140deg, var(--alerta), #ff9a5b); }
+  .fab-mic.grabando .mic-ondas {
+    animation: pulso 1.4s ease-out infinite;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--alerta) 60%, transparent);
+  }
+  .fab-teclado {
+    width: 42px; height: 42px;
+    background: var(--panel); border: 1px solid var(--borde);
+  }
+  .fab-teclado svg { width: 19px; height: 19px; fill: var(--texto-2); }
+
+  .aviso { bottom: calc(92px + env(safe-area-inset-bottom)); }
+  .metricas { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+}
+
+/* ── Pantallas angostas: las tablas se vuelven fichas apiladas ──
+   Mismo umbral que el renglón de cotizaciones: por debajo de ~1300px el
+   panel de Ari no deja sitio para las columnas de Clientes, Cobros o
+   Productos, y antes obligaba a desplazarse de lado para llegar a los
+   botones. Así se apilan en vez de recortarse. */
+@media (max-width: 1300px) {
+  .tabla-envoltura { overflow-x: visible; }
+  table { min-width: 0; display: block; }
+  thead { display: none; }
+  tbody { display: block; }
+
+  tbody tr {
+    display: block; padding: 13px 15px;
+    border-bottom: 1px solid color-mix(in srgb, var(--borde) 55%, transparent);
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: none; }
+
+  tbody td {
+    display: flex; gap: 10px; align-items: baseline;
+    border: none; padding: 3px 0;
+  }
+  tbody td::before {
+    content: attr(data-rotulo);
+    flex: 0 0 80px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--texto-3);
+  }
+  /* La fila del renglón de cantidad no es una celda con rótulo: si se le
+     aplica el trato de ficha apilada, el hueco de 80px que se reserva para el
+     nombre de la columna la empuja y le saca los botones de la pantalla. */
+  tbody .fila-editor > td { display: block; padding: 0; }
+  tbody .fila-editor > td::before { content: none; }
+
+  td.principal-col { font-size: 15px; }
+  td.num { text-align: left; }
+  td.acciones { padding-top: 9px; }
+  td.acciones::before { content: none; }
+  .acciones-fila { width: 100%; justify-content: flex-start; }
+  .mini { padding: 9px 16px; font-size: 12.5px; border-radius: 9px; }
+}
+
+@media (max-width: 640px) {
+  .evento { grid-template-columns: 46px minmax(0, 1fr) auto; gap: 10px; padding: 13px 15px; }
+  .evento .hora { font-size: 14px; }
+  .evento .acciones-fila .mini { padding: 8px 12px; }
+
+  .vacio { padding: 26px 16px; }
+  .metrica .valor { font-size: 23px; }
+  .metrica.dinero .valor { font-size: 19px; }
+  .cabecera h1 { font-size: 19px; }
+}
+
+/* Pantallas muy angostas: sólo iconos en la barra inferior */
+@media (max-width: 400px) {
+  .nav-item { min-width: 52px; font-size: 9px; }
+  tbody td::before { flex-basis: 68px; }
+}
+
+/* Respeta a quien pidió menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+/* ─────────── Pantalla de entrada ─────────── */
+
+.pantalla-entrada {
+  display: grid; place-items: center; min-height: 100vh; min-height: 100dvh;
+  padding: 24px;
+}
+.entrada-caja {
+  width: 100%; max-width: 380px; text-align: center;
+  background: var(--panel); border: 1px solid var(--borde);
+  border-radius: 20px; box-shadow: var(--sombra);
+  padding: 36px 28px 30px;
+}
+.marca-logo.grande {
+  width: 54px; height: 54px; border-radius: 15px; font-size: 19px;
+  margin: 0 auto 16px;
+}
+.entrada-caja h1 { font-size: 22px; letter-spacing: -.4px; }
+.entrada-caja .subtitulo { font-size: 13.5px; color: var(--texto-3); margin-top: 5px; }
+.entrada-caja form { display: flex; flex-direction: column; gap: 13px; margin-top: 24px; text-align: left; }
+.entrada-caja label { display: flex; flex-direction: column; gap: 6px; }
+.entrada-caja label span {
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .7px; color: var(--texto-3);
+}
+.entrada-caja input {
+  background: var(--panel-alto); border: 1px solid var(--borde);
+  border-radius: 11px; padding: 12px 14px; font-size: 16px; outline: none;
+  transition: border-color .15s;
+}
+.entrada-caja input:focus { border-color: var(--acento); }
+.entrada-caja button {
+  margin-top: 4px; padding: 13px; border-radius: 11px; font-size: 15px; font-weight: 600;
+  background: linear-gradient(140deg, var(--acento), #2f9fd8); color: #fff;
+  transition: transform .15s, opacity .15s;
+}
+.entrada-caja button:hover { transform: translateY(-1px); }
+.entrada-caja button[disabled] { opacity: .6; transform: none; cursor: wait; }
+.entrada-caja .error { color: var(--alerta); font-size: 13px; min-height: 18px; text-align: center; }
+
+/* Botón de salir, dentro de la app */
+.salir {
+  display: block; width: 100%; margin-top: 10px; padding: 7px;
+  border-radius: 9px; font-size: 11.5px; color: var(--texto-3);
+  border: 1px solid var(--borde); transition: .15s;
+}
+.salir:hover { color: var(--alerta); border-color: var(--alerta); }
+
+/* Micrófono sin voz disponible (dirección sin https o navegador incompatible):
+   sigue siendo tocable —abre el teclado— pero se ve apagado. */
+.mic.sin-voz, .fab-mic.sin-voz { background: var(--panel-alto); }
+.mic.sin-voz svg, .fab-mic.sin-voz svg { fill: var(--texto-3); }
+.fab-mic.sin-voz { box-shadow: none; border: 1px solid var(--borde); }
+
+/* ─────────── Marca ─────────── */
+
+.marca-logo { padding: 7px; }
+.marca-mark { width: 100%; height: 100%; display: block; color: var(--marino); }
+.marca-logo.grande { padding: 10px; }
+
+/* Bloque tipográfico del logo: "click" en cian, "control" en blanco,
+   trazo fino y letras espaciadas, como en la marca. */
+.marca-nombre {
+  font-weight: 300; letter-spacing: .04em; font-size: 15px;
+  color: var(--texto);
+}
+.marca-nombre i { font-style: normal; color: var(--acento); }
+.entrada-caja h1.marca-nombre { font-size: 25px; font-weight: 300; letter-spacing: .05em; }
+/* El atributo hidden debe ganarle a la regla de arriba */
+.salir[hidden] { display: none; }
+
+/* ─────────── Ficha de cotización ─────────── */
+
+.volver {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--texto-2); padding: 7px 12px;
+  border-radius: 9px; border: 1px solid var(--borde); margin-bottom: 16px;
+  transition: .15s;
+}
+.volver:hover { color: var(--acento); border-color: var(--acento); }
+
+.ficha { padding: 22px; margin-bottom: 26px; }
+.ficha-cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.ficha-cabecera h2 { font-size: 20px; letter-spacing: -.3px; }
+.ficha-cabecera p { font-size: 13px; color: var(--texto-3); margin-top: 4px; }
+
+.ficha-cifras {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 22px 0 14px;
+}
+.ficha-cifras div { display: flex; flex-direction: column; gap: 4px; }
+.ficha-cifras span {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--texto-3); font-weight: 700;
+}
+.ficha-cifras strong { font-size: 21px; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+.ficha-cifras .ok { color: var(--verde); }
+.ficha-cifras .pend { color: var(--ambar); }
+
+.barra-saldo { height: 7px; border-radius: 7px; background: var(--panel-alto); overflow: hidden; }
+.barra-saldo span {
+  display: block; height: 100%; border-radius: 7px;
+  background: linear-gradient(90deg, var(--acento), var(--verde));
+  transition: width .4s ease;
+}
+.ficha-desc { margin-top: 16px; font-size: 13.5px; color: var(--texto-2); line-height: 1.6; }
+
+.lista-abonos { display: flex; flex-direction: column; }
+.abono {
+  display: grid; grid-template-columns: 92px 1fr auto auto; gap: 14px; align-items: center;
+  padding: 13px 18px;
+  border-bottom: 1px solid color-mix(in srgb, var(--borde) 55%, transparent);
+}
+.abono:last-child { border-bottom: none; }
+.abono-fecha { font-size: 12.5px; color: var(--texto-3); }
+.abono-nota { font-size: 14px; }
+.abono-monto { font-size: 15px; font-weight: 700; color: var(--verde); font-variant-numeric: tabular-nums; }
+
+.form-abono {
+  display: grid; grid-template-columns: 1fr 1fr auto; gap: 14px; align-items: end; padding: 18px;
+}
+.form-abono label { display: flex; flex-direction: column; gap: 6px; }
+.form-abono label.ancho { grid-column: 1 / -1; }
+.form-abono span {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .7px; color: var(--texto-3);
+}
+.form-abono input {
+  background: var(--panel-alto); border: 1px solid var(--borde);
+  border-radius: 10px; padding: 11px 13px; font-size: 14px; outline: none;
+  transition: border-color .15s; color-scheme: dark light;
+}
+.form-abono input:focus { border-color: var(--acento); }
+.form-abono button {
+  padding: 12px 20px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  background: var(--acento); color: var(--marino); white-space: nowrap;
+  transition: transform .15s;
+}
+.form-abono button:hover { transform: translateY(-1px); }
+
+.mini.destacado { color: var(--acento); border-color: color-mix(in srgb, var(--acento) 45%, var(--borde)); }
+
+@media (max-width: 640px) {
+  .ficha-cifras { grid-template-columns: 1fr; gap: 10px; }
+  .ficha-cifras div { flex-direction: row; align-items: baseline; justify-content: space-between; }
+  .abono { grid-template-columns: 1fr auto; row-gap: 6px; }
+  .abono-fecha { grid-column: 1 / -1; }
+  .abono .mini { grid-column: 1; grid-row: 3; justify-self: start; }
+  .form-abono { grid-template-columns: 1fr; }
+  .form-abono button { width: 100%; }
+}
+
+/* ─────────── Logo de la marca ─────────── */
+/* Si existe public/logo.png (o logo.svg) se usa ese archivo y se oculta la
+   versión dibujada. Si no existe, el <img> se quita solo y queda la de respaldo. */
+
+.marca-img { display: block; max-width: 100%; height: auto; }
+.sidebar .marca-img {
+  width: 100%; border-radius: 10px; background: var(--marino);
+  padding: 8px 10px; margin-bottom: 4px;
+}
+.marca:has(.marca-img) .marca-logo,
+.marca:has(.marca-img) > div:last-child { display: none; }
+.marca:has(.marca-img) { display: block; padding-bottom: 18px; }
+
+.entrada-caja .marca-img {
+  width: 100%; max-width: 230px; margin: 0 auto 18px;
+  border-radius: 12px; background: var(--marino); padding: 12px 14px;
+}
+.pantalla-entrada:has(.marca-img) .marca-logo.grande,
+.pantalla-entrada:has(.marca-img) h1.marca-nombre { display: none; }
+
+@media (max-width: 1180px) and (min-width: 901px) {
+  .sidebar .marca-img { display: none; }
+  .marca:has(.marca-img) .marca-logo { display: grid; }
+}
+@media (max-width: 900px) {
+  .sidebar .marca-img { display: none; }
+}
+
+/* Aviso de por qué no hay micrófono */
+.burbuja.aviso-voz {
+  max-width: 100%; border-color: var(--ambar);
+  background: color-mix(in srgb, var(--ambar) 8%, var(--panel));
+}
+.burbuja.aviso-voz p + p { margin-top: 7px; }
+.burbuja.aviso-voz code {
+  background: var(--panel-alto); padding: 1px 5px; border-radius: 5px;
+  font-size: 12px; word-break: break-all;
+}
+
+/* ─────────── Ficha de cliente ─────────── */
+
+.ficha-cifras.cuatro { grid-template-columns: repeat(4, 1fr); }
+.ficha-cifras .alerta { color: var(--alerta); }
+
+.contacto { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.contacto a { color: var(--acento); text-decoration: none; font-size: 13px; }
+.contacto a:hover { text-decoration: underline; }
+.contacto span { font-size: 13px; color: var(--texto-3); }
+.contacto i { font-style: normal; color: var(--texto-3); opacity: .5; }
+
+.abono-nota em {
+  display: block; font-style: normal; font-size: 12px;
+  color: var(--texto-3); margin-top: 2px;
+}
+
+@media (max-width: 900px) { .ficha-cifras.cuatro { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .ficha-cifras.cuatro { grid-template-columns: 1fr; } }
+
+/* ─────────── Formulario de edición manual ─────────── */
+
+/* Que envuelvan antes que salirse: un botón cortado contra el borde de la
+   pantalla no se ve que existe, y no hay cómo llegar a él. */
+.ficha-acciones { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
+
+.form-editar {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 20px;
+}
+.form-editar label { display: flex; flex-direction: column; gap: 6px; }
+.form-editar label.ancho { grid-column: 1 / -1; }
+.form-editar span {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .7px; color: var(--texto-3);
+}
+.form-editar input,
+.form-editar select,
+.form-editar textarea {
+  background: var(--panel-alto); border: 1px solid var(--borde);
+  border-radius: 10px; padding: 11px 13px; font-size: 14px; outline: none;
+  transition: border-color .15s; color-scheme: dark light; font-family: inherit;
+  width: 100%; resize: vertical;
+}
+.form-editar input:focus,
+.form-editar select:focus,
+.form-editar textarea:focus { border-color: var(--acento); }
+
+.form-acciones { grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 4px; }
+.form-acciones button {
+  padding: 12px 22px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  background: var(--acento); color: var(--marino); transition: transform .15s;
+}
+.form-acciones button:hover { transform: translateY(-1px); }
+.form-acciones .secundario {
+  background: none; border: 1px solid var(--borde); color: var(--texto-2);
+}
+.form-acciones .secundario:hover { color: var(--texto); border-color: var(--acento); transform: none; }
+/* Borrar no se ofrece como una opción más: va apagado, y sólo se enciende en
+   rojo cuando el dedo ya está encima. */
+.form-acciones .peligro {
+  background: none; border: 1px solid var(--borde); color: var(--texto-3);
+  margin-left: auto;
+}
+.form-acciones .peligro:hover {
+  color: var(--alerta); border-color: var(--alerta); transform: none;
+}
+@media (max-width: 640px) { .form-acciones .peligro { margin-left: 0; } }
+
+@media (max-width: 640px) {
+  .form-editar { grid-template-columns: 1fr; }
+  .form-acciones { flex-direction: column-reverse; }
+  .form-acciones button { width: 100%; }
+  .ficha-cabecera { flex-direction: column; }
+  .ficha-acciones { align-self: flex-start; }
+}
+
+/* ─────────── Catálogo de productos ─────────── */
+
+.ficha-cifras.tres { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 640px) { .ficha-cifras.tres { grid-template-columns: 1fr; } }
+
+.barra-productos {
+  display: flex; gap: 10px; align-items: center; margin-bottom: 18px; flex-wrap: wrap;
+}
+.barra-productos input[type="search"] {
+  flex: 1; min-width: 220px;
+  background: var(--panel); border: 1px solid var(--borde);
+  border-radius: 10px; padding: 11px 14px; font-size: 14px; outline: none;
+  color: var(--texto); transition: border-color .15s;
+}
+.barra-productos input[type="search"]:focus { border-color: var(--acento); }
+.barra-productos .mini { padding: 11px 16px; }
+.gestor-fotos:empty { display: none; }
+
+.ficha-producto-cab { display: flex; gap: 16px; align-items: flex-start; }
+.foto-producto {
+  width: 84px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; align-items: center;
+}
+.foto-producto img {
+  width: 84px; height: 84px; max-width: 84px; max-height: 84px;
+  object-fit: contain; border-radius: 12px;
+  border: 1px solid var(--borde); background: var(--panel-alto);
+}
+.foto-producto .foto-vacia {
+  width: 84px; height: 84px; display: flex; align-items: center; justify-content: center;
+  border: 1px dashed var(--borde); border-radius: 12px; font-size: 11px;
+  color: var(--texto-3); text-align: center; padding: 6px;
+}
+.foto-producto .mini { font-size: 11px; padding: 6px 8px; }
+
+/* ─────────── Importar lista de precios ─────────── */
+
+.ayuda { font-size: 13px; color: var(--texto-2); margin-bottom: 14px; }
+
+.import-hoja { margin-bottom: 18px; }
+.import-hoja-cab {
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: end;
+  padding: 16px 18px 0;
+}
+.import-hoja-cab label {
+  display: flex; flex-direction: column; gap: 6px; font-size: 11px;
+  font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--texto-3);
+}
+.import-hoja-cab label.check {
+  flex-direction: row; align-items: center; gap: 8px; text-transform: none;
+  font-weight: 500; letter-spacing: normal; font-size: 13px; color: var(--texto-2);
+}
+.import-hoja-cab input[type="text"] {
+  background: var(--panel-alto); border: 1px solid var(--borde);
+  border-radius: 10px; padding: 9px 12px; font-size: 14px; color: var(--texto);
+  font-weight: 400; text-transform: none; letter-spacing: normal;
+}
+.import-hoja-cab .import-resultado { font-size: 13px; color: var(--verde); font-weight: 600; }
+.import-hoja .ayuda { padding: 10px 18px 0; margin-bottom: 0; }
+.import-hoja select.import-mapa {
+  background: var(--panel-alto); border: 1px solid var(--borde);
+  border-radius: 8px; padding: 5px 6px; font-size: 12px; color: var(--texto);
+  max-width: 160px;
+}
+.import-hoja th { padding: 10px 12px; }
+.import-hoja td { font-size: 12.5px; max-width: 220px; }
+
+/* Ninguna imagen dentro de una tabla es más que una uña, venga de donde venga.
+   Va sin anidar bajo ninguna vista a propósito: una foto de 4000 píxeles del
+   Excel de un proveedor no puede reventar la pantalla porque la regla más
+   específica no llegó a aplicarse. */
+table img {
+  max-width: 58px; max-height: 58px; width: auto; height: auto;
+  object-fit: contain; vertical-align: middle;
+}
+
+/* Las fotos que trae el Excel, para confirmarlas antes de importar */
+.import-hoja .th-foto {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .7px; color: var(--texto-3); width: 74px;
+}
+.import-hoja .celda-foto { width: 74px; }
+.import-hoja .celda-foto img {
+  width: 58px; height: 58px; object-fit: contain;
+  border: 1px solid var(--borde); border-radius: 8px; background: var(--panel-alto);
+  display: block;
+}
+.import-hoja .celda-foto .sin-foto { color: var(--texto-3); }
+
+/* Informe de qué cambia al cruzar la lista con el catálogo */
+.informe { padding: 4px 18px 0; display: flex; flex-wrap: wrap; gap: 18px; }
+.informe-grupo { flex: 1 1 260px; min-width: 0; }
+.informe-grupo h4 {
+  margin: 0 0 6px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .7px; color: var(--texto-3);
+}
+.informe-grupo.nuevo h4 { color: var(--verde); }
+.informe-grupo.actualizado h4 { color: var(--acento); }
+.informe-grupo.ausente h4 { color: var(--ambar); }
+.informe-grupo ul { list-style: none; margin: 0; padding: 0; }
+.informe-grupo li {
+  font-size: 12.5px; padding: 4px 0; line-height: 1.4;
+  border-bottom: 1px solid color-mix(in srgb, var(--borde) 40%, transparent);
+}
+.informe-grupo li:last-child { border-bottom: none; }
+.informe-grupo li.mas { color: var(--texto-3); font-style: italic; }
+.informe-grupo s { color: var(--texto-3); }
+.informe-grupo b { font-variant-numeric: tabular-nums; }
+.informe-grupo em { font-style: normal; color: var(--texto-3); font-size: 11.5px; }
+.informe.aplicado { opacity: .85; }
+
+.contacto .pastilla,
+p .pastilla { margin-left: 6px; }
+.pastilla.propio { color: var(--acento-2); border-color: color-mix(in srgb, var(--acento-2) 40%, transparent); }
+
+/* ─────────── Cotización que se está dictando ─────────── */
+
+.en-curso {
+  display: flex; align-items: center; gap: 12px;
+  margin: 0 0 18px; padding: 11px 16px;
+  border-radius: 12px; border: 1px solid color-mix(in srgb, var(--acento-2) 40%, var(--borde));
+  background: color-mix(in srgb, var(--acento-2) 9%, var(--panel));
+}
+.en-curso[hidden] { display: none; }
+.en-curso .punto {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--acento-2); flex-shrink: 0;
+  animation: latido 1.8s ease-in-out infinite;
+}
+@keyframes latido { 50% { opacity: .3; transform: scale(.8); } }
+.en-curso-texto { flex: 1; min-width: 0; }
+.en-curso-texto strong {
+  display: block; font-size: 13.5px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.en-curso-texto span { display: block; font-size: 12px; color: var(--texto-2); margin-top: 1px; }
+.en-curso .mini { flex-shrink: 0; }
+
+@media (max-width: 640px) {
+  .en-curso { flex-wrap: wrap; }
+  .en-curso-texto { flex-basis: calc(100% - 21px); }
+  .en-curso .mini { flex: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .en-curso .punto { animation: none; }
+}
+
+/* Acceso a los datos de la empresa, en el pie de la barra lateral */
+.enlace-ajustes {
+  display: block; width: 100%; text-align: left; margin-bottom: 8px;
+  padding: 8px 10px; border-radius: 8px; font-size: 12.5px;
+  color: var(--texto-3); background: none; border: none; cursor: pointer;
+  transition: color .15s, background .15s;
+}
+.enlace-ajustes:hover { color: var(--acento); background: var(--panel-alto); }
+
+/* ─────────── Elegir el tema ─────────── */
+
+.temas { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.opcion-tema {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  padding: 12px; border-radius: 12px; text-align: left;
+  border: 1.5px solid var(--borde); background: var(--panel-alto);
+  color: var(--texto); transition: border-color .15s, background .15s;
+}
+.opcion-tema:hover { border-color: var(--acento); }
+.opcion-tema.elegida { border-color: var(--acento); background: color-mix(in srgb, var(--acento) 12%, var(--panel-alto)); }
+.opcion-tema strong { font-size: 13.5px; font-weight: 650; }
+.opcion-tema small { font-size: 11px; color: var(--texto-3); line-height: 1.35; }
+
+/* Una muestra de cada tema, para reconocerlo sin tener que probarlo. */
+.opcion-tema .muestra {
+  width: 100%; height: 30px; border-radius: 7px; margin-bottom: 5px;
+  border: 1px solid var(--borde);
+}
+.muestra-oscuro { background: linear-gradient(135deg, #071a2e 0 50%, #14375e 50% 100%); }
+.muestra-claro  { background: linear-gradient(135deg, #ffffff 0 50%, #e5eef6 50% 100%); }
+.muestra-auto   { background: linear-gradient(135deg, #071a2e 0 50%, #ffffff 50% 100%); }
+
+/* Un <a> que se ve igual que los botones .mini de las fichas */
+a.mini { text-decoration: none; display: inline-flex; align-items: center; }
+
+/* ─────────── Renglones de una cotización ─────────── */
+
+.tabla-items .fila-seccion td {
+  background: var(--panel-alto); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .8px; color: var(--acento);
+  padding: 9px 16px;
+}
+.tabla-items .col-ref { font-size: 12px; color: var(--texto-2); white-space: nowrap; }
+.tabla-items .total-item { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.marca-item { display: block; font-style: normal; font-size: 11.5px; color: var(--texto-3); margin-top: 2px; }
+
+/* El área a la que va el renglón, y el aviso de que va a salir sin foto */
+.area-item, .falta-foto {
+  display: inline-block; font-style: normal; font-size: 10.5px; font-weight: 600;
+  padding: 1px 7px; border-radius: 999px; margin: 3px 5px 0 0; vertical-align: middle;
+}
+.area-item { color: var(--acento); background: color-mix(in srgb, var(--acento) 14%, transparent); }
+.falta-foto { color: var(--ambar); background: color-mix(in srgb, var(--ambar) 14%, transparent); }
+
+/* Un renglón abierto para editar ocupa toda la fila */
+.tabla-items .fila-editor td { padding: 0; background: var(--panel-alto); }
+.form-item {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px 14px; padding: 16px 18px;
+}
+.form-item label { display: flex; flex-direction: column; gap: 6px; }
+.form-item label.ancho { grid-column: 1 / -1; }
+.form-item label span {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--texto-3);
+}
+.form-item input, .form-item textarea {
+  background: var(--panel); border: 1px solid var(--borde); border-radius: 9px;
+  padding: 9px 11px; font: inherit; font-size: 13.5px; color: var(--texto); resize: vertical;
+}
+.form-item input:focus, .form-item textarea:focus { outline: none; border-color: var(--acento); }
+.form-item .form-acciones { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
+
+/* Logo de la empresa, en Ajustes */
+.logo-ajuste { display: flex; gap: 18px; align-items: flex-start; padding: 18px; flex-wrap: wrap; }
+.logo-vista {
+  width: 190px; min-height: 84px; flex-shrink: 0; display: flex;
+  align-items: center; justify-content: center; padding: 10px;
+  border: 1px solid var(--borde); border-radius: 12px; background: #fff;
+}
+.logo-vista img { max-width: 100%; max-height: 76px; display: block; }
+.logo-vista .foto-vacia { color: #94a3b8; font-size: 12px; }
+.logo-texto { flex: 1; min-width: 220px; display: flex; flex-direction: column; align-items: flex-start; }
+.logo-texto .mini + .mini { margin-top: 8px; }
+
+/* Los renglones llevan seis columnas, dos de ellas con campos editables. La
+   descripción se lleva el espacio que sobre (width:100% sobre una celda de
+   tabla es "todo lo que quede") y es la única que se encoge, así los botones
+   de la derecha nunca quedan fuera de la tarjeta pidiendo scroll horizontal. */
+.tabla-items thead th,
+.tabla-items tbody td { padding-left: 10px; padding-right: 10px; }
+.tabla-items .principal-col { width: 100%; overflow-wrap: anywhere; }
+.tabla-items .acciones-fila { gap: 5px; }
+.tabla-items .acciones-fila .mini {
+  padding: 5px 0; font-size: 12px; width: 28px; text-align: center;
+}
+
+.celda-num {
+  width: 54px; text-align: right; background: var(--panel-alto);
+  border: 1px solid var(--borde); border-radius: 8px; padding: 6px 7px;
+  font-size: 13px; color: var(--texto); font-variant-numeric: tabular-nums;
+  outline: none; transition: border-color .15s;
+}
+.celda-num.ancho { width: 92px; }
+.celda-num:focus { border-color: var(--acento); }
+
+/* Totales y porcentajes */
+.form-totales {
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: end;
+  padding: 18px; border-bottom: 1px solid color-mix(in srgb, var(--borde) 55%, transparent);
+}
+.form-totales label { display: flex; flex-direction: column; gap: 6px; }
+.form-totales span {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .7px; color: var(--texto-3);
+}
+.form-totales input, .form-totales select {
+  background: var(--panel-alto); border: 1px solid var(--borde);
+  border-radius: 10px; padding: 10px 12px; font-size: 14px; color: var(--texto);
+  outline: none; transition: border-color .15s; width: 130px;
+}
+.form-totales input:focus, .form-totales select:focus { border-color: var(--acento); }
+.form-totales button {
+  padding: 11px 20px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  background: var(--acento); color: var(--marino);
+}
+
+.resumen-totales { padding: 16px 18px; display: flex; flex-direction: column; gap: 9px; }
+.resumen-totales div { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; }
+.resumen-totales span { font-size: 13.5px; color: var(--texto-2); }
+.resumen-totales b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.resumen-totales .gran-total {
+  border-top: 1px solid var(--borde); padding-top: 11px; margin-top: 3px;
+}
+.resumen-totales .gran-total span { font-size: 14px; font-weight: 700; color: var(--texto); }
+.resumen-totales .gran-total b { font-size: 22px; color: var(--acento-2); letter-spacing: -.5px; }
+
+/* Buscador del catálogo dentro de la cotización */
+.buscador-catalogo {
+  width: 100%; background: var(--panel-alto); border: 1px solid var(--borde);
+  border-radius: 10px; padding: 11px 14px; font-size: 14px; color: var(--texto);
+  outline: none; transition: border-color .15s;
+}
+.buscador-catalogo:focus { border-color: var(--acento); }
+
+.resultados-catalogo { display: flex; flex-direction: column; }
+.resultado {
+  display: grid; grid-template-columns: 1fr auto 68px auto; gap: 14px; align-items: center;
+  padding: 12px 18px;
+  border-top: 1px solid color-mix(in srgb, var(--borde) 55%, transparent);
+}
+.resultado strong { font-size: 13.5px; font-weight: 600; display: block; }
+.resultado em {
+  font-style: normal; font-size: 11.5px; color: var(--texto-3); display: block; margin-top: 2px;
+}
+.resultado .precio { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 640px) {
+  .resultado { grid-template-columns: 1fr auto; row-gap: 8px; }
+  .resultado > div { grid-column: 1 / -1; }
+  .form-totales { flex-direction: column; align-items: stretch; }
+  .form-totales input, .form-totales select, .form-totales button { width: 100%; }
+  .celda-num, .celda-num.ancho { width: 100%; max-width: 130px; }
+}
+
+/* ─────────── Listas de precios en línea ─────────── */
+
+.lista-online { padding: 16px 18px; margin-bottom: 14px; }
+.lista-cab { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.lista-cab h3 { margin: 0; font-size: 15px; }
+.lista-cab p { margin: 3px 0 0; font-size: 12.5px; color: var(--texto-2); }
+.lista-url {
+  margin: 10px 0 8px; font-size: 11.5px; color: var(--texto-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.lista-online .check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--texto-2); }
+.lista-informe:empty { display: none; }
+
+.tabla-muestra { width: 100%; border-collapse: collapse; margin: 0 0 4px; }
+.tabla-muestra td {
+  padding: 5px 9px; font-size: 11.5px; border-bottom: 1px solid var(--borde);
+  white-space: nowrap; max-width: 190px; overflow: hidden; text-overflow: ellipsis;
+}
+.tabla-muestra .es-encabezado td { color: var(--texto-3); background: var(--panel-alto); font-weight: 600; }
+.tabla-muestra .es-dato td { color: var(--texto); }
+
+/* ─────────── Cotización subida en PDF ─────────── */
+
+.adjunto { display: flex; gap: 16px; align-items: center; padding: 16px 18px; flex-wrap: wrap; }
+.adjunto-icono {
+  width: 46px; height: 56px; flex-shrink: 0; display: grid; place-items: center;
+  border: 1px solid var(--borde); border-radius: 8px; background: var(--panel-alto);
+  font-size: 11px; font-weight: 800; letter-spacing: .5px; color: var(--alerta);
+}
+.adjunto-texto { flex: 1; min-width: 200px; }
+.adjunto-texto strong { display: block; font-size: 14px; overflow-wrap: anywhere; }
+.adjunto-texto span { display: block; font-size: 12.5px; color: var(--texto-2); margin-top: 3px; }
+.form-editar input[type="file"] {
+  background: var(--panel-alto); border: 1px dashed var(--borde); border-radius: 10px;
+  padding: 12px; font-size: 13px; color: var(--texto-2); width: 100%;
+}
+
+/* Cobros que en realidad son el saldo de una cotización aprobada */
+.de-cotizacion {
+  display: block; font-style: normal; font-size: 11.5px;
+  color: var(--texto-3); margin-top: 3px;
+}
+td.vencido { color: var(--alerta); font-weight: 600; }
+
+/* ─────────── Tipo de producto y su uña ─────────── */
+
+.filtros-tipo { display: flex; flex-wrap: wrap; gap: 7px; margin: -8px 0 18px; }
+.chip {
+  font-size: 12px; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--borde); color: var(--texto-2); background: none;
+  transition: .13s; white-space: nowrap;
+}
+.chip:hover { border-color: var(--acento); color: var(--texto); }
+.chip.activo {
+  background: color-mix(in srgb, var(--acento) 16%, transparent);
+  border-color: var(--acento); color: var(--texto); font-weight: 600;
+}
+.chip em { font-style: normal; opacity: .55; margin-left: 3px; font-size: 11px; }
+
+.resumen-cliente-cobro {
+  margin: -8px 0 18px; font-size: 14px; color: var(--texto-2);
+}
+.resumen-cliente-cobro .dinero { color: var(--acento-2); font-weight: 700; }
+
+.etiqueta-tipo {
+  display: inline-block; font-size: 11px; font-weight: 600; white-space: nowrap;
+  padding: 2px 8px; border-radius: 999px;
+  color: var(--acento-2); background: color-mix(in srgb, var(--acento-2) 14%, transparent);
+}
+
+.mini-foto {
+  width: 38px; height: 38px; object-fit: contain; border-radius: 7px;
+  border: 1px solid var(--borde); background: var(--panel-alto); display: block;
+}
+.mini-foto.vacia { border-style: dashed; }
+
+/* ─────────── Agenda: cada cita, una ficha ─────────── */
+
+/* Cada cita va sobre el mismo cajón deslizable que cotizaciones, clientes y
+   productos: la ficha entera es lo que se mueve, y el cajón entra desde su
+   borde derecho. margin-bottom se corrió del todo a este envoltorio, porque
+   overflow:hidden en la ficha se comería el margen si se quedara adentro. */
+.cita-item {
+  position: relative; overflow: hidden; margin-bottom: 12px;
+}
+.cita-item > .cita-ficha {
+  transform: translateX(var(--x));
+  transition: transform .18s ease;
+  touch-action: pan-y;
+}
+.cita-item.arrastrando > .cita-ficha { transition: none; }
+
+.cita-ficha {
+  display: flex; gap: 18px; align-items: flex-start;
+  background: var(--panel); border: 1px solid var(--borde);
+  border-radius: var(--radio); padding: 16px 18px; margin-bottom: 0;
+}
+.cita-ficha.es-hoy { border-color: color-mix(in srgb, var(--acento) 45%, var(--borde)); }
+.cita-ficha.editando { display: block; padding: 0; }
+.cita-ficha.editando .tarjeta { border: none; margin: 0 !important; background: none; }
+
+.cita-cuando {
+  width: 86px; flex-shrink: 0; text-align: center;
+  padding: 8px 0; border-radius: 11px; background: var(--panel-alto);
+}
+.cita-cuando strong { display: block; font-size: 13px; }
+.cita-cuando span { display: block; font-size: 18px; font-weight: 700; letter-spacing: -.5px; margin-top: 2px; }
+.cita-ficha.es-hoy .cita-cuando { background: color-mix(in srgb, var(--acento) 16%, transparent); }
+
+.cita-cuerpo { flex: 1; min-width: 0; }
+.cita-cuerpo h3 { margin: 0; font-size: 16px; letter-spacing: -.2px; }
+.cita-quien { margin: 3px 0 0; font-size: 13px; color: var(--texto-2); }
+
+/* El detalle entero, con sus saltos de línea: es lo que hay que hacer. */
+.cita-detalle {
+  margin-top: 10px; padding: 10px 13px; border-radius: 10px;
+  background: var(--panel-alto); border-left: 3px solid var(--acento);
+  font-size: 13.5px; line-height: 1.55; white-space: pre-line; overflow-wrap: anywhere;
+}
+.cita-sin-detalle { margin: 8px 0 0; font-size: 12.5px; color: var(--texto-3); font-style: italic; }
+
+.cita-acciones {
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-end; flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .cita-ficha { flex-wrap: wrap; gap: 12px; }
+  .cita-cuando { width: auto; display: flex; gap: 8px; align-items: baseline; padding: 6px 12px; }
+  .cita-cuerpo { flex-basis: 100%; order: 3; }
+  .cita-acciones { flex-direction: row; flex-wrap: wrap; align-items: center; margin-left: auto; }
+}
+.chip.agrupar { border-style: dashed; color: var(--ambar); border-color: color-mix(in srgb, var(--ambar) 45%, var(--borde)); }
+.chip.agrupar:hover { border-color: var(--ambar); color: var(--ambar); }
+
+/* La oferta en PDF, accesible desde la lista sin entrar a la ficha */
+.mini.pdf {
+  text-decoration: none; display: inline-flex; align-items: center; gap: 3px;
+  color: var(--acento); border-color: color-mix(in srgb, var(--acento) 40%, var(--borde));
+}
+.mini.pdf:hover { background: color-mix(in srgb, var(--acento) 14%, transparent); color: var(--acento); }
+
+/* ─────────── Visor de PDF ─────────── */
+
+.visor-pdf {
+  position: fixed; inset: 0; z-index: 90;
+  display: flex; flex-direction: column;
+  background: var(--fondo);
+}
+.visor-pdf[hidden] { display: none; }
+body.con-visor { overflow: hidden; }
+
+.visor-barra {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; flex-shrink: 0;
+  background: var(--panel); border-bottom: 1px solid var(--borde);
+  /* En el teléfono la barra de estado se monta encima si no se respeta. */
+  padding-top: max(10px, env(safe-area-inset-top));
+}
+.visor-cerrar {
+  width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px;
+  font-size: 17px; color: var(--texto); background: var(--panel-alto);
+  border: 1px solid var(--borde); transition: .13s;
+}
+.visor-cerrar:hover { background: var(--alerta); color: #fff; border-color: var(--alerta); }
+.visor-titulo {
+  flex: 1; min-width: 0; font-size: 14px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.visor-aparte, .visor-compartir {
+  flex-shrink: 0; font-size: 12px; text-decoration: none; color: var(--acento);
+  border: 1px solid color-mix(in srgb, var(--acento) 40%, var(--borde));
+  border-radius: 8px; padding: 7px 12px; background: none; font-family: inherit; cursor: pointer;
+}
+.visor-aparte:hover, .visor-compartir:hover { background: color-mix(in srgb, var(--acento) 14%, transparent); }
+
+.visor-marco {
+  flex: 1; width: 100%; border: none; background: #fff;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ─────────── Cotizaciones en renglones cortos ─────────── */
+
+.lista-cot {
+  background: var(--panel); border: 1px solid var(--borde);
+  border-radius: var(--radio); overflow: hidden;
+}
+/* Cada renglón va sobre un cajón de acciones que asoma al deslizarlo con el
+   dedo, como en el correo del teléfono. El renglón es el que se mueve; el
+   cajón está quieto abajo, y el recorte del contenedor lo tapa mientras el
+   renglón está en su lugar. */
+.cot-item {
+  overflow: hidden;
+  border-bottom: 1px solid color-mix(in srgb, var(--borde) 55%, transparent);
+}
+.cot-item:last-child { border-bottom: none; }
+
+/* Lo que se mueve al deslizar lo dice cada lista; el contenedor sólo lleva la
+   cuenta de cuánto, en --x, y el CSS de abajo se lo aplica a lo que
+   corresponda. Así el mismo gesto sirve para el renglón de cotizaciones y para
+   una fila de tabla, que por dentro no se parecen en nada. */
+.deslizable { --x: 0px; position: relative; }
+.deslizable.abierto { --x: calc(-1 * var(--cajon)); }
+
+/* El cajón vive FUERA del renglón, pegado a su borde derecho, y entra
+   corriéndose junto con él. Antes estaba quieto debajo y el renglón le pasaba
+   por encima: eso obliga a que lo de arriba sea opaco y a que tape hasta el
+   último rincón —si no, el cajón se asoma por los bordes— y además le robaba
+   el toque al renglón, porque un elemento posicionado se dibuja por encima.
+   Así no hay nada que tapar: cuando está cerrado, sencillamente no está. */
+.cot-cajon {
+  position: absolute; top: 0; bottom: 0; left: 100%; width: var(--cajon);
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  transform: translateX(var(--x));
+  transition: transform .18s ease;
+}
+.arrastrando .cot-cajon { transition: none; }
+/* Botones redondeados con su dibujo y su rótulo chiquito debajo, no dos
+   bloques cuadrados de color: ocupan lo mismo pero pesan mucho menos a la
+   vista, y la caneca se reconoce sin leer. */
+.cajon-btn {
+  flex: 1; border: 0; border-radius: 14px; cursor: pointer; color: #fff;
+  /* Alto de pastilla, no de bloque: en un renglón alto el botón no tiene por
+     qué estirarse de arriba abajo. */
+  height: min(100%, 82px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  font-family: inherit; font-size: 10.5px; font-weight: 600; letter-spacing: .2px;
+}
+.cajon-btn svg { width: 21px; height: 21px; fill: currentColor; }
+/* Los colores del tema son claros —están pensados para texto sobre fondo
+   oscuro, no para fondo de un botón—: acá van oscurecidos, si no el rótulo
+   blanco encima no se alcanza a leer. */
+/* El color plano va primero por si el navegador es viejo y no entiende
+   color-mix: sin él, el botón quedaría sin fondo y no se vería. */
+.cajon-btn.editar { background: #33718d; background: color-mix(in srgb, var(--acento) 52%, #04121f); }
+.cajon-btn.borrar { background: #ae4759; background: color-mix(in srgb, var(--alerta) 62%, #2a0510); }
+.cajon-btn.ok     { background: #22795a; background: color-mix(in srgb, var(--verde) 52%, #01180f); }
+a.cajon-btn { text-decoration: none; }
+.cajon-btn:active { filter: brightness(1.12); }
+.cajon-btn:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
+
+.cot-fila {
+  position: relative;
+  display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+  background: var(--panel);
+  cursor: pointer; transition: background .12s, transform .18s ease;
+  /* El navegador se queda con el desplazamiento vertical y a nosotros nos
+     deja el horizontal: así deslizar no pelea con recorrer la lista. */
+  touch-action: pan-y;
+}
+/* Mientras el dedo está encima manda el dedo, no la animación. */
+.cot-item.arrastrando .cot-fila { transition: none; }
+.cot-item > .cot-fila { transform: translateX(var(--x)); }
+.cot-item { overflow: hidden; }
+.cot-fila:hover { background: var(--panel-alto); }
+.cot-fila:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; }
+
+.cot-texto { flex: 1; min-width: 0; }
+.cot-texto strong {
+  display: block; font-size: 14px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cot-texto span {
+  display: block; font-size: 12.5px; color: var(--texto-2); margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.cot-cifra { text-align: right; flex-shrink: 0; min-width: 88px; }
+.cot-cifra b { display: block; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--ambar); }
+.cot-cifra b.total { color: var(--texto); }
+.cot-cifra b.nada { color: var(--texto-3); }
+.cot-cifra b.ok { color: var(--verde); }
+.cot-cifra span { display: block; font-size: 10.5px; color: var(--texto-3); text-transform: uppercase; letter-spacing: .5px; }
+
+.cot-botones { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.cot-fila .pastilla { flex-shrink: 0; }
+/* La pastilla del estado es un botón: se toca y cambia. La flecha lo dice sin
+   depender de pasar el mouse por encima, que en el teléfono no existe. */
+.pastilla.cambia { cursor: pointer; transition: .13s; border-style: dashed; }
+.pastilla.cambia:hover, .pastilla.cambia:active { filter: brightness(1.3); border-style: solid; }
+/* Los tres puntos abren el mismo cajón que el deslizado. El gesto no se ve, y
+   quien no lo conozca —o al que el teléfono no se lo tome— tiene que poder
+   llegar igual a editar y a eliminar. */
+.cot-fila .mas { flex-shrink: 0; padding: 6px 10px; line-height: 1; font-size: 15px; letter-spacing: 1px; }
+.cot-fila .mini.pdf { flex-shrink: 0; text-decoration: none; padding: 5px 9px; }
+.cot-fila .sin-pdf { width: 30px; flex-shrink: 0; }
+
+/* El panel de Ari a la derecha deja poco sitio para el renglón desde el
+   escritorio angosto (~1300px) hacia abajo: sin esto el texto se aprieta
+   contra las cifras y los botones del costado quedan recortados. */
+@media (max-width: 1300px) {
+  .cot-fila { flex-wrap: wrap; gap: 8px 10px; }
+  .cot-texto { flex-basis: 100%; }
+  .cot-cifra { text-align: left; margin-right: auto; }
+}
+
+/* El cajón dentro de una tabla. En el computador no aparece: ahí la fila
+   tiene sitio de sobra para la hilera de botones, y nadie desliza con el
+   mouse. En el celular es al revés, y por eso se cambian de lugar. */
+.td-cajon, .solo-angosto { display: none; }
+
+@media (max-width: 640px) {
+  /* Igual que en el renglón de cotizaciones: el navegador se queda con lo
+     vertical y a nosotros nos deja lo horizontal. Sin esto el gesto no llega. */
+  tbody tr.deslizable { overflow: hidden; touch-action: pan-y; }
+  /* Al abrir un cajón, el botón que se tocó queda fuera de la fila y el
+     navegador quiere seguirlo: sin esto, arrastra la pantalla de costado. */
+  #contenido { overflow-x: hidden; }
+  tbody tr.deslizable > td:not(.td-cajon) { transform: translateX(var(--x)); }
+  tbody tr.deslizable.arrastrando > td { transition: none; }
+  tbody tr.deslizable > td { transition: transform .18s ease; }
+
+  .td-cajon { display: block; padding: 0; }
+  /* La fila entera queda de fondo del cajón, para que al correrse no se vea a
+     través de ella lo que hay debajo. */
+  tbody tr.deslizable { background: var(--panel); }
+  tbody tr.deslizable .acciones-fila { display: none; }
+  .solo-angosto { display: inline-flex; }
+  td.acciones { display: flex; justify-content: flex-end; }
+}
+
+.galeria-fotos { display: flex; flex-wrap: wrap; gap: 10px; }
+.galeria-foto {
+  position: relative; width: 84px; height: 84px;
+  border-radius: 10px; overflow: hidden; border: 1px solid var(--borde);
+}
+.galeria-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.galeria-foto .mini {
+  position: absolute; inset: auto 0 0 0; border-radius: 0;
+  font-size: 10px; padding: 4px 0; text-align: center;
+  background: color-mix(in srgb, var(--alerta) 75%, #000); color: #fff; border: none;
+}
+.galeria-agregar {
+  width: 84px; height: 84px; border-radius: 10px; cursor: pointer;
+  border: 1px dashed var(--borde); background: var(--panel);
+  color: var(--texto-2); font-size: 11.5px; font-family: inherit; line-height: 1.3;
+}
+.galeria-agregar:hover { border-color: var(--acento); color: var(--acento); }
+
+/* ─────────── Tienda: aprobar quién entra al catálogo ─────────── */
+
+.portal-lista { display: flex; flex-direction: column; gap: 10px; }
+.portal-fila {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 14px; padding: 14px 16px;
+}
+.portal-datos { display: flex; flex-direction: column; gap: 3px; min-width: 220px; }
+.portal-datos strong { font-size: 14.5px; }
+.portal-empresa { font-weight: 400; color: var(--texto-2); }
+.portal-contacto { font-size: 12.5px; color: var(--texto-2); }
+.portal-fecha { font-size: 11.5px; color: var(--texto-3); }
+.portal-datos .pastilla { align-self: flex-start; margin-top: 2px; }
+
+.portal-aprobar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+}
+.portal-aprobar select {
+  font-size: 13px; padding: 7px 10px; border-radius: 8px;
+  border: 1px solid var(--borde); background: var(--panel); color: var(--texto);
+  font-family: inherit;
+}
+.portal-botones { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.portal-clave-form {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  flex-basis: 100%; margin-top: 2px;
+}
+.portal-clave-form input {
+  font-size: 13px; padding: 7px 10px; border-radius: 8px; min-width: 220px;
+  border: 1px solid var(--borde); background: var(--panel); color: var(--texto); font-family: inherit;
+}
+
+/* ─────────── Cargar el catálogo en la cotización ─────────── */
+
+/* El renglón que se abre debajo del producto para poner la cantidad. Se
+   resalta con un borde a la izquierda para que se vea de cuál cuelga: en la
+   lista apilada del celular, sin eso, parece una tarjeta suelta más. */
+tbody .fila-editor > td {
+  padding: 0;
+  background: color-mix(in srgb, var(--verde) 9%, var(--panel-alto));
+  border-left: 3px solid var(--verde);
+}
+.cotizar-producto {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px;
+  padding: 14px 16px;
+}
+.cotizar-producto label { display: flex; flex-direction: column; gap: 6px; }
+.cotizar-producto label span {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--texto-3);
+}
+/* Ancho de cantidad, no de nombre: entran cuatro cifras y se toca cómodo. */
+.cotizar-producto input {
+  width: 96px; font-size: 16px; padding: 9px 11px;
+  border-radius: 9px; border: 1px solid var(--borde);
+  background: var(--panel); color: var(--texto); font-family: inherit;
+}
+.cotizar-precio { display: flex; flex-direction: column; gap: 2px; }
+.cotizar-precio b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.cotizar-precio span { font-size: 11px; color: var(--texto-3); }
+/* Pegados al precio y NO empujados a la derecha: esta fila abarca la tabla
+   entera, y la tabla de productos es más ancha que la pantalla. Con
+   margin-left:auto los botones se iban a parar al extremo derecho, fuera de
+   lo que se ve, y había que desplazarse de lado para poder agregar. */
+.cotizar-botones { display: flex; gap: 8px; }
+.cotizar-producto .ayuda { flex-basis: 100%; margin: 0; }
+
+/* El recordatorio de que hay una cotización armándose, arriba del catálogo. */
+.aviso-armando {
+  border-left: 3px solid var(--verde);
+  padding: 9px 12px; margin: 0 0 14px;
+  background: color-mix(in srgb, var(--verde) 8%, transparent);
+  border-radius: 0 9px 9px 0;
+}
+
+@media (max-width: 640px) {
+  .cotizar-botones { margin-left: 0; flex-basis: 100%; }
+  .cotizar-producto .mini { flex: 1; }
+}
+
+/* ─────────── Bloques que se pliegan ─────────── */
+
+details.plegable > summary { cursor: pointer; list-style: none; user-select: none; }
+details.plegable > summary::-webkit-details-marker { display: none; }
+details.plegable > summary:hover { color: var(--texto-2); }
+details.plegable .flecha { transition: transform .15s; display: inline-block; font-size: 10px; }
+details.plegable[open] > summary .flecha { transform: rotate(90deg); }
+details.plegable .cuantos {
+  font-style: normal; font-size: 10.5px; font-weight: 700;
+  padding: 1px 7px; border-radius: 999px;
+  background: var(--panel-alto); color: var(--texto-2);
+}
+/* El cliente es por lo que uno busca todo: resaltado en todas las pantallas. */
+.es-cliente { color: var(--ambar); font-weight: 600; }
+@media (max-width: 1300px) {
+  .cot-botones { flex-basis: 100%; justify-content: flex-end; }
+}
+.filtro-cliente { font-size: 12.5px; color: var(--texto-2); align-self: center; }
