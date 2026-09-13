@@ -420,6 +420,32 @@ async function api(req, res, url) {
     }
   }
 
+  // GET /api/enlace/resumen -> las mismas tarjetas del panel de Inicio (por
+  // cobrar, pendientes, próximas citas...), para un widget de Atajos en la Mac
+  // o cualquier otro programa externo. Va antes del muro de sesión por lo
+  // mismo que el enlace de la agenda: no hay una persona haciendo clic acá,
+  // y este token es aparte del de arriba porque uno sólo lee y el otro puede
+  // escribir en la agenda.
+  if (recurso === 'enlace' && partes[1] === 'resumen' && req.method === 'GET') {
+    if (!auth.resumenActivo()) {
+      return json(res, 503, {
+        error: 'El resumen externo no está configurado. Definí ARI_TOKEN_RESUMEN '
+          + '(mínimo 16 caracteres) en las variables de entorno y reiniciá la aplicación.',
+      });
+    }
+
+    const ip = auth.origen(req);
+    if (auth.bloqueado(ip)) {
+      return json(res, 429, { error: 'Demasiados intentos fallidos. Esperá unos minutos.' });
+    }
+    if (!auth.tokenResumenValido(req)) {
+      auth.registrarFallo(ip);
+      return json(res, 401, { error: 'Token inválido.' });
+    }
+    auth.limpiarIntentos(ip);
+    return json(res, 200, db.resumen());
+  }
+
   /* ---------------------------------------------------------------- */
   /* Catálogo público: acá entra cualquiera, con SU propia sesión —la  */
   /* cookie del portal, nada que ver con la del panel—.                 */

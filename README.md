@@ -1309,6 +1309,62 @@ recién al final por el nombre exacto, así que la misma persona agendando dos
 veces no queda duplicada en la lista de clientes. Los datos que ya tuviera
 cargados no se pisan: sólo se completan los que estén vacíos.
 
+## Un widget en el escritorio de la Mac, con Atajos
+
+El panel de **Inicio** —por cobrar, pendientes, próximas citas, cuántos
+clientes— se puede ver también como un widget del escritorio de la Mac
+(el mismo panel de "Editar widgets" donde están Calendario, Clima, etc.),
+armándolo con la app **Atajos** de Apple. No hay forma de que la propia
+página web aparezca ahí —ese panel es sólo para apps nativas—, pero un
+Atajo sí puede entrar, y puede pedirle el resumen a Ari por su cuenta.
+
+**1. Definir el token**, en `.env` o en las variables de entorno de cPanel
+—el mismo lugar donde ya está `ARI_CLAVE`—:
+
+```bash
+ARI_TOKEN_RESUMEN=otra-clave-larga-e-inventada-de-al-menos-16-caracteres
+```
+
+Es un token aparte del de agendar (`ARI_TOKEN_ENLACE`) a propósito: éste
+sólo lee las tarjetas del panel, no puede escribir nada, así que conviene
+que sea un secreto distinto. Mientras la variable no exista, la ruta
+responde 503 y no hay forma de leer nada por ahí.
+
+**2. Armar el Atajo**, en la app Atajos de la Mac:
+
+1. **+ Nuevo atajo**.
+2. Agregar la acción **"Obtener contenido de URL"**, con:
+   - URL: `https://ari.clickcontrol.co/api/enlace/resumen`
+   - Método: `GET`
+   - En "Cabeceras de solicitud" (Request Headers), agregar una con clave
+     `Authorization` y valor `Bearer otra-clave-larga-e-inventada-de-al-menos-16-caracteres`
+     (el mismo valor que en `ARI_TOKEN_RESUMEN`).
+3. Con eso ya llega el resumen completo en JSON. Para armar un texto legible,
+   agregar **"Obtener valor de diccionario"** (Get Dictionary Value) por
+   cada dato que se quiera mostrar —por ejemplo, la clave `contadores` y
+   dentro de ella `porCobrar`, `clientes`, `citasHoy`— y juntarlos con la
+   acción **"Texto"** en algo como:
+   ```
+   Por cobrar: [porCobrar]
+   Citas hoy: [citasHoy]
+   Clientes: [clientes]
+   ```
+4. Guardar el atajo con un nombre, por ejemplo **"Resumen Ari"**.
+
+**3. Agregarlo como widget**: clic derecho en el escritorio → **Editar
+widgets** (el mismo panel de la primera captura) → buscar **Atajos** →
+elegir el atajo "Resumen Ari" y el tamaño → arrastrarlo al escritorio.
+
+> El endpoint devuelve exactamente lo mismo que ya se ve en Inicio
+> (`contadores.porCobrar`, `contadores.citasHoy`, `contadores.cotizaciones`,
+> `contadores.clientes`, y las listas `pendientesHoy` y `proximasCitas`),
+> así que cualquier dato de esa pantalla se puede llevar al widget.
+>
+> Los widgets de Atajos en macOS no se actualizan al instante: el sistema
+> decide cada cuánto los refresca (suele ser cada rato, no en tiempo real).
+> Para verlo al día en el momento alcanza con abrir la app Atajos y correrlo
+> a mano, o tocar el widget.
+
 ## Datos
 
 Todo queda en `data/clic-control.db` (SQLite), en tu propia máquina o servidor.

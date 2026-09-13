@@ -1344,6 +1344,30 @@ comprobar('y de verdad cambiaron (no es que ya tuvieran ese valor)',
   comprobar('se puede quitar una', db.catalogoPublico('constructor').find((p) => p.id === z9.id).fotos.length, 1);
 }
 
+/* 14 · Token de sólo lectura del resumen (widget de Atajos, etc.) ------- */
+{
+  // Dos secretos, para el mismo motivo que el de agendar por la web: uno
+  // escribe en la agenda, el otro sólo lee el resumen del panel de Inicio, y
+  // no tiene por qué filtrarse el mismo token para las dos cosas.
+  process.env.ARI_TOKEN_ENLACE = 'token-para-agendar-bien-largo-1';
+  process.env.ARI_TOKEN_RESUMEN = 'token-para-leer-bien-largo-2';
+  const auth = await import('./server/auth.js');
+  const conToken = (token) => ({ headers: token ? { authorization: `Bearer ${token}` } : {} });
+
+  comprobar('con el token configurado, el resumen externo queda activo', auth.resumenActivo(), true);
+  comprobar('el token correcto de resumen pasa', auth.tokenResumenValido(conToken('token-para-leer-bien-largo-2')), true);
+  comprobar('el token del enlace de agenda no sirve para leer el resumen',
+    auth.tokenResumenValido(conToken('token-para-agendar-bien-largo-1')), false);
+  comprobar('uno inventado tampoco', auth.tokenResumenValido(conToken('cualquier-otra-cosa')), false);
+  comprobar('sin ninguno tampoco', auth.tokenResumenValido(conToken(null)), false);
+  comprobar('también sirve la cabecera x-ari-token, no sólo Authorization',
+    auth.tokenResumenValido({ headers: { 'x-ari-token': 'token-para-leer-bien-largo-2' } }), true);
+  comprobar('y al revés: el token de resumen no sirve para el enlace de agenda',
+    auth.tokenEnlaceValido(conToken('token-para-leer-bien-largo-2')), false);
+  comprobar('el de agenda sí sirve para el de agenda',
+    auth.tokenEnlaceValido(conToken('token-para-agendar-bien-largo-1')), true);
+}
+
 /* ------------------------------------------------------------------ */
 
 db.db.close();

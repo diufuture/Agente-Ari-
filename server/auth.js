@@ -96,6 +96,33 @@ export function tokenEnlaceValido(req) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Token para leer el resumen desde afuera (un widget, un atajo…)      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * El mismo problema que el enlace de arriba, al revés: acá no escribe nadie,
+ * sólo lee las tarjetas del panel de Inicio —por cobrar, pendientes, próximas
+ * citas—, para poder armar un widget de Atajos en la Mac o algo parecido.
+ *
+ * Token aparte del de arriba a propósito: uno sólo lee, el otro puede escribir
+ * en la agenda, y no tiene por qué filtrarse el mismo secreto para las dos
+ * cosas. Se configura en ARI_TOKEN_RESUMEN.
+ */
+const TOKEN_RESUMEN = (process.env.ARI_TOKEN_RESUMEN || '').trim();
+
+export const resumenActivo = () => TOKEN_RESUMEN.length >= 16;
+
+/** ¿Este pedido trae el token del resumen? Acepta `Authorization: Bearer …`. */
+export function tokenResumenValido(req) {
+  if (!resumenActivo()) return false;
+  const cabecera = String(req.headers.authorization || '');
+  const enviado = cabecera.startsWith('Bearer ')
+    ? cabecera.slice(7).trim()
+    : String(req.headers['x-ari-token'] || '').trim();
+  return igualSeguro(enviado, TOKEN_RESUMEN);
+}
+
+/* ------------------------------------------------------------------ */
 /* Cookies                                                             */
 /* ------------------------------------------------------------------ */
 
