@@ -367,6 +367,39 @@ comprobar('no quedan cotizaciones en «enviada»',
   db.consultar('cotizaciones', { incluir_archivadas: true, limite: 300 })
     .some((q) => q.estado === 'enviada'), false);
 
+/* 7b3 · Cerrar con { saldar: true } cobra lo que falte y cierra junto -- */
+// Ir antes a registrar el abono a mano es el paso lento que se quiere
+// evitar: con saldar:true, cerrar directamente anota el abono que faltaba
+// y cierra, en un solo paso.
+const conSaldo = db.insertar('cotizaciones', {
+  titulo: 'Arreglo de cortina', cliente_id: db.resolverCliente('Sra. Paula Alborada').id,
+  monto: 635000, estado: 'aprobada',
+});
+
+let error = null;
+try { db.cerrarCotizacion(conSaldo.id); } catch (e) { error = e; }
+comprobar('sin saldar, rechaza igual que antes', error?.message.includes('por cobrar'), true);
+comprobar('y el error trae cuánto falta, para poder preguntar sin adivinar', error?.saldoPendiente, 635000);
+
+db.cerrarCotizacion(conSaldo.id, { saldar: true });
+comprobar('con saldar:true, se cierra igual', db.obtenerPorId('cotizaciones', conSaldo.id).archivada, 1);
+comprobar('y quedó saldada del todo', db.obtenerPorId('cotizaciones', conSaldo.id).saldo, 0);
+
+const abonoAutomatico = db.consultar('abonos', { cotizacion_id: conSaldo.id })[0];
+comprobar('el abono automático es por exactamente lo que faltaba', abonoAutomatico?.monto, 635000);
+comprobar('y queda anotado que fue al cerrar, no un pago que alguien olvidó registrar',
+  abonoAutomatico?.nota, 'Saldo cobrado al cerrar la oferta');
+
+// Si ya no falta nada, saldar:true no debería duplicar un abono de sobra.
+const yaSaldada = db.insertar('cotizaciones', {
+  titulo: 'Instalación pagada de una', cliente_id: db.resolverCliente('Sra. Paula Alborada').id,
+  monto: 200000, estado: 'aprobada',
+});
+db.insertar('abonos', { cotizacion_id: yaSaldada.id, monto: 200000 });
+db.cerrarCotizacion(yaSaldada.id, { saldar: true });
+comprobar('sin nada pendiente, saldar:true no crea un abono de más',
+  db.consultar('abonos', { cotizacion_id: yaSaldada.id }).length, 1);
+
 /* 7c2 · Las fechas son las del negocio, no las del servidor ---------- */
 // El hosting corre en UTC. De 7 de la tarde en adelante eso hace creer al
 // servidor que ya es el día siguiente, y "mañana" cae pasado mañana. Se

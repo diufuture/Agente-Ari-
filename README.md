@@ -458,6 +458,20 @@ cotización aprobada sin un cobro registrado aparte no contaba como "por
 cobrar" en ningún lado salvo en Cobros. Ahora es un solo cálculo, en el
 servidor, y las pantallas lo usan igual.
 
+### Cerrar una cotización con saldo pendiente
+
+**Cerrar**, en Cotizaciones, sólo saca de la lista de trabajo lo que ya no
+debe plata —cerrar algo con saldo sería perderlo de vista justo cuando
+todavía hay que cobrarlo—. Si al tocarlo todavía le falta algo, en vez de
+sólo avisar que no se puede, pregunta si el cliente ya pagó: si se
+confirma, anota un abono por exactamente lo que faltaba y cierra la
+oferta en el mismo paso, sin tener que entrar antes a registrar el abono
+a mano. Si se dice que no, queda todo igual que antes.
+
+Ese abono automático queda anotado como *"Saldo cobrado al cerrar la
+oferta"*, para distinguirlo de uno que alguien registró a mano en su
+momento.
+
 ### Agrupar por cliente
 
 Cuando hay pendientes de varios clientes a la vez, arriba de la lista

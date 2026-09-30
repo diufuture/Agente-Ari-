@@ -2185,15 +2185,28 @@ export function consultar(entidad, filtros = {}) {
  * Sólo se puede cerrar si no falta plata. Cerrar algo con saldo sería perderlo
  * de vista justo cuando todavía hay que cobrarlo, que es lo contrario de lo
  * que uno quiere.
+ *
+ * Con `saldar: true` no hace falta ir antes a registrar el abono a mano: si
+ * el cliente ya pagó todo, se anota un abono por lo que faltaba y se cierra
+ * en el mismo paso. Sin el permiso, sigue rechazando el cierre como antes
+ * -el error trae `saldoPendiente` y `moneda` para poder preguntar y, si
+ * dicen que sí, reintentar con `saldar: true`-.
  */
-export function cerrarCotizacion(id) {
+export function cerrarCotizacion(id, { saldar = false } = {}) {
   const cot = obtenerPorId('cotizaciones', id);
   if (!cot) throw new Error('Esa cotización no existe.');
   if (Number(cot.saldo) > 0) {
-    throw new Error(
-      `Todavía le faltan ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: cot.moneda || 'COP', maximumFractionDigits: 0 }).format(cot.saldo)} por cobrar. `
-      + 'Registrá los abonos que falten y ahí sí se puede cerrar.',
-    );
+    if (!saldar) {
+      const err = new Error(
+        `Todavía le faltan ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: cot.moneda || 'COP', maximumFractionDigits: 0 }).format(cot.saldo)} por cobrar. `
+        + 'Registrá los abonos que falten y ahí sí se puede cerrar.',
+      );
+      err.saldoPendiente = cot.saldo;
+      err.moneda = cot.moneda;
+      throw err;
+    }
+    insertar('abonos', { cotizacion_id: id, monto: cot.saldo, nota: 'Saldo cobrado al cerrar la oferta' });
+    trasAbono(id);
   }
   return actualizar('cotizaciones', id, { archivada: 1 });
 }

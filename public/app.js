@@ -90,7 +90,7 @@ async function api(ruta, opciones = {}) {
     body: opciones.body ? JSON.stringify(opciones.body) : undefined,
   });
   const datos = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(datos.error || `Error ${r.status}`);
+  if (!r.ok) throw Object.assign(new Error(datos.error || `Error ${r.status}`), datos);
   return datos;
 }
 
@@ -4112,6 +4112,23 @@ $('#contenido').addEventListener('click', async (e) => {
       await refrescarResumen();
       await pintar();
     } catch (err) {
+      // Con saldo pendiente, en vez de sólo avisar que no se puede, se
+      // pregunta si ya lo pagaron: si dice que sí, se anota el abono que
+      // faltaba y se cierra en el mismo paso, sin tener que ir antes a
+      // registrarlo a mano.
+      if (cerrando && err.saldoPendiente > 0
+        && confirm(`Todavía le faltan ${fmtDinero(err.saldoPendiente, err.moneda)} por cobrar. `
+          + '¿Ya se los pagaron? Se registra un abono por ese valor y se cierra la oferta.')) {
+        try {
+          await api(`/cotizaciones/${id}/cerrar`, { method: 'POST', body: { saldar: true } });
+          avisar('Abono registrado y cotización cerrada ✓');
+          await refrescarResumen();
+          await pintar();
+        } catch (err2) {
+          avisar(err2.message, true);
+        }
+        return;
+      }
       avisar(err.message, true);
     }
     return;

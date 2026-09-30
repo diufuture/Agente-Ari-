@@ -870,13 +870,22 @@ async function api(req, res, url) {
   }
 
   // POST|DELETE /api/cotizaciones/:id/cerrar -> la saca de la lista de trabajo
-  // y la deja en el historial del cliente. Sólo si no falta plata.
+  // y la deja en el historial del cliente. Sólo si no falta plata, salvo que
+  // venga { saldar: true }: ahí registra el abono que falte y cierra igual.
   if (recurso === 'cotizaciones' && id && partes[2] === 'cerrar') {
     try {
-      if (req.method === 'POST') return json(res, 200, db.cerrarCotizacion(Number(id)));
+      if (req.method === 'POST') {
+        const { saldar } = await leerJson(req);
+        return json(res, 200, db.cerrarCotizacion(Number(id), { saldar: Boolean(saldar) }));
+      }
       if (req.method === 'DELETE') return json(res, 200, db.reabrirCotizacion(Number(id)));
     } catch (err) {
-      return json(res, 400, { error: err.message });
+      // saldoPendiente/moneda viajan aparte para poder preguntar "¿ya lo
+      // pagaron?" y reintentar con saldar:true, sin tener que leerlo del texto.
+      return json(res, 400, {
+        error: err.message,
+        ...(err.saldoPendiente != null ? { saldoPendiente: err.saldoPendiente, moneda: err.moneda } : {}),
+      });
     }
   }
 
