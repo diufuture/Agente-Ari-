@@ -143,3 +143,14 @@ Posibles errores en la lista, por confirmar:
 - El cliente **elige las puertas o espacios** donde quiere cerradura (entrada principal y otras) y la línea para cada una.
 - Después de definir dónde la quiere, se le pregunta **el tipo de puerta: madera, metálica o blindada.**
 - (Pendiente: si la instalación de la cerradura se cobra aparte. Se ve en la sección de precios.)
+
+**16. Demás sistemas:**
+- **Cortinas motorizadas:** NO se cotizan en línea, porque requieren catálogo de cortinas y medidas. Se muestran como **módulo aparte**: el cliente marca que quiere cortinas automatizadas (y en qué espacios) y **un asesor lo contacta** para armar la oferta detallada. Marcar cortinas en un espacio igual cambia el interruptor sugerido (más botones, ver 9 y 9b).
+- **Opcionales por espacio:** en cada espacio se muestran, con foto, las opciones que puede agregar con un clic, punto por punto:
+  - **Cámaras de seguridad** («¿Quieres una cámara aquí?»).
+  - **Sensores:** puerta y ventana, agua, humedad.
+  - **Controles remotos IR+RF** para aire acondicionado y TV.
+- **Red WiFi:** un **capítulo final**, porque toda casa lo necesita para una solución completa. Los sistemas se presentan como capítulos que se van sumando, y la red es uno de ellos.
+- **Localizadores iTag:** **no** van en el cotizador.
+- **Asistente de voz (Alexa):** al final, opcional, para toda la casa. (El usuario no tiene claro cómo plantearlo; se le propuso una forma, ver la respuesta.)
+- (Pendiente: el **dimmer** no se mencionó. Hay que confirmar si entra como opcional por espacio.)
