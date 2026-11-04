@@ -74,3 +74,15 @@ Además, la persona puede **agregar espacios propios** con el nombre que quiera,
 - **Sonido:** no afecta a los interruptores de luz, pero hay que tener en cuenta las **pantallas**, que también manejan sonido.
 - **Pantallas:** el catálogo tiene pantallas que controlan más cosas (luces, cortinas, sonido).
 - Conclusión: **la topología cambia según lo que se va a cotizar.**
+
+**9b. Regla con cortinas, sonido y pantallas:**
+- **Los botones son configurables.** Con un botón y una automatización, un toque sube la cortina y el siguiente la baja. Se pueden agrupar cortinas o pararlas con un botón. Un botón que quede libre se usa para una **escena**.
+- **Espacio con cortinas:** se sugiere **un interruptor de 6 botones independientes** o **una pantalla de 4"** para manejar las cortinas y lo demás.
+- Las cortinas suelen traer **su propio control remoto**. Es válido si el cliente quiere manejarlas aparte, pero Click Control sugiere el interruptor o la pantalla.
+- **La pantalla NO reemplaza el interruptor.** Las de 4" traen **Alexa integrada** (control por voz), pero no tienen contacto físico para la iluminación. Es una **opción premium que se suma**.
+- **Tipos de pantalla en el catálogo:**
+  1. **Pantalla 4" con Alexa:** voz y control general, sin contacto de iluminación.
+  2. **Pantalla con sonido por Bluetooth:** maneja el sonido de ese espacio; desde ahí se controla todo el espacio.
+  3. **Pantalla con sonido cableada a parlantes:** igual, pero va cableada a los parlantes.
+  4. **Pantalla con 2 circuitos de iluminación.**
+- Si el cliente pone sonido en un espacio, se sugiere una pantalla con sonido (Bluetooth o cableada).
