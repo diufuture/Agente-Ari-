@@ -91,3 +91,5 @@ Además, la persona puede **agregar espacios propios** con el nombre que quiera,
 - **Los interruptores siempre van, tal como los sugiere la regla.** No se quitan aunque la pantalla tenga contactos físicos (por ejemplo, la de 2 circuitos).
 - Las pantallas se ofrecen como un paso o tarjeta aparte: **«Convierte tu casa en premium: agrega una pantalla a tu habitación»**. Se muestran las opciones con lo que hace cada una («maneja 2 circuitos de iluminación», «maneja sonido», «Alexa integrada»…).
 - El cliente decide en qué espacios **agrega** pantalla, **además** de los interruptores. Así no se enreda la oferta.
+
+**10. Detalle que ve el cliente:** **con detalle y editable (opción a)**. Ejemplo: «Habitación principal: 1 interruptor de 2 canales + 2 de 1 canal», con − / +. Es más transparente: el cliente conoce su casa («aquí tengo uno de 3 botones») y debe poder **cambiar también el número de canales** (de 2 a 3), no solo la cantidad.
