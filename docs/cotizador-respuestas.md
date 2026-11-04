@@ -202,4 +202,7 @@ Posibles errores en la lista, por confirmar:
   - Puerta metálica: **$180.000**
   - Puerta blindada: **$280.000**
 - Propuestos y no objetados: Sonido 20%, Sensores y control IR 15%, Pantallas premium 15%, Red WiFi 15%. Los hubs van incluidos en el 15% de iluminación.
-- (Pendiente: si la instalación lleva IVA y si los valores de cerradura ya lo incluyen.)
+
+**19d. IVA de la instalación:** la instalación **se discrimina por capítulo** (Iluminación, Cine, Cámaras, Cerraduras…) y **se le suma el 19% de IVA**. Los valores de instalación (porcentajes y fijos de cerradura) son **antes de IVA**. Interpretación aplicada: cada valor de instalación se muestra con el IVA ya sumado, igual que los equipos.
+
+**20. ¿Precio exacto o rango?** Respondida en la 14: **siempre con precio**. Se muestra un total concreto, con la nota de que la obra civil y los adicionales se ven en sitio.
