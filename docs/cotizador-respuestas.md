@@ -38,3 +38,11 @@
 13. Exterior o jardín
 
 Además, la persona puede **agregar espacios propios** con el nombre que quiera, si el suyo no está en la lista. (Pendiente para la regla de interruptores: qué cantidad sugerir a un espacio personalizado.)
+
+**8. Obra nueva o casa ya construida:** se pregunta. **No bloquea nada**: el cliente decide, pero cada producto le muestra qué implica instalarlo.
+- En Colombia se usa la **caja americana (rectangular)**. Esos interruptores sirven en cualquier casa, nueva o usada.
+- En el catálogo también hay **modelos europeos (caja cuadrada 8×8)**, que requieren **obra civil** para cambiar la caja, junto con el cableado.
+- Si la casa está **en obra**, se sugieren los modelos que se acoplan a la obra (incluidos los europeos).
+- Si la casa está **ya construida** y el cliente elige un modelo europeo, se le avisa que necesita obra civil y cableado.
+- Lo mismo aplica a **sonido** y **cortinas**: al elegir el producto se muestran las indicaciones de instalación según el estado de la casa.
+- Implica guardar en cada producto: tipo de caja (americana / europea 8×8) y una nota de instalación.
