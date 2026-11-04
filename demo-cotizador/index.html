@@ -109,6 +109,11 @@ h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; li
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { padding: 10px 16px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--panel); font-weight: 600; font-size: 15px; }
 .chip[aria-pressed="true"] { border-color: var(--btn-bg); background: var(--btn-bg); color: var(--btn-fg); }
+.opciones.cuatro { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 640px) { .opciones.cuatro { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.op.sis.fila { grid-template-columns: auto 1fr; align-items: center; gap: 14px; padding-right: 44px; }
+.fila-txt { display: grid; gap: 4px; }
+.fila-txt > span { font-size: 13.5px; color: var(--fg-2); }
 
 /* Fotos de producto */
 .foto { position: relative; background: var(--foto); display: grid; place-items: center; aspect-ratio: 4 / 3; max-width: 100%; overflow: hidden; }
@@ -457,7 +462,12 @@ const P = {
   phone: "M5 4h4l2 5-3 2a11 11 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2",
   crown: "M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5zM5 19h14",
   star: "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z",
-  check: "M5 12l5 5 9-10"
+  check: "M5 12l5 5 9-10",
+  building: "M5 21V4h10v17M15 9h4v12M8 8h2M8 12h2M8 16h2M3 21h18",
+  barn: "M3 21V10l9-6 9 6v11M3 21h18M9 21v-6h6v6M9 15l6 6M15 15l-6 6",
+  briefcase: "M3 8h18v12H3zM9 8V5h6v3M3 13h18",
+  helmet: "M3 18h18M5 18v-2a7 7 0 0 1 14 0v2M12 9V6M9 10l-1-3M15 10l1-3",
+  homecheck: "M4 11l8-7 8 7v9H4zM9 15l2 2 4-4"
 };
 const ico = (k, cls = "ico") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${P[k] || P.room}"/></svg>`;
 const img = (k, alt = "") => IMG[k] ? `<img src="${IMG[k]}" alt="${alt}" loading="lazy">` : "";
@@ -487,7 +497,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const cop = n => "$" + Math.round(n).toLocaleString("es-CO");
 const conIva = n => n * (1 + IVA);
-const primerNombre = () => (S.cli.nombre.trim().split(/\s+/)[0] || "");
+const primerNombre = () => { const n = S.cli.nombre.trim().split(/\s+/)[0] || ""; return n ? n[0].toLocaleUpperCase("es") + n.slice(1) : ""; };
 const ciudad = () => S.casa.ciudad === "Otra" ? S.casa.otra.trim() : S.casa.ciudad;
 const toast = msg => { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 3400); };
 const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
@@ -622,11 +632,11 @@ const VISTAS = {
     </div>`,
 
   casa() {
-    const tipos = [["Apartamento", "home"], ["Casa", "home"], ["Finca", "tree"], ["Oficina", "desk"]];
+    const tipos = [["Apartamento", "building", "#6fa2ff", "En edificio o conjunto"], ["Casa", "home", "#4fd69c", "Uno o varios pisos"], ["Finca", "barn", "#f6c343", "Casa de campo o descanso"], ["Oficina", "briefcase", "#b49cff", "Local o espacio de trabajo"]];
     return `
     <div class="paso-meta">Tu vivienda</div>
     <h1>${primerNombre() ? esc(primerNombre()) + ", ¿qué" : "¿Qué"} tipo de vivienda tienes?</h1>
-    <div class="bloque"><div class="opciones">${tipos.map(([t, i]) => `<button type="button" class="op" data-act="set" data-k="casa.tipo" data-v="${t}" aria-pressed="${S.casa.tipo === t}">${ico(i)}<b>${t}</b></button>`).join("")}</div></div>
+    <div class="bloque"><div class="opciones cuatro">${tipos.map(([t, i, c, d]) => `<button type="button" class="op sis" style="--c:${c}" data-act="set" data-k="casa.tipo" data-v="${t}" aria-pressed="${S.casa.tipo === t}"><span class="sis-ico">${ico(i, "")}</span><b>${t}</b><span>${d}</span></button>`).join("")}</div></div>
     <div class="bloque"><h2>¿En qué ciudad o municipio está?</h2>
       <div class="chips">${["Bogotá", "Chía", "Cajicá", "Otra"].map(c => `<button type="button" class="chip" data-act="ciudad" data-v="${c}" aria-pressed="${S.casa.ciudad === c}">${c === "Otra" ? "Otra ciudad" : c}</button>`).join("")}</div>
       ${S.casa.ciudad === "Otra" ? `<div class="campo"><label for="f-otra">Escribe tu ciudad o municipio</label><input id="f-otra" data-f="casa.otra" value="${esc(S.casa.otra)}" placeholder="Ej. Sopó, Zipaquirá, Medellín…" autocomplete="address-level2"><span class="ayuda">Lo necesitamos para calcular los viáticos de la visita técnica.</span></div>` : ""}
@@ -635,8 +645,8 @@ const VISTAS = {
       <div class="chips">${[1, 2, 3, 4].map(n => `<button type="button" class="chip" data-act="pisos" data-v="${n}" aria-pressed="${S.casa.pisos === n}">${n === 4 ? "4 o más" : n}</button>`).join("")}</div></div>
     <div class="bloque"><h2>¿En qué estado está?</h2>
       <div class="opciones anchas">
-        <button type="button" class="op" data-act="set" data-k="casa.estado" data-v="obra" aria-pressed="${S.casa.estado === "obra"}"><b>En obra o remodelación</b><span>Podemos cambiar cajas y pasar cableado.</span></button>
-        <button type="button" class="op" data-act="set" data-k="casa.estado" data-v="construida" aria-pressed="${S.casa.estado === "construida"}"><b>Ya construida y habitada</b><span>Usamos lo que ya tiene tu casa.</span></button>
+        <button type="button" class="op sis fila" style="--c:#ffaa4d" data-act="set" data-k="casa.estado" data-v="obra" aria-pressed="${S.casa.estado === "obra"}"><span class="sis-ico">${ico("helmet", "")}</span><span class="fila-txt"><b>En obra o remodelación</b><span>Podemos cambiar cajas y pasar cableado.</span></span></button>
+        <button type="button" class="op sis fila" style="--c:#3fe0c5" data-act="set" data-k="casa.estado" data-v="construida" aria-pressed="${S.casa.estado === "construida"}"><span class="sis-ico">${ico("homecheck", "")}</span><span class="fila-txt"><b>Ya construida y habitada</b><span>Usamos lo que ya tiene tu casa.</span></span></button>
       </div></div>`;
   },
 
