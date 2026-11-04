@@ -257,3 +257,7 @@ Posibles errores en la lista, por confirmar:
 - **Visitas simultáneas:** por ahora no se configura capacidad; se crecerá en eso más adelante. Interpretación aplicada: **una visita por franja**, y la franja agendada desaparece del calendario.
 
 **27. Tratamiento de datos (Ley 1581 de 2012):** no hay política publicada. **Claude redacta un borrador** de política de tratamiento de datos y la casilla de autorización (contacto por WhatsApp y correo), y **luego la revisa un abogado**. (Pendiente: redactar el borrador; hacen falta razón social, NIT, dirección y correo de contacto para peticiones.)
+
+## G. Experiencia
+
+**28. Dispositivo:** la mayoría llega **desde el celular**, pero tiene que funcionar bien **en celular y en computador**. Se diseña primero para celular (botones grandes, un paso por pantalla) y en el computador se aprovecha el espacio (por ejemplo, con el resumen siempre visible al lado).
