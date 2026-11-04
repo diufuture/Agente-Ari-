@@ -153,4 +153,14 @@ Posibles errores en la lista, por confirmar:
 - **Red WiFi:** un **capítulo final**, porque toda casa lo necesita para una solución completa. Los sistemas se presentan como capítulos que se van sumando, y la red es uno de ellos.
 - **Localizadores iTag:** **no** van en el cotizador.
 - **Asistente de voz (Alexa):** al final, opcional, para toda la casa. (El usuario no tiene claro cómo plantearlo; se le propuso una forma, ver la respuesta.)
-- (Pendiente: el **dimmer** no se mencionó. Hay que confirmar si entra como opcional por espacio.)
+- **Dimmer:** **NO** se ofrece en el cotizador, para no enredar al cliente.
+- **Control por voz (aprobado):** al final, «¿Quieres manejar tu casa con la voz?». Todo es compatible con Alexa y Google; se puede usar un parlante Alexa propio o agregar una **pantalla D1 (Alexa integrada)** en los espacios que elija.
+
+**Capítulos de la oferta (aprobados):**
+1. Iluminación (interruptores + hubs)
+2. Sonido y Cine en casa
+3. Cerraduras
+4. Opcionales por espacio (cámaras, sensores, control IR de aire y TV)
+5. Cortinas (con asesor, sin precio en línea)
+6. Red WiFi
+7. Control por voz (opcional)
