@@ -135,3 +135,5 @@ Posibles errores en la lista, por confirmar:
 - **Proveedores nuevos en prueba:** toda la parlantería será **WiFi o Bluetooth** y **multiroom** (todo se enlaza). El cotizador tiene que manejar eso en las opciones de sonido.
 - **Productos pendientes:** el usuario los va a subir al catálogo de Ari por categoría, y de ahí se arman los **paquetes**. Los productos de sonido de la lista de agosto (VB6, FC-01, HR-6) no son la referencia final.
 - **Cine en casa** es un caso aparte: usa otros amplificadores y otra parlantería, que tampoco están en la lista actual. Se sugiere una opción inicial; si el cliente pide algo específico, se revisa con él (asesoría).
+
+**14. Cine en casa:** tres paquetes, **Básico, Medio y Avanzado (Premium)**, **siempre con precio** («cuando no se les da un valor, la gente no lo toma»). Cada paquete muestra qué incluye: parlantería, amplificador y demás elementos. (Pendiente: el contenido y los productos de cada paquete, que vendrán del catálogo de Ari con los nuevos proveedores.)
