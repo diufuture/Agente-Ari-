@@ -137,3 +137,9 @@ Posibles errores en la lista, por confirmar:
 - **Cine en casa** es un caso aparte: usa otros amplificadores y otra parlantería, que tampoco están en la lista actual. Se sugiere una opción inicial; si el cliente pide algo específico, se revisa con él (asesoría).
 
 **14. Cine en casa:** tres paquetes, **Básico, Medio y Avanzado (Premium)**, **siempre con precio** («cuando no se les da un valor, la gente no lo toma»). Cada paquete muestra qué incluye: parlantería, amplificador y demás elementos. (Pendiente: el contenido y los productos de cada paquete, que vendrán del catálogo de Ari con los nuevos proveedores.)
+
+**15. Cerraduras:**
+- **Tres líneas: Básica, Medium y Premium.** El usuario va a subir más modelos al catálogo de Ari. Por ahora están CLICK 15 y CLICK S1.
+- El cliente **elige las puertas o espacios** donde quiere cerradura (entrada principal y otras) y la línea para cada una.
+- Después de definir dónde la quiere, se le pregunta **el tipo de puerta: madera, metálica o blindada.**
+- (Pendiente: si la instalación de la cerradura se cobra aparte. Se ve en la sección de precios.)
