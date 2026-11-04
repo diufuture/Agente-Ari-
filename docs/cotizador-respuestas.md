@@ -93,3 +93,26 @@ Además, la persona puede **agregar espacios propios** con el nombre que quiera,
 - El cliente decide en qué espacios **agrega** pantalla, **además** de los interruptores. Así no se enreda la oferta.
 
 **10. Detalle que ve el cliente:** **con detalle y editable (opción a)**. Ejemplo: «Habitación principal: 1 interruptor de 2 canales + 2 de 1 canal», con − / +. Es más transparente: el cliente conoce su casa («aquí tengo uno de 3 botones») y debe poder **cambiar también el número de canales** (de 2 a 3), no solo la cantidad.
+
+**11. Modelos de interruptor y cómo se presentan:**
+- **No se muestra marca**: es marca propia (referencias «CLICK …»). El cliente elige por **foto**.
+- Hay que mejorar la visualización: **cómo se ve físicamente** el interruptor, **cómo se vería instalado en un espacio** y **sus características**.
+- Fuente: *Lista de precios – Agosto 2026* (xlsx, con fotos incrustadas por hoja).
+
+Líneas que salen de la lista (precio cliente final):
+
+| Línea | Caja | Referencias | Notas |
+|---|---|---|---|
+| Policarbonato gris (US) | Americana | ST1, ST2, ST3, ST4 (1–4 contactos) | Neutro opcional. $262.400 – $336.800 |
+| Policarbonato gris (EU) | Europea 8×8 | Z1, Z2, Z3, Z4 (4 contactos + 2 escenas = 6 botones), Z8 (serie G6, 4 contactos, 8 botones) | $233.600 – $328.000 |
+| Vidrio gris (EU) | Europea 8×8 | HS1, HS2, HS3, HS4 (4 contactos + 2 escenas) | $262.400 – $336.800 |
+| Vidrio blanco (EU) | Europea 8×8 | HSW1, HSW2, HSW3, HSW4 (4 contactos + 2 escenas) | $262.400 – $336.800 |
+| Caja de instalación | — | CLICK BX | $13.760 |
+
+Otras hojas de la lista: **Display** (pantallas D1–D6), **Sensores-Hub** (gateways GW018/GW015, módulos SB4, dimmer DM2, controlador de cortinas CU2, sensores, IR, cámara, iTag), **Key look** (cerraduras 15 y S1), **Sound** (Sonance VB6, amplificador FC-01, parlante HR-6) y **WIFI** (Huawei: AP, routers, switch).
+
+Posibles errores en la lista, por confirmar:
+- «CLICK ST4 · 1 módulo (línea básica)»: repite la referencia ST4 y tiene el precio canal ($210.500) mayor que el de cliente final ($80.000).
+- «CLICK HS2»: aparece dos veces, como «1 módulo (línea básica)» en policarbonato y como «Vidrio 2 contactos».
+- Sonance VB6, FC-01 y toda la hoja WIFI tienen un solo precio. Falta confirmar si es el de cliente final.
+- En la línea americana (US) no hay modelo de 6 botones para cortinas.
