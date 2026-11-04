@@ -231,3 +231,7 @@ Posibles errores en la lista, por confirmar:
 | ¿Cómo nos conociste? | Opcional |
 
 **23. Momento de pedir los datos:** **al principio**, antes de empezar. Personaliza la experiencia («Hola, Juan, ¿cómo es tu casa?»): a la gente le gusta decir quién es. Se pide primero el contacto y luego empieza el cotizador.
+
+**24. Entrega de la oferta:**
+- **Fase 1:** **(a) PDF descargable** al terminar + **(b) PDF por correo**, si dejó correo + **(c) botón «Enviar a WhatsApp»** con mensaje listo y link de la oferta (sin costo).
+- **Fase 2:** **(d) mensaje automático por WhatsApp Business API** desde el número de la empresa. Se revisa más adelante.
