@@ -280,3 +280,5 @@ Posibles errores en la lista, por confirmar:
 - **Se activan solos al subir los productos a Ari:** Sonido y Cine en casa.
 - **Versión 2 y siguientes:** pago en línea, WhatsApp por API, Ari conversando. Se va subiendo de versión según cómo funcione.
 - **Red WiFi:** queda para estudiarla a fondo. Funciona **como los hubs**: un router + access points según **plantas y áreas** (cantidad de espacios). La regla exacta se define al armar el módulo de WiFi.
+
+**34. Forma de avanzar:** **primero un demo navegable**, para revisarlo localmente **sin conexión a Ari** (solo recorrido y navegabilidad, con datos de ejemplo). Se aprueba paso a paso y después se construye la versión real conectada. (Fecha objetivo: no se definió.)
