@@ -126,3 +126,12 @@ Posibles errores en la lista, por confirmar:
 - **Piso 1 (toda vivienda):** **CLICK GW015**, gateway ZigBee **cableado**.
 - **Cada piso adicional:** **CLICK GW018**, módulo ZigBee + Bluetooth, **sin cableado**.
 - Las **pantallas con gateway integrado (D2, D4…) no reemplazan el hub**: son adicionales a lo que se sugiere de base.
+
+## D. Sistemas por área
+
+**13. Sonido:**
+- **Tres categorías:** **Básico, Medio y Profesional.**
+- **Siempre estéreo por defecto: 2 parlantes por espacio.**
+- **Proveedores nuevos en prueba:** toda la parlantería será **WiFi o Bluetooth** y **multiroom** (todo se enlaza). El cotizador tiene que manejar eso en las opciones de sonido.
+- **Productos pendientes:** el usuario los va a subir al catálogo de Ari por categoría, y de ahí se arman los **paquetes**. Los productos de sonido de la lista de agosto (VB6, FC-01, HR-6) no son la referencia final.
+- **Cine en casa** es un caso aparte: usa otros amplificadores y otra parlantería, que tampoco están en la lista actual. Se sugiere una opción inicial; si el cliente pide algo específico, se revisa con él (asesoría).
