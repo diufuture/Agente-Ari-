@@ -255,3 +255,5 @@ Posibles errores en la lista, por confirmar:
 - **Duración: de 1 a 2 horas, según el tamaño.** Propuesta por defecto: **1 hora hasta 6 espacios, 2 horas para más de 6 o más de un piso** (ajustable).
 - **Anticipación mínima: 48 horas.**
 - **Visitas simultáneas:** por ahora no se configura capacidad; se crecerá en eso más adelante. Interpretación aplicada: **una visita por franja**, y la franja agendada desaparece del calendario.
+
+**27. Tratamiento de datos (Ley 1581 de 2012):** no hay política publicada. **Claude redacta un borrador** de política de tratamiento de datos y la casilla de autorización (contacto por WhatsApp y correo), y **luego la revisa un abogado**. (Pendiente: redactar el borrador; hacen falta razón social, NIT, dirección y correo de contacto para peticiones.)
