@@ -235,3 +235,9 @@ Posibles errores en la lista, por confirmar:
 **24. Entrega de la oferta:**
 - **Fase 1:** **(a) PDF descargable** al terminar + **(b) PDF por correo**, si dejó correo + **(c) botón «Enviar a WhatsApp»** con mensaje listo y link de la oferta (sin costo).
 - **Fase 2:** **(d) mensaje automático por WhatsApp Business API** desde el número de la empresa. Se revisa más adelante.
+
+**25. Avisos («abordarlo por todos los medios»):**
+- **Al cliente:** siempre le llega un **resumen por correo y por WhatsApp**.
+- **WhatsApp de Click Control: +57 321 507 3310.** El botón de WhatsApp abre un **canal directo** entre el cliente y Click Control, con el link de la oferta.
+- **A Click Control:** todos los medios: (a) la cotización aparece en Ari como «Pendiente – Web», con sus renglones por capítulo y espacio; (b) correo a gerencia@clickcontrol.co con el resumen y el PDF; (c) el mensaje del cliente por WhatsApp; (d) Ari avisa al abrir («Tienes N cotizaciones nuevas de la web»).
+- **Decisión tomada por defecto (falta confirmar):** el cotizador **sí crea el cliente en Ari**, marcado con origen «Web», a diferencia de los pedidos de la tienda. La razón es que hay que contactarlo y hacerle seguimiento.
