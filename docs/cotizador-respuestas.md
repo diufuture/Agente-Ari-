@@ -215,3 +215,17 @@ Posibles errores en la lista, por confirmar:
   - Chía y Cajicá: **$120.000**
   - Otras ciudades: **«Por confirmar»** (lo define el asesor)
 - **Sin monto mínimo:** se atiende cualquier cotización, siempre que se pague la visita técnica.
+
+## F. Datos del cliente y entrega
+
+**22. Datos que se piden (aprobado):**
+
+| Dato | |
+|---|---|
+| Nombre | Obligatorio |
+| WhatsApp | Obligatorio |
+| Correo | Opcional |
+| Ciudad | Ya se pregunta al inicio |
+| Barrio o dirección | Opcional |
+| Cédula o NIT | No se pide ahora |
+| ¿Cómo nos conociste? | Opcional |
