@@ -263,3 +263,5 @@ Posibles errores en la lista, por confirmar:
 **28. Dispositivo:** la mayoría llega **desde el celular**, pero tiene que funcionar bien **en celular y en computador**. Se diseña primero para celular (botones grandes, un paso por pantalla) y en el computador se aprovecha el espacio (por ejemplo, con el resumen siempre visible al lado).
 
 **29. Imágenes:** **mixto**. Íconos o ilustraciones para elegir espacios y capítulos, y fotos reales en momentos clave (interruptor instalado, cine terminado). Se va ajustando sobre la marcha para que sea muy sencillo e intuitivo. (Pendiente: fotos de proyectos reales; mientras tanto se usan las fotos de producto del catálogo.)
+
+**30. Ari dentro del cotizador:** **opción a**. La versión 1 funciona **solo con toques y botones**, sin IA y sin gasto de tokens. Las opciones con Ari (conversar o resolver dudas) se agregan más adelante, a medida que se entienda cómo se usa.
