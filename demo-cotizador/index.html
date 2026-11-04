@@ -124,8 +124,8 @@ h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; li
 .miniaturas { display: flex; gap: 6px; padding: 0 14px 14px; }
 .miniaturas span { width: 38px; height: 38px; background: var(--foto); border-radius: 8px; border: 1px solid var(--line); display: grid; place-items: center; padding: 3px; }
 .miniaturas img { max-width: 100%; max-height: 100%; }
-.thumb { width: 54px; height: 54px; flex: none; background: var(--foto); border: 1px solid var(--line); border-radius: 10px; display: grid; place-items: center; padding: 4px; }
-.thumb img { max-width: 100%; max-height: 100%; }
+.thumb { position: relative; width: 56px; height: 56px; flex: none; background: var(--foto); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.thumb img { position: absolute; inset: 5px; width: calc(100% - 10px); height: calc(100% - 10px); object-fit: contain; }
 
 /* Pisos y contadores */
 .piso { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); overflow: hidden; }
@@ -688,7 +688,6 @@ const VISTAS = {
         <button type="button" class="foto-op" data-act="linea" data-v="${k}" aria-pressed="${S.linea === k}">
           <div class="foto">${img(L.foto + 2, L.n)}</div>
           <div class="txt"><b>${L.n}</b><span>${L.acabado} · ${L.txt}</span></div>
-          <div class="miniaturas" aria-label="Disponible en 1 a 4 botones">${[1, 2, 3, 4].map(c => `<span>${img(L.foto + c)}</span>`).join("")}</div>
         </button>`).join("")}</div>`;
     if (S.linea && linea().caja === "eu" && S.casa.estado === "construida")
       h += `<div class="aviso">${ico("warn")}<span><b>Este estilo usa caja cuadrada (8×8).</b> Como tu casa ya está construida, necesitas obra civil para cambiar las cajas y el cableado. La obra civil no está incluida en la cotización.</span></div>`;
