@@ -121,3 +121,8 @@ Posibles errores en la lista, por confirmar:
 - **Fuente de los productos:** el cotizador **toma los productos y precios directamente del catálogo de Ari**, donde ya están todos (o de un Excel subido a Ari o al cotizador). No se duplica la información.
 - **Cortinas con caja americana:** se usa el **ST4 de 4 botones**. Cada botón se configura para cualquier función, no necesariamente un circuito de luz. Por ejemplo: cortina + luz, o solo cortinas.
 - **Las dudas de referencias y precios de la lista (ST4 básico, HS2 duplicado, productos con un solo precio) se revisan después**, cuando se arme la oferta en detalle. No bloquean el diseño.
+
+**12. Hub o cerebro:**
+- **Piso 1 (toda vivienda):** **CLICK GW015**, gateway ZigBee **cableado**.
+- **Cada piso adicional:** **CLICK GW018**, módulo ZigBee + Bluetooth, **sin cableado**.
+- Las **pantallas con gateway integrado (D2, D4…) no reemplazan el hub**: son adicionales a lo que se sugiere de base.
