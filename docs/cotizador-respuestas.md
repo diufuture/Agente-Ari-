@@ -206,3 +206,8 @@ Posibles errores en la lista, por confirmar:
 **19d. IVA de la instalación:** la instalación **se discrimina por capítulo** (Iluminación, Cine, Cámaras, Cerraduras…) y **se le suma el 19% de IVA**. Los valores de instalación (porcentajes y fijos de cerradura) son **antes de IVA**. Interpretación aplicada: cada valor de instalación se muestra con el IVA ya sumado, igual que los equipos.
 
 **20. ¿Precio exacto o rango?** Respondida en la 14: **siempre con precio**. Se muestra un total concreto, con la nota de que la obra civil y los adicionales se ven en sitio.
+
+**21. Visita técnica y ciudad:**
+- La **visita técnica se cobra** y **se descuenta de la oferta** si el cliente la toma. Sirve de filtro para la gente que pide visita y no compra.
+- **Base: Bogotá.** **Fuera de Bogotá cambia el valor por viáticos.**
+- (Pendiente: valor de la visita en Bogotá y fuera, y si hay monto mínimo de proyecto.)
