@@ -46,3 +46,31 @@ Además, la persona puede **agregar espacios propios** con el nombre que quiera,
 - Si la casa está **ya construida** y el cliente elige un modelo europeo, se le avisa que necesita obra civil y cableado.
 - Lo mismo aplica a **sonido** y **cortinas**: al elegir el producto se muestran las indicaciones de instalación según el estado de la casa.
 - Implica guardar en cada producto: tipo de caja (americana / europea 8×8) y una nota de instalación.
+
+## C. Interruptores
+
+**9. Cantidad de interruptores por espacio.** La tabla sugerida está bien **como punto de partida, cuando solo se automatiza la iluminación**:
+
+| Espacio | Sugerido (solo iluminación) |
+|---|---|
+| Habitación principal | 1 de 2 canales + 2 de 1 canal |
+| Habitaciones | 1 de 2 canales |
+| Baños | 1 de 2 canales |
+| Sala | 1 de 3 canales |
+| Sala TV | 1 de 2 canales |
+| Comedor | 1 de 1 canal |
+| Cocina | 1 de 3 canales |
+| Estudio u oficina | 1 de 2 canales |
+| Pasillos y escaleras | 2 de 1 canal |
+| Terraza o balcón | 1 de 1 canal |
+| Garaje | 1 de 1 canal |
+| Zona de ropas | 1 de 1 canal |
+| Exterior o jardín | 1 de 2 canales |
+| Espacio propio | 1 de 2 canales |
+
+**Cambio importante en el recorrido:** después de la casa y los espacios se pregunta **«¿Qué quieres automatizar?»** (iluminación, cortinas, sonido…). **El interruptor sugerido depende de esa respuesta:**
+- **Solo iluminación:** se usa la tabla de arriba.
+- **Iluminación + cortinas:** en los espacios con cortina se sugieren interruptores con más botones. Existe uno de **4 canales con 6 botones**, que sirve para manejar cortinas desde el interruptor. Cambia el modelo.
+- **Sonido:** no afecta a los interruptores de luz, pero hay que tener en cuenta las **pantallas**, que también manejan sonido.
+- **Pantallas:** el catálogo tiene pantallas que controlan más cosas (luces, cortinas, sonido).
+- Conclusión: **la topología cambia según lo que se va a cotizar.**
