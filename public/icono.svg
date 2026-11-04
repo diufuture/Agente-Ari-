@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="Click Control">
+  <rect width="192" height="192" rx="42" fill="#071a2e"/>
+
+  <!-- Anillos concéntricos del logo: trazos cortados, no círculos completos -->
+  <g fill="none" stroke="#5fc9f3" stroke-linecap="round">
+    <path d="M96 34a62 62 0 0 1 62 62" stroke-width="7"/>
+    <path d="M96 158a62 62 0 0 1-62-62" stroke-width="7"/>
+    <path d="M96 54a42 42 0 0 1 42 42" stroke-width="6"/>
+    <path d="M96 138a42 42 0 0 1-42-42" stroke-width="6"/>
+    <path d="M96 73a23 23 0 0 1 23 23" stroke-width="5"/>
+    <path d="M96 119a23 23 0 0 1-23-23" stroke-width="5"/>
+  </g>
+  <circle cx="96" cy="96" r="8" fill="#5fc9f3"/>
+
+  <!-- Cursor de mano, en blanco como en el logo -->
+  <path d="M92 88v26l-6-6a5 5 0 0 0-7 7l14 17a14 14 0 0 0 11 5h13a12 12 0 0 0 12-12v-19a5 5 0 0 0-10 0v-4a5 5 0 0 0-10 0v-3a5 5 0 0 0-10 0V88a4 4 0 0 0-7 0Z"
+        fill="#f2f6f9" stroke="#071a2e" stroke-width="3" stroke-linejoin="round"/>
+</svg>
