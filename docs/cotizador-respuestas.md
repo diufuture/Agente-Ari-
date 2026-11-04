@@ -116,3 +116,8 @@ Posibles errores en la lista, por confirmar:
 - «CLICK HS2»: aparece dos veces, como «1 módulo (línea básica)» en policarbonato y como «Vidrio 2 contactos».
 - Sonance VB6, FC-01 y toda la hoja WIFI tienen un solo precio. Falta confirmar si es el de cliente final.
 - En la línea americana (US) no hay modelo de 6 botones para cortinas.
+
+**11b. Aclaraciones:**
+- **Fuente de los productos:** el cotizador **toma los productos y precios directamente del catálogo de Ari**, donde ya están todos (o de un Excel subido a Ari o al cotizador). No se duplica la información.
+- **Cortinas con caja americana:** se usa el **ST4 de 4 botones**. Cada botón se configura para cualquier función, no necesariamente un circuito de luz. Por ejemplo: cortina + luz, o solo cortinas.
+- **Las dudas de referencias y precios de la lista (ST4 básico, HS2 duplicado, productos con un solo precio) se revisan después**, cuando se arme la oferta en detalle. No bloquean el diseño.
