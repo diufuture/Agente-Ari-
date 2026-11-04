@@ -282,3 +282,19 @@ Posibles errores en la lista, por confirmar:
 - **Red WiFi:** queda para estudiarla a fondo. Funciona **como los hubs**: un router + access points según **plantas y áreas** (cantidad de espacios). La regla exacta se define al armar el módulo de WiFi.
 
 **34. Forma de avanzar:** **primero un demo navegable**, para revisarlo localmente **sin conexión a Ari** (solo recorrido y navegabilidad, con datos de ejemplo). Se aprueba paso a paso y después se construye la versión real conectada. (Fecha objetivo: no se definió.)
+
+---
+
+## Revisión del demo 1 (ajustes pedidos)
+
+- **Ciudad «Otra»:** el cliente escribe cuál ciudad o municipio. Es obligatorio, porque define los viáticos.
+- **Sin precios mientras elige.** No se muestran precios en los pasos ni en el resumen lateral; solo al final, en la cotización. Así el cliente se motiva a explorar los modelos. Aplica a todo el catálogo (interruptores, cerraduras, pantallas, sensores…).
+- **Fotos reales** de cada producto en lugar de precios.
+- **Cerraduras en Ari:** hay que marcarlas como **Básica / Media / Premium**, para que el cotizador las llame así.
+- **Error corregido:** cambiar los canales de un interruptor se trababa. Ahora se elige con botones.
+- **Flujo final:** la cotización se puede **descargar en PDF o enviar por WhatsApp o correo antes** de preguntar por la visita. Después se pregunta «¿Quieres agendar una visita técnica para confirmar todo?», con la opción «Ahora no». Así el cliente nunca se queda sin su información.
+- **Datos para transferencia** (se muestran al pagar la visita):
+  - Davivienda, ahorros 4670179318, Click Control S.A.S., NIT 900.884.929-4, llave 79950402.
+  - Bancolombia, ahorros 93292434012, Ariel Bravo Benavides, C.C. 79.950.402, llave 3215073310.
+- **Marca:** logo recibido (azul noche #00182B y cian #6EE3FB).
+- **Datos de la empresa (RUT):** CLICK CONTROL S.A.S., NIT 900.884.929-4, Cra 15 # 140-22, Bogotá D.C., gerencia@clickcontrol.co. Con ellos se redactó el borrador de política en `docs/politica-tratamiento-datos.md`.
