@@ -249,3 +249,9 @@ Posibles errores en la lista, por confirmar:
 - **Pasarela:** se define después (Wompi, Bold, Mercado Pago…). El cotizador queda preparado para conectar la que se elija.
 - **Transferencia o Nequi:** se muestran los números (pendiente: recibirlos) y el cliente **envía el soporte por WhatsApp** al 321 507 3310.
 - **Agendar la visita:** un **agendador** donde el cliente **elige la fecha y la hora** según la **disponibilidad real de la agenda de Ari**.
+
+**26c. Configuración del agendador:**
+- **Disponibilidad configurable desde Ari:** se abren a mano los días y franjas en que se puede agendar (ej. «esta semana solo martes y jueves de 9 a 12»). Lo que no se abre no se ofrece.
+- **Duración: de 1 a 2 horas, según el tamaño.** Propuesta por defecto: **1 hora hasta 6 espacios, 2 horas para más de 6 o más de un piso** (ajustable).
+- **Anticipación mínima: 48 horas.**
+- **Visitas simultáneas:** por ahora no se configura capacidad; se crecerá en eso más adelante. Interpretación aplicada: **una visita por franja**, y la franja agendada desaparece del calendario.
