@@ -267,3 +267,8 @@ Posibles errores en la lista, por confirmar:
 **30. Ari dentro del cotizador:** **opción a**. La versión 1 funciona **solo con toques y botones**, sin IA y sin gasto de tokens. Las opciones con Ari (conversar o resolver dudas) se agregan más adelante, a medida que se entienda cómo se usa.
 
 **31. Paquetes rápidos:** **sí (opción a)**. Después de marcar la casa y los espacios, el cliente puede elegir un paquete (ej. Apto Esencial / Apto Confort / Casa Premium) que precarga los capítulos sobre sus espacios, o armarla paso a paso. Todo es ajustable después. El contenido de cada paquete se configura desde Ari.
+
+**32. Guardar y retomar:** **las dos (opción c)**.
+- Se guarda solo en el dispositivo y, al volver, sigue donde iba.
+- Llega un link por WhatsApp o correo para retomar desde cualquier dispositivo o compartirlo.
+- En Ari se ven las **cotizaciones sin terminar**, con los datos del cliente, para llamarlos.
