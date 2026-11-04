@@ -14,6 +14,14 @@
 
 ## B. Topología de la casa
 
+**7. Datos iniciales (se preguntan antes de los espacios):**
+- **Tipo de vivienda:** apartamento, casa, finca u oficina.
+- **Número de niveles o pisos:** 1, 2, 3… Esto define cómo se guía a la persona:
+  - Los espacios se preguntan **por piso**: «Piso 1: ¿qué espacios tiene?», «Piso 2: …».
+  - Regla: **mínimo un hub (cerebro) por piso**.
+- **Ciudad:** importante, se pregunta. (Pendiente: definir si cambia el precio, por ejemplo con viáticos o cobertura, en la sección de precios.)
+- **Metros cuadrados:** NO se preguntan; la mayoría de la gente no los sabe.
+
 **6. Espacios:** lista genérica sugerida:
 1. Habitación principal
 2. Habitaciones
