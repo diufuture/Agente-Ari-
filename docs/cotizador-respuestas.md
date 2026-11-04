@@ -246,4 +246,6 @@ Posibles errores en la lista, por confirmar:
 - **Pago en línea** con pasarela: **Mercado Pago** (el usuario dice que trabaja con cualquiera; por confirmar cuál tiene cuenta).
 - **Transferencia o Nequi:** se muestran los números en el cotizador.
 - **Efectivo.**
-- (Pendiente: confirmar la pasarela, los números de Nequi o de la cuenta, y cómo se agenda la visita.)
+- **Pasarela:** se define después (Wompi, Bold, Mercado Pago…). El cotizador queda preparado para conectar la que se elija.
+- **Transferencia o Nequi:** se muestran los números (pendiente: recibirlos) y el cliente **envía el soporte por WhatsApp** al 321 507 3310.
+- **Agendar la visita:** un **agendador** donde el cliente **elige la fecha y la hora** según la **disponibilidad real de la agenda de Ari**.
