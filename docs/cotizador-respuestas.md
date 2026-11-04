@@ -177,3 +177,7 @@ Posibles errores en la lista, por confirmar:
 **18. Precio público:**
 - Siempre el **precio cliente final**.
 - **Con IVA incluido en cada precio.** No se discrimina el IVA al final: un solo total. Es una herramienta masiva y no hay que enredar al cliente.
+
+**18b. IVA:** los precios de la lista están **antes de IVA**. El cotizador **suma el 19% a cada precio** antes de mostrarlo. Ejemplo: ST1, $262.400 en la lista → **$312.256** en la web.
+
+**Política de gancho en la oferta (nuevo):** la oferta que recibe el cliente lleva políticas de descuento para incentivar el cierre. Ejemplo: **«Si tomas la oferta dentro de los primeros 10 días, obtienes un 5% de descuento.»** Debe ser **configurable** desde Ari (porcentaje, días, texto) y verse en el PDF y en el mensaje, con la fecha límite calculada.
