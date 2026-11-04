@@ -309,6 +309,24 @@ h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; li
 .op.sis[aria-pressed="true"]::after { background-color: var(--c); }
 .op.sis:not([aria-pressed="true"]) .sis-ico { filter: saturate(.75); opacity: .85; }
 .paso h1:focus { outline: none; }
+/* Acordeón de espacios */
+.acordeon { display: grid; gap: 10px; }
+.acc { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 80px); }
+.acc-cab { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: none; background: none; text-align: left; border-radius: var(--r); }
+.acc-cab .ico { width: 26px; height: 26px; color: var(--accent); flex: none; }
+.acc-nom { flex: 1; min-width: 0; display: grid; }
+.acc-nom b { font-family: var(--font-display); font-size: 16.5px; }
+.acc-nom small { color: var(--fg-3); font-size: 12.5px; font-weight: 600; }
+.acc-res { font-size: 13.5px; color: var(--fg-2); text-align: right; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.acc-ok { color: var(--accent); font-weight: 700; }
+.chev { width: 20px; height: 20px; color: var(--fg-3); flex: none; transition: transform .2s; }
+.acc.abierta { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.acc.abierta .chev { transform: rotate(180deg); color: var(--accent); }
+.acc:not(.abierta):hover { border-color: var(--accent); }
+.acc-cuerpo { border-top: 1px solid var(--line); }
+.acc-cuerpo > .sw-fila:first-child, .acc-cuerpo > .fila-op:first-child { border-top: none; }
+.acc-pie { display: flex; justify-content: flex-end; }
+
 /* Niveles: Pro dorado, Medio cian, Básico sobrio */
 .paq-collage { display: flex; align-items: center; justify-content: center; gap: 4%; height: 150px; margin: -4px -4px 8px; padding: 14px; border-radius: 12px; background: radial-gradient(ellipse 70% 80% at 50% 45%, var(--foto), var(--foto-2)); }
 .paq-collage img { max-height: 100%; max-width: 46%; object-fit: contain; filter: drop-shadow(0 10px 12px var(--sombra)); }
@@ -504,6 +522,7 @@ const P = {
   crown: "M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5zM5 19h14",
   star: "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z",
   check: "M5 12l5 5 9-10",
+  chev: "M6 9l6 6 6-6",
   building: "M5 21V4h10v17M15 9h4v12M8 8h2M8 12h2M8 16h2M3 21h18",
   barn: "M3 21V10l9-6 9 6v11M3 21h18M9 21v-6h6v6M9 15l6 6M15 15l-6 6",
   briefcase: "M3 8h18v12H3zM9 8V5h6v3M3 13h18",
@@ -653,6 +672,20 @@ const bloqueRecibir = (titulo) => `
     <p class="sub">WhatsApp de Click Control: <b>321 507 3310</b></p>
   </div>`;
 
+/* Acordeón por espacio: uno abierto, los demás como renglones con su resumen */
+function acordeon(paso, lista, resumen, cuerpo) {
+  const abierto = (S.abierto && S.abierto[paso]) ?? (lista[0] && lista[0].id);
+  return `<div class="acordeon">${lista.map((e, i) => {
+    const on = e.id === abierto, sig = lista[i + 1];
+    return `<section class="esp acc ${on ? "abierta" : ""}">
+      <button type="button" class="acc-cab" data-act="abrir" data-p="${paso}" data-id="${on ? "" : e.id}" aria-expanded="${on}">
+        ${ico(e.i)}<span class="acc-nom"><b>${esc(e.n)}</b>${S.casa.pisos > 1 ? `<small>Piso ${e.piso}</small>` : ""}</span>
+        <span class="acc-res">${resumen(e)}</span>${ico("chev", "chev")}</button>
+      ${on ? `<div class="acc-cuerpo">${cuerpo(e)}
+        ${sig ? `<div class="esp-pie acc-pie"><button type="button" class="btn-sec" data-act="abrir" data-p="${paso}" data-id="${sig.id}">Listo, sigue ${esc(sig.n)} →</button></div>` : ""}</div>` : ""}
+    </section>`; }).join("")}</div>`;
+}
+
 const BADGE = { premium: "Recomendado", confort: "Más elegido" };
 const ICO_T = { premium: "crown", confort: "star", esencial: "check" };
 function tarjetaNivel(x, attrs, pressed, prefijo = "") {
@@ -760,19 +793,18 @@ const VISTAS = {
       h += `<div class="info">${ico("infoi")}<span>Buena elección para una casa en obra: deja instaladas cajas cuadradas de 8×8 en cada punto.</span></div>`;
     h += `</div>`;
     if (!S.linea) return h;
-    h += `<div class="bloque"><h2>Tus interruptores, espacio por espacio</h2><p class="sub">Te sugerimos lo más común. Si en algún espacio tienes más luces, elige más canales o agrega otro interruptor.</p><div class="esp-lista">`;
-    for (const e of espacios()) {
-      const sws = swDe(e);
-      h += `<section class="esp"><div class="esp-cab">${ico(e.i)}<h3>${esc(e.n)}</h3>${S.cort[e.id] ? `<span class="tag-cort">Con cortina</span>` : ""}${S.casa.pisos > 1 ? `<span class="piso-n">Piso ${e.piso}</span>` : ""}</div>`;
+    h += `<div class="bloque"><h2>Tus interruptores, espacio por espacio</h2><p class="sub">Te sugerimos lo más común. Si en algún espacio tienes más luces, elige más canales o agrega otro interruptor.</p>`;
+    h += acordeon("ilum", espacios(), e => { const sws = swDe(e), n = sws.reduce((a, x) => a + x.n, 0); return `${S.cort[e.id] ? '<span class="tag-cort">Con cortina</span> ' : ""}${plural(n, "interruptor", "interruptores")}`; }, e => {
+      const sws = swDe(e); let c = "";
       sws.forEach((s, j) => {
-        h += `<div class="sw-fila"><span class="thumb">${img(linea().foto + s.c)}</span>
-          <div class="canales" role="group" aria-label="Canales">${[1, 2, 3, 4].map(c => `<button type="button" data-act="swc" data-id="${e.id}" data-j="${j}" data-v="${c}" aria-pressed="${s.c === c}" aria-label="${nombreCanal(c)}"><b>${c}</b><small>${c === 4 ? (linea().caja === "eu" ? "+2 escenas" : "botones") : c === 1 ? "canal" : "canales"}</small></button>`).join("")}</div>
+        c += `<div class="sw-fila"><span class="thumb">${img(linea().foto + s.c)}</span>
+          <div class="canales" role="group" aria-label="Canales">${[1, 2, 3, 4].map(n => `<button type="button" data-act="swc" data-id="${e.id}" data-j="${j}" data-v="${n}" aria-pressed="${s.c === n}" aria-label="${nombreCanal(n)}"><b>${n}</b><small>${n === 4 ? (linea().caja === "eu" ? "+2 escenas" : "botones") : n === 1 ? "canal" : "canales"}</small></button>`).join("")}</div>
           <div class="sw-cant"><div class="stepper"><button type="button" aria-label="Menos" data-act="swn" data-id="${e.id}" data-j="${j}" data-d="-1">−</button><output>${s.n}</output><button type="button" aria-label="Más" data-act="swn" data-id="${e.id}" data-j="${j}" data-d="1">+</button></div>
           ${sws.length > 1 ? `<button type="button" class="quitar" data-act="swq" data-id="${e.id}" data-j="${j}">Quitar</button>` : ""}</div></div>`;
       });
-      h += `<div class="esp-pie"><button type="button" class="link-btn" data-act="swa" data-id="${e.id}">+ Agregar otro interruptor</button></div></section>`;
-    }
-    h += `</div><div class="info">${ico("hub")}<span>Incluimos el cerebro del sistema: <b>1 hub cableado</b> en el piso 1${S.casa.pisos > 1 ? ` y <b>${plural(S.casa.pisos - 1, "hub inalámbrico", "hubs inalámbricos")}</b> para los demás pisos` : ""}.</span></div></div>`;
+      return c + `<div class="esp-pie"><button type="button" class="link-btn" data-act="swa" data-id="${e.id}">+ Agregar otro interruptor</button></div>`;
+    });
+    h += `<div class="info">${ico("hub")}<span>Incluimos el cerebro del sistema: <b>1 hub cableado</b> en el piso 1${S.casa.pisos > 1 ? ` y <b>${plural(S.casa.pisos - 1, "hub inalámbrico", "hubs inalámbricos")}</b> para los demás pisos` : ""}.</span></div></div>`;
     return h;
   },
 
@@ -817,11 +849,8 @@ const VISTAS = {
     <div class="paso-meta">Cámaras y sensores</div>
     <h1>Agrega lo que quieras en cada espacio</h1>
     <p class="lead">Toca + en lo que quieras agregar. Si no necesitas nada en un espacio, déjalo así.</p>
-    <div class="bloque">${espacios().map(e => { const o = S.opc[e.id] || {}; return `
-      <section class="esp"><div class="esp-cab">${ico(e.i)}<h3>${esc(e.n)}</h3>${S.casa.pisos > 1 ? `<span class="piso-n">Piso ${e.piso}</span>` : ""}</div>
-      ${Object.entries(OPC).map(([k, x]) => `<div class="fila-op"><span class="thumb">${img(k, x.n)}</span><div class="nom">${x.n}<small>${x.s}</small></div>
-        <div class="stepper"><button type="button" aria-label="Menos" data-act="opc" data-id="${e.id}" data-k="${k}" data-d="-1">−</button><output>${o[k] || 0}</output><button type="button" aria-label="Más" data-act="opc" data-id="${e.id}" data-k="${k}" data-d="1">+</button></div></div>`).join("")}
-      </section>`; }).join("")}</div>`,
+    <div class="bloque">${acordeon("opc", espacios(), e => { const o = S.opc[e.id] || {}, n = Object.values(o).reduce((a, b) => a + b, 0); return n ? `<span class="acc-ok">${plural(n, "equipo", "equipos")}</span>` : "Nada agregado"; }, e => { const o = S.opc[e.id] || {}; return Object.entries(OPC).map(([k, x]) => `<div class="fila-op"><span class="thumb">${img(k, x.n)}</span><div class="nom">${x.n}<small>${x.s}</small></div>
+        <div class="stepper"><button type="button" aria-label="Menos" data-act="opc" data-id="${e.id}" data-k="${k}" data-d="-1">−</button><output>${o[k] || 0}</output><button type="button" aria-label="Más" data-act="opc" data-id="${e.id}" data-k="${k}" data-d="1">+</button></div></div>`).join(""); })}</div>`,
 
   pant: () => `
     <div class="paso-meta">Pantallas premium</div>
@@ -1035,6 +1064,7 @@ document.addEventListener("click", e => {
     case "wifi": S.wifi = v === "1"; break;
     case "vozesp": S.voz.esp[b.dataset.id] = !S.voz.esp[b.dataset.id]; break;
     case "quiere": S.visita.quiere = v; break;
+    case "abrir": { S.abierto = S.abierto || {}; S.abierto[b.dataset.p] = b.dataset.id; render(); const el = document.querySelector(`.acc.abierta`); if (el) el.scrollIntoView({ block: "start", behavior: "smooth" }); return; }
     case "dia": S.visita.dia = v; S.visita.hora = ""; break;
     case "politica": abrirPolitica(); return;
     case "cerrarPolitica": $("#politica").hidden = true; $("#f-acepta")?.focus(); return;
