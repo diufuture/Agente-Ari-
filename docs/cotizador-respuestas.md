@@ -210,4 +210,8 @@ Posibles errores en la lista, por confirmar:
 **21. Visita técnica y ciudad:**
 - La **visita técnica se cobra** y **se descuenta de la oferta** si el cliente la toma. Sirve de filtro para la gente que pide visita y no compra.
 - **Base: Bogotá.** **Fuera de Bogotá cambia el valor por viáticos.**
-- (Pendiente: valor de la visita en Bogotá y fuera, y si hay monto mínimo de proyecto.)
+- **Valores de la visita técnica** (configurables en Ari):
+  - Bogotá: **$80.000**
+  - Chía y Cajicá: **$120.000**
+  - Otras ciudades: **«Por confirmar»** (lo define el asesor)
+- **Sin monto mínimo:** se atiende cualquier cotización, siempre que se pague la visita técnica.
