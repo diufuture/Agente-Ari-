@@ -241,3 +241,9 @@ Posibles errores en la lista, por confirmar:
 - **WhatsApp de Click Control: +57 321 507 3310.** El botón de WhatsApp abre un **canal directo** entre el cliente y Click Control, con el link de la oferta.
 - **A Click Control:** todos los medios: (a) la cotización aparece en Ari como «Pendiente – Web», con sus renglones por capítulo y espacio; (b) correo a gerencia@clickcontrol.co con el resumen y el PDF; (c) el mensaje del cliente por WhatsApp; (d) Ari avisa al abrir («Tienes N cotizaciones nuevas de la web»).
 - **Decisión tomada por defecto (falta confirmar):** el cotizador **sí crea el cliente en Ari**, marcado con origen «Web», a diferencia de los pedidos de la tienda. La razón es que hay que contactarlo y hacerle seguimiento.
+
+**26. Pago de la visita técnica:** se le dan **todas las opciones** al cliente:
+- **Pago en línea** con pasarela: **Mercado Pago** (el usuario dice que trabaja con cualquiera; por confirmar cuál tiene cuenta).
+- **Transferencia o Nequi:** se muestran los números en el cotizador.
+- **Efectivo.**
+- (Pendiente: confirmar la pasarela, los números de Nequi o de la cuenta, y cómo se agenda la visita.)
