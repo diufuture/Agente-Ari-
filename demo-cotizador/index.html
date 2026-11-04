@@ -309,6 +309,25 @@ h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; li
 .op.sis[aria-pressed="true"]::after { background-color: var(--c); }
 .op.sis:not([aria-pressed="true"]) .sis-ico { filter: saturate(.75); opacity: .85; }
 .paso h1:focus { outline: none; }
+/* Resumen compacto por capítulo */
+.caps-res { display: grid; gap: 10px; }
+.cap-res { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
+.cap-res summary, .cap-sum { display: flex; align-items: center; gap: 14px; padding: 14px 16px; list-style: none; cursor: pointer; }
+.cap-sum { cursor: default; }
+.cap-res summary::-webkit-details-marker { display: none; }
+.cap-res .sis-ico { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; background: var(--c); color: #00182b; flex: none; box-shadow: 0 6px 16px color-mix(in srgb, var(--c) 35%, transparent); }
+.cap-res .sis-ico svg { width: 25px; height: 25px; }
+.cap-nom { flex: 1; min-width: 0; font-family: var(--font-display); font-weight: 700; font-size: 17px; }
+.cap-res b { font-family: var(--font-display); font-size: 18px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cap-res .cap-txt { font-size: 15px; color: var(--fg-2); }
+.cap-res[open] { border-color: var(--c); }
+.cap-res[open] .chev { transform: rotate(180deg); }
+.cap-det { border-top: 1px solid var(--line); }
+.cap-det .renglon:first-child { border-top: none; }
+.visita-card { display: grid; gap: 12px; padding: 18px; border-radius: var(--r); border: 1px solid var(--line); background: var(--panel); }
+.visita-card h2 { font-size: 20px; }
+.visita-card h3 { font-size: 16px; margin-top: 6px; }
+
 /* Acordeón de espacios */
 .acordeon { display: grid; gap: 10px; }
 .acc { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 80px); }
@@ -639,7 +658,7 @@ function pasos() {
   if (S.sis.cortinas) l.push("cortinas");
   l.push("ilum");
   for (const k of ["sonido", "cine", "cerraduras", "opc", "pant", "wifi", "voz"]) if (S.sis[k]) l.push(k);
-  l.push("resumen", "visita", "listo");
+  l.push("resumen", "listo");
   return l;
 }
 const pasoActual = () => { const l = pasos(); if (S.i >= l.length) S.i = l.length - 1; return l[S.i]; };
@@ -648,7 +667,7 @@ function valido(p) {
   if (p === "casa") return !!(S.casa.tipo && ciudad() && S.casa.pisos > 0 && S.casa.estado);
   if (p === "espacios") return espacios().length > 0;
   if (p === "ilum") return !!S.linea;
-  if (p === "visita") return S.visita.quiere === "no" || (S.visita.quiere === "si" && S.visita.dia && S.visita.hora && S.visita.pago);
+  if (p === "resumen") return S.visita.quiere !== "si" || !!(S.visita.dia && S.visita.hora && S.visita.pago);
   return true;
 }
 
@@ -699,6 +718,34 @@ function tarjetaNivel(x, attrs, pressed, prefijo = "") {
     ${attrs ? `<span class="paq-cta">${pressed ? "Elegido" : "Elegir " + x.n}</span>` : ""}</${tag}>`;
 }
 const segNivel = (lista, actual, attrs) => lista.map(([k, n, t]) => `<button type="button" class="${t ? "t-" + t : "t-no"}" ${attrs} data-v="${k}" aria-pressed="${actual === k}">${t === "premium" ? ico("crown", "seg-ico") : ""}${n}</button>`).join("");
+
+function bloqueVisita() {
+  const dur = duracionVisita(), v = visitaValor(), q = S.visita.quiere;
+  let h = `<section class="visita-card"><h2>¿Quieres que vayamos a tu casa a confirmar todo?</h2>
+    <p class="sub">En la visita medimos, revisamos tus cajas y cableado y te dejamos la oferta final. Dura unas ${plural(dur, "hora", "horas")} y cuesta <b>${v ? cop(v) : "un valor por confirmar según tu ciudad"}</b>; se descuenta de tu proyecto.</p>
+    <div class="opciones anchas">
+      <button type="button" class="op" data-act="quiere" data-v="si" aria-pressed="${q === "si"}">${ico("cal")}<b>Sí, quiero agendarla</b><span>Elige el día y la hora que te sirvan.</span></button>
+      <a class="op" data-act="quiere" data-v="no" aria-pressed="${q === "no"}" href="https://wa.me/${WA}?text=${encodeURIComponent(mensajeWA() + "\nPor ahora no quiero agendar visita; tengo unas dudas.")}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">${ico("chat")}<b>Ahora no, prefiero escribirles</b><span>Abre WhatsApp con Click Control para resolver tus dudas.</span></a>
+    </div>`;
+  if (q === "si") {
+    const dias = franjas(dur), sel = dias.find(d => d.key === S.visita.dia);
+    h += `<h3>Elige el día</h3>
+      <div class="dias" role="group" aria-label="Días disponibles">${dias.map(d => `<button type="button" class="dia" data-act="dia" data-v="${d.key}" aria-pressed="${S.visita.dia === d.key}"><small>${d.dsem}</small><b>${d.num}</b><small>${d.mes}</small></button>`).join("")}</div>
+      ${sel ? `<h3>Elige la hora</h3><div class="chips">${sel.horas.map(x => `<button type="button" class="chip" data-act="set" data-k="visita.hora" data-v="${x}" aria-pressed="${S.visita.hora === x}">${x}</button>`).join("")}</div>` : ""}
+      <p class="sub"><span class="ejemplo">Ejemplo</span> En la versión real tú abres estas franjas desde Ari. Se agenda con al menos 48 horas.</p>
+      <h3>¿Cómo quieres pagar la visita?</h3>
+      <div class="opciones anchas">
+        <button type="button" class="op" data-act="set" data-k="visita.pago" data-v="linea" aria-pressed="${S.visita.pago === "linea"}"><b>Pago en línea</b><span>Tarjeta, PSE o Nequi. (En el demo no se cobra.)</span></button>
+        <button type="button" class="op" data-act="set" data-k="visita.pago" data-v="transf" aria-pressed="${S.visita.pago === "transf"}"><b>Transferencia</b><span>Nos envías el soporte por WhatsApp.</span></button>
+        <button type="button" class="op" data-act="set" data-k="visita.pago" data-v="efectivo" aria-pressed="${S.visita.pago === "efectivo"}"><b>Efectivo</b><span>Pagas el día de la visita.</span></button>
+      </div>
+      ${S.visita.pago === "transf" ? `<div class="cuentas">
+        <div class="cuenta"><b>Davivienda · Cuenta de ahorros</b><dl><dt>Titular</dt><dd>Click Control S.A.S.</dd><dt>NIT</dt><dd>900.884.929-4</dd><dt>Cuenta</dt><dd>4670179318</dd><dt>Llave</dt><dd>79950402</dd></dl></div>
+        <div class="cuenta"><b>Bancolombia · Cuenta de ahorros</b><dl><dt>Titular</dt><dd>Ariel Bravo Benavides</dd><dt>C.C.</dt><dd>79.950.402</dd><dt>Cuenta</dt><dd>93292434012</dd><dt>Llave</dt><dd>3215073310</dd></dl></div>
+      </div><div class="info">${ico("chat")}<span>Cuando hagas la transferencia, envía el soporte al WhatsApp <b>321 507 3310</b>.</span></div>` : ""}`;
+  }
+  return h + `</section>`;
+}
 
 /* ---------- Vistas ---------- */
 const VISTAS = {
@@ -886,53 +933,25 @@ const VISTAS = {
   },
 
   resumen() {
-    const { caps, total } = calcular(), v = visitaValor(), limite = new Date(Date.now() + 10 * 864e5);
+    const { caps, total } = calcular(), limite = new Date(Date.now() + 10 * 864e5);
+    const color = k => (SISTEMAS.find(x => x.k === k) || {}).c || "#6ee3fb";
+    const fila = (k, i, n, valor, detalle, ej) => detalle
+      ? `<details class="cap-res" data-cap="${k}" style="--c:${color(k)}" ${(S.capAbierto || {})[k] ? "open" : ""}><summary><span class="sis-ico">${ico(i, "")}</span><span class="cap-nom">${n}${ej ? ' <span class="ejemplo">ejemplo</span>' : ""}</span><b>${valor}</b>${ico("chev", "chev")}</summary><div class="cap-det">${detalle}</div></details>`
+      : `<div class="cap-res" style="--c:${color(k)}"><div class="cap-sum"><span class="sis-ico">${ico(i, "")}</span><span class="cap-nom">${n}</span><b class="cap-txt">${valor}</b></div></div>`;
     let h = `<div class="paso-meta">Tu cotización</div>
       <h1>${primerNombre() ? esc(primerNombre()) + ", esta" : "Esta"} es tu cotización</h1>
-      <p class="lead">Precios con IVA incluido. Puedes volver atrás y cambiar lo que quieras.</p><div class="bloque">`;
+      <p class="lead">Precios con IVA incluido. Toca un capítulo para ver su detalle.</p><div class="bloque"><div class="caps-res">`;
     for (const c of caps)
-      h += `<section class="cap-final"><div class="cap-final-cab">${ico(c.i)}<h3>${c.n}${c.ejemplo ? ' <span class="ejemplo">ejemplo</span>' : ""}</h3><b>${cop(conIva(c.eq + c.inst))}</b></div>
-        ${c.items.map(([t, p]) => `<div class="renglon"><span>${esc(t)}</span><span>${cop(conIva(p))}</span></div>`).join("")}
-        <div class="renglon inst"><span>Instalación y configuración</span><span>${cop(conIva(c.inst))}</span></div></section>`;
-    if (S.sis.cortinas) { const n = Object.values(S.cort).filter(Boolean).length; h += `<section class="cap-final"><div class="cap-final-cab">${ico("curtain")}<h3>Cortinas</h3><b>Con asesor</b></div><div class="renglon"><span>${n ? plural(n, "espacio marcado", "espacios marcados") : "Sin espacios marcados"} · un asesor te llamará con la oferta</span><span></span></div></section>`; }
-    if (S.sis.wifi && S.wifi) h += `<section class="cap-final"><div class="cap-final-cab">${ico("wifi")}<h3>Red WiFi</h3><b>Por definir</b></div><div class="renglon"><span>La diseñamos según tus pisos y espacios</span><span></span></div></section>`;
-    h += `
+      h += fila(c.k, c.i, c.n, cop(conIva(c.eq + c.inst)), c.items.map(([t, p]) => `<div class="renglon"><span>${esc(t)}</span><span>${cop(conIva(p))}</span></div>`).join("") + `<div class="renglon inst"><span>Instalación y configuración</span><span>${cop(conIva(c.inst))}</span></div>`, c.ejemplo);
+    if (S.sis.cortinas) h += fila("cortinas", "curtain", "Cortinas", "Te llamamos");
+    if (S.sis.wifi && S.wifi) h += fila("wifi", "wifi", "Red WiFi", "Por definir");
+    h += `</div>
       <div class="total-final"><div class="t"><span>Total con IVA</span><b>${cop(total)}</b></div>
-        <p>La instalación no incluye obra civil (regatas, cajas nuevas o cableado que no exista). Esos trabajos se cotizan en la visita.</p></div>
+        <p>Incluye instalación y configuración. No incluye obra civil (regatas, cajas nuevas o cableado que no exista).</p></div>
       <div class="gancho">${ico("gift")}<div><b>Toma tu oferta antes del ${limite.toLocaleDateString("es-CO", { day: "numeric", month: "long" })} y obtén 5% de descuento</b><span>Pagarías ${cop(total * .95)}.</span></div></div>
       ${bloqueRecibir("Recibe tu cotización")}
-      <div class="info">${ico("pin")}<span><b>Visita técnica: ${v ? cop(v) : "valor por confirmar"}</b>${ciudad() && !v ? ` (para ${esc(ciudad())} se suman viáticos)` : ""}. Se descuenta del total cuando tomas tu proyecto.</span></div>
+      ${bloqueVisita()}
     </div>`;
-    return h;
-  },
-
-  visita() {
-    const dur = duracionVisita(), v = visitaValor(), q = S.visita.quiere;
-    let h = `<div class="paso-meta">Visita técnica</div>
-      <h1>¿Quieres que vayamos a tu casa a confirmar todo?</h1>
-      <p class="lead">En la visita medimos, revisamos tus cajas y cableado y te dejamos la oferta final. Dura unas ${plural(dur, "hora", "horas")} y cuesta ${v ? cop(v) : "un valor por confirmar según tu ciudad"}. Ese valor se descuenta de tu proyecto.</p>
-      <div class="bloque"><div class="opciones anchas">
-        <button type="button" class="op" data-act="quiere" data-v="si" aria-pressed="${q === "si"}">${ico("cal")}<b>Sí, quiero agendarla</b><span>Elige el día y la hora que te sirvan.</span></button>
-        <button type="button" class="op" data-act="quiere" data-v="no" aria-pressed="${q === "no"}">${ico("phone")}<b>Ahora no, gracias</b><span>Te escribimos por WhatsApp para resolver tus dudas.</span></button>
-      </div></div>`;
-    if (q !== "si") return h;
-    const dias = franjas(dur), sel = dias.find(d => d.key === S.visita.dia);
-    h += `<div class="bloque"><h2>Elige el día</h2>
-        <div class="dias" role="group" aria-label="Días disponibles">${dias.map(d => `<button type="button" class="dia" data-act="dia" data-v="${d.key}" aria-pressed="${S.visita.dia === d.key}"><small>${d.dsem}</small><b>${d.num}</b><small>${d.mes}</small></button>`).join("")}</div>
-        ${sel ? `<h2>Elige la hora</h2><div class="chips">${sel.horas.map(x => `<button type="button" class="chip" data-act="set" data-k="visita.hora" data-v="${x}" aria-pressed="${S.visita.hora === x}">${x}</button>`).join("")}</div>` : ""}
-        <p class="sub"><span class="ejemplo">Ejemplo</span> En la versión real tú abres estas franjas desde Ari. Se agenda con al menos 48 horas.</p>
-      </div>
-      <div class="bloque"><h2>¿Cómo quieres pagar la visita?</h2>
-        <div class="opciones anchas">
-          <button type="button" class="op" data-act="set" data-k="visita.pago" data-v="linea" aria-pressed="${S.visita.pago === "linea"}"><b>Pago en línea</b><span>Tarjeta, PSE o Nequi. (En el demo no se cobra.)</span></button>
-          <button type="button" class="op" data-act="set" data-k="visita.pago" data-v="transf" aria-pressed="${S.visita.pago === "transf"}"><b>Transferencia</b><span>Nos envías el soporte por WhatsApp.</span></button>
-          <button type="button" class="op" data-act="set" data-k="visita.pago" data-v="efectivo" aria-pressed="${S.visita.pago === "efectivo"}"><b>Efectivo</b><span>Pagas el día de la visita.</span></button>
-        </div>
-        ${S.visita.pago === "transf" ? `<div class="cuentas">
-          <div class="cuenta"><b>Davivienda · Cuenta de ahorros</b><dl><dt>Titular</dt><dd>Click Control S.A.S.</dd><dt>NIT</dt><dd>900.884.929-4</dd><dt>Cuenta</dt><dd>4670179318</dd><dt>Llave</dt><dd>79950402</dd></dl></div>
-          <div class="cuenta"><b>Bancolombia · Cuenta de ahorros</b><dl><dt>Titular</dt><dd>Ariel Bravo Benavides</dd><dt>C.C.</dt><dd>79.950.402</dd><dt>Cuenta</dt><dd>93292434012</dd><dt>Llave</dt><dd>3215073310</dd></dl></div>
-        </div><div class="info">${ico("chat")}<span>Cuando hagas la transferencia, envía el soporte al WhatsApp <b>321 507 3310</b>.</span></div>` : ""}
-      </div>`;
     return h;
   },
 
@@ -1008,7 +1027,7 @@ function render(foco) {
   $("#barraNom").textContent = NOMBRES_PASO[p];
   const sig = $("#siguiente");
   sig.hidden = p === "listo";
-  sig.textContent = p === "datos" ? "Empezar" : p === "resumen" ? "Continuar" : p === "visita" ? (S.visita.quiere === "si" ? "Confirmar visita" : "Terminar") : p === "voz" || l[S.i + 1] === "resumen" ? "Ver mi cotización" : "Siguiente";
+  sig.textContent = p === "datos" ? "Empezar" : p === "resumen" ? (S.visita.quiere === "si" ? "Confirmar visita y terminar" : "Terminar") : p === "voz" || l[S.i + 1] === "resumen" ? "Ver mi cotización" : "Siguiente";
   sig.disabled = !valido(p);
   pintarResumen();
   guardar();
@@ -1026,11 +1045,13 @@ document.addEventListener("change", e => {
   const t = e.target;
   if (t.dataset.f) { setPath(t.dataset.f, t.type === "checkbox" ? t.checked : t.value); $("#siguiente").disabled = !valido(pasoActual()); guardar(); }
 });
+document.addEventListener("toggle", e => { const d = e.target; if (d.dataset && d.dataset.cap) { S.capAbierto = S.capAbierto || {}; S.capAbierto[d.dataset.cap] = d.open; guardar(); } }, true);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#politica").hidden) $("#politica").hidden = true; });
 
 document.addEventListener("click", e => {
   if (e.target.id === "politica") { e.target.hidden = true; return; }
   const b = e.target.closest("button[data-act], a[data-act]"); if (!b || b.disabled) return;
+  if (b.tagName === "A" && b.dataset.act === "quiere") { S.visita.quiere = "no"; setTimeout(() => { const y = window.scrollY; render(); window.scrollTo({ top: y }); }, 0); return; }
   const a = b.dataset.act, v = b.dataset.v;
   switch (a) {
     case "set": setPath(b.dataset.k, v); break;
