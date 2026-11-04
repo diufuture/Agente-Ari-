@@ -171,3 +171,9 @@ Posibles errores en la lista, por confirmar:
   - **Nivel:** Básico / Medio / Premium, donde aplique.
 - **Sección nueva en Ari: «Paquetes».** Ahí se arma cada paquete de sonido y cine (ej. «Sonido Medio = 2 parlantes X + 1 amplificador Y»). El cotizador muestra el paquete con su precio total.
 - Un producto nuevo **no aparece en la web hasta que se le asigne un capítulo.**
+
+## E. Precios
+
+**18. Precio público:**
+- Siempre el **precio cliente final**.
+- **Con IVA incluido en cada precio.** No se discrimina el IVA al final: un solo total. Es una herramienta masiva y no hay que enredar al cliente.
