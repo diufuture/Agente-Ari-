@@ -265,3 +265,5 @@ Posibles errores en la lista, por confirmar:
 **29. Imágenes:** **mixto**. Íconos o ilustraciones para elegir espacios y capítulos, y fotos reales en momentos clave (interruptor instalado, cine terminado). Se va ajustando sobre la marcha para que sea muy sencillo e intuitivo. (Pendiente: fotos de proyectos reales; mientras tanto se usan las fotos de producto del catálogo.)
 
 **30. Ari dentro del cotizador:** **opción a**. La versión 1 funciona **solo con toques y botones**, sin IA y sin gasto de tokens. Las opciones con Ari (conversar o resolver dudas) se agregan más adelante, a medida que se entienda cómo se usa.
+
+**31. Paquetes rápidos:** **sí (opción a)**. Después de marcar la casa y los espacios, el cliente puede elegir un paquete (ej. Apto Esencial / Apto Confort / Casa Premium) que precarga los capítulos sobre sus espacios, o armarla paso a paso. Todo es ajustable después. El contenido de cada paquete se configura desde Ari.
