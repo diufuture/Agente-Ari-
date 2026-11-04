@@ -229,3 +229,5 @@ Posibles errores en la lista, por confirmar:
 | Barrio o dirección | Opcional |
 | Cédula o NIT | No se pide ahora |
 | ¿Cómo nos conociste? | Opcional |
+
+**23. Momento de pedir los datos:** **al principio**, antes de empezar. Personaliza la experiencia («Hola, Juan, ¿cómo es tu casa?»): a la gente le gusta decir quién es. Se pide primero el contacto y luego empieza el cotizador.
