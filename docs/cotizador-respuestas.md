@@ -164,3 +164,10 @@ Posibles errores en la lista, por confirmar:
 5. Cortinas (con asesor, sin precio en línea)
 6. Red WiFi
 7. Control por voz (opcional)
+
+**17. Qué productos ve el cotizador (aprobado):**
+- Cada producto del catálogo de Ari lleva dos datos nuevos:
+  - **Capítulo del cotizador:** Iluminación, Hub, Sonido, Cine, Cerraduras, Cámaras, Sensores, Control IR, Pantallas premium, Red WiFi, Control por voz… o **«No mostrar»** (por defecto).
+  - **Nivel:** Básico / Medio / Premium, donde aplique.
+- **Sección nueva en Ari: «Paquetes».** Ahí se arma cada paquete de sonido y cine (ej. «Sonido Medio = 2 parlantes X + 1 amplificador Y»). El cotizador muestra el paquete con su precio total.
+- Un producto nuevo **no aparece en la web hasta que se le asigne un capítulo.**
