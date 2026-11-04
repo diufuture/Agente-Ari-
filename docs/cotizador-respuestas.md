@@ -9,3 +9,5 @@
 **3. Dónde corre Ari:** en el mismo hosting (cPanel).
 
 **4. Nombre de la marca:** **Click Control**, con k. Se usa así en el cotizador, en el PDF y en los mensajes. (Pendiente: en Ari todavía aparece «Clic Control» y hay que corregirlo.)
+
+**5. Estilo gráfico:** las dos cosas. El usuario manda el logo que tiene; los colores, las letras y el resto se sacan de www.clickcontrol.co. Antes de seguir se le muestra una prueba para que la apruebe. (Pendiente: recibir el logo.)
