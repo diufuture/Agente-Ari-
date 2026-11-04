@@ -247,6 +247,51 @@ h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; li
 .hoja ul { padding-left: 20px; }
 
 .toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 12px 18px; border-radius: 12px; font-weight: 600; font-size: 14.5px; z-index: 60; max-width: calc(100% - 32px); }
+
+/* Paquetes: Premium destaca, Confort llama la atención, Esencial sobrio */
+.paquetes { display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .paquetes { grid-template-columns: 1fr 1fr; } .paq-premium { grid-column: 1 / -1; } }
+.paq { position: relative; text-align: left; display: grid; gap: 6px; align-content: start; padding: 20px; border-radius: 18px; border: 1.5px solid var(--line); background: var(--panel); color: var(--fg); transition: transform .15s, box-shadow .15s; }
+.paq:hover { transform: translateY(-2px); }
+.paq-ico { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; background: var(--panel-2); color: var(--fg-2); }
+.paq-ico svg { width: 26px; height: 26px; }
+.paq-nom { font-family: var(--font-display); font-weight: 700; font-size: 22px; margin-top: 6px; }
+.paq-sub { font-size: 14.5px; color: var(--fg-2); }
+.paq ul { list-style: none; margin: 8px 0 4px; padding: 0; display: grid; gap: 6px; font-size: 14.5px; }
+.paq li { display: flex; gap: 8px; align-items: flex-start; }
+.paq li svg { width: 18px; height: 18px; flex: none; margin-top: 2px; color: var(--accent); }
+.paq-cta { justify-self: start; margin-top: 8px; padding: 9px 16px; border-radius: 999px; font-weight: 700; font-size: 14.5px; border: 1.5px solid var(--line); }
+.paq-badge { position: absolute; top: 16px; right: 16px; font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 5px 10px; border-radius: 999px; }
+.paq[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--accent); }
+.paq[aria-pressed="true"] .paq-cta { background: var(--btn-bg); color: var(--btn-fg); border-color: var(--btn-bg); }
+
+.paq-confort { border-color: #2bb5d6; background: linear-gradient(160deg, color-mix(in srgb, #6ee3fb 22%, var(--panel)), var(--panel) 70%); }
+.paq-confort .paq-ico { background: #6ee3fb; color: #00182b; }
+.paq-confort .paq-badge { background: #6ee3fb; color: #00182b; }
+.paq-confort .paq-cta { border-color: #2bb5d6; }
+
+.paq-premium { border: 2px solid #e9b949; color: #f4f8fb; padding: 24px;
+  background: radial-gradient(120% 140% at 100% 0%, rgba(233, 185, 73, .28), transparent 55%), linear-gradient(150deg, #0d2f52 0%, #00182b 60%, #021120 100%);
+  box-shadow: 0 14px 34px rgba(0, 24, 43, .35); }
+.paq-premium .paq-ico { width: 56px; height: 56px; background: linear-gradient(140deg, #ffe08a, #e9b949 55%, #c98e1c); color: #2a1a00; box-shadow: 0 6px 18px rgba(233, 185, 73, .45); }
+.paq-premium .paq-ico svg { width: 30px; height: 30px; }
+.paq-premium .paq-nom { font-size: 28px; background: linear-gradient(90deg, #ffe7a3, #e9b949); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.paq-premium .paq-sub { color: #c5d6e2; }
+.paq-premium ul { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.paq-premium li svg { color: #e9b949; }
+.paq-premium .paq-badge { background: linear-gradient(90deg, #ffe08a, #e9b949); color: #2a1a00; }
+.paq-premium .paq-cta { background: linear-gradient(90deg, #ffe08a, #e9b949); color: #2a1a00; border: none; padding: 11px 20px; }
+.paq-premium[aria-pressed="true"] { box-shadow: 0 0 0 3px #e9b949, 0 14px 34px rgba(0, 24, 43, .35); }
+.paq-premium[aria-pressed="true"] .paq-cta { background: #f4f8fb; color: #00182b; }
+
+/* Sistemas con color propio */
+.op.sis .sis-ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--c); color: #00182b; }
+.op.sis .sis-ico svg { width: 24px; height: 24px; }
+.op.sis:hover { border-color: var(--c); }
+.op.sis[aria-pressed="true"] { border-color: var(--c); background: color-mix(in srgb, var(--c) 14%, var(--panel)); box-shadow: inset 0 0 0 1px var(--c); }
+.op.sis[aria-pressed="true"]::after { background-color: var(--c); }
+.op.sis:not([aria-pressed="true"]) .sis-ico { filter: saturate(.75); opacity: .85; }
+.paso h1:focus { outline: none; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -353,20 +398,23 @@ const PCT = { ilum: .15, sonido: .20, cine: .20, opc: .15, pant: .15, voz: .15 }
 const VISITA = { "Bogotá": 80000, "Chía": 120000, "Cajicá": 120000 };
 
 const SISTEMAS = [
-  { k: "ilum", n: "Iluminación", i: "bulb", s: "Interruptores inteligentes", fijo: true },
-  { k: "cortinas", n: "Cortinas", i: "curtain", s: "Te asesoramos aparte" },
-  { k: "sonido", n: "Sonido", i: "speaker", s: "Música en tus espacios" },
-  { k: "cine", n: "Cine en casa", i: "film", s: "Proyector y sonido envolvente" },
-  { k: "cerraduras", n: "Cerraduras", i: "lock", s: "Abre con huella o app" },
-  { k: "opc", n: "Cámaras y sensores", i: "camera", s: "Seguridad y control de aire y TV" },
-  { k: "pant", n: "Pantallas premium", i: "screen", s: "Control total desde la pared" },
-  { k: "wifi", n: "Red WiFi", i: "wifi", s: "Señal en toda la casa" },
-  { k: "voz", n: "Control por voz", i: "mic", s: "Alexa y Google" }
+  { k: "ilum", n: "Iluminación", i: "bulb", s: "Interruptores inteligentes", fijo: true, c: "#f6c343" },
+  { k: "cortinas", n: "Cortinas", i: "curtain", s: "Te asesoramos aparte", c: "#b49cff" },
+  { k: "sonido", n: "Sonido", i: "speaker", s: "Música en tus espacios", c: "#ff7ab6" },
+  { k: "cine", n: "Cine en casa", i: "film", s: "Proyector y sonido envolvente", c: "#ff7d6b" },
+  { k: "cerraduras", n: "Cerraduras", i: "lock", s: "Abre con huella o app", c: "#4fd69c" },
+  { k: "opc", n: "Cámaras y sensores", i: "camera", s: "Seguridad y control de aire y TV", c: "#ffaa4d" },
+  { k: "pant", n: "Pantallas premium", i: "screen", s: "Control total desde la pared", c: "#6ee3fb" },
+  { k: "wifi", n: "Red WiFi", i: "wifi", s: "Señal en toda la casa", c: "#6fa2ff" },
+  { k: "voz", n: "Control por voz", i: "mic", s: "Alexa y Google", c: "#3fe0c5" }
 ];
 const PAQUETES = {
-  esencial: { n: "Esencial", s: "Iluminación inteligente en toda la casa", sis: [] },
-  confort: { n: "Confort", s: "Iluminación, cerradura y sonido en la sala", sis: ["cerraduras", "sonido"] },
-  premium: { n: "Premium", s: "Todo lo anterior, más cámaras, pantalla, red WiFi y control por voz", sis: ["cerraduras", "sonido", "opc", "pant", "voz", "wifi"] }
+  premium: { n: "Premium", s: "La casa inteligente completa", sis: ["cerraduras", "sonido", "opc", "pant", "voz", "wifi"], i: "crown", badge: "Recomendado",
+    lleva: ["Iluminación inteligente en toda la casa", "Cerradura Premium con huella", "Sonido en sala y habitación principal", "Cámara y sensor en la sala", "Pantalla táctil en la sala", "Red WiFi y control por voz"] },
+  confort: { n: "Confort", s: "Comodidad y seguridad para el día a día", sis: ["cerraduras", "sonido"], i: "star", badge: "Más elegido",
+    lleva: ["Iluminación inteligente en toda la casa", "Cerradura con huella", "Sonido en la sala"] },
+  esencial: { n: "Esencial", s: "Para empezar", sis: [], i: "bulb",
+    lleva: ["Iluminación inteligente en toda la casa"] }
 };
 const NOMBRES_PASO = { datos: "Tus datos", casa: "Tu vivienda", espacios: "Tus espacios", sistemas: "Qué automatizar", cortinas: "Cortinas", ilum: "Iluminación", sonido: "Sonido", cine: "Cine en casa", cerraduras: "Cerraduras", opc: "Cámaras y sensores", pant: "Pantallas", wifi: "Red WiFi", voz: "Control por voz", resumen: "Tu cotización", visita: "Visita técnica", listo: "Listo" };
 
@@ -406,7 +454,10 @@ const P = {
   doc: "M6 3h9l4 4v14H6zM14 3v5h5",
   mail: "M3 6h18v12H3zM3 7l9 6 9-6",
   link: "M10 14l4-4M8 12l-2 2a3 3 0 0 0 4 4l2-2M16 12l2-2a3 3 0 0 0-4-4l-2 2",
-  phone: "M5 4h4l2 5-3 2a11 11 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"
+  phone: "M5 4h4l2 5-3 2a11 11 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2",
+  crown: "M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5zM5 19h14",
+  star: "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z",
+  check: "M5 12l5 5 9-10"
 };
 const ico = (k, cls = "ico") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${P[k] || P.room}"/></svg>`;
 const img = (k, alt = "") => IMG[k] ? `<img src="${IMG[k]}" alt="${alt}" loading="lazy">` : "";
@@ -612,9 +663,14 @@ const VISTAS = {
     <h1>¿Qué quieres automatizar?</h1>
     <p class="lead">Elige un paquete para ir rápido, o marca tú mismo los sistemas. Todo lo puedes ajustar después.</p>
     <div class="bloque"><h2>Paquetes rápidos</h2>
-      <div class="opciones anchas">${Object.entries(PAQUETES).map(([k, p]) => `<button type="button" class="op" data-act="paquete" data-v="${k}" aria-pressed="${S.paquete === k}">${ico("bolt")}<b>${p.n}</b><span>${p.s}</span></button>`).join("")}</div></div>
+      <div class="paquetes">${Object.entries(PAQUETES).map(([k, p]) => `<button type="button" class="paq paq-${k}" data-act="paquete" data-v="${k}" aria-pressed="${S.paquete === k}">
+        ${p.badge ? `<span class="paq-badge">${p.badge}</span>` : ""}
+        <span class="paq-ico">${ico(p.i, "")}</span>
+        <span class="paq-nom">${p.n}</span><span class="paq-sub">${p.s}</span>
+        <ul>${p.lleva.map(t => `<li>${ico("check", "")}${t}</li>`).join("")}</ul>
+        <span class="paq-cta">${S.paquete === k ? "Elegido" : "Elegir " + p.n}</span></button>`).join("")}</div></div>
     <div class="bloque"><h2>O elige sistema por sistema</h2>
-      <div class="opciones">${SISTEMAS.map(s => `<button type="button" class="op" data-act="sis" data-v="${s.k}" aria-pressed="${!!S.sis[s.k]}">${ico(s.i)}<b>${s.n}</b><span>${s.fijo ? "Siempre incluida" : s.s}</span></button>`).join("")}</div></div>`,
+      <div class="opciones">${SISTEMAS.map(s => `<button type="button" class="op sis" style="--c:${s.c}" data-act="sis" data-v="${s.k}" aria-pressed="${!!S.sis[s.k]}"><span class="sis-ico">${ico(s.i, "")}</span><b>${s.n}</b><span>${s.fijo ? "Siempre incluida" : s.s}</span></button>`).join("")}</div></div>`,
 
   cortinas: () => `
     <div class="paso-meta">Cortinas</div>
