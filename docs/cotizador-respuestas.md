@@ -195,3 +195,11 @@ Posibles errores en la lista, por confirmar:
 | Cámaras | **15%** |
 
 - **La obra civil NO está incluida** en la instalación. Muchas veces la hace el cliente, y cuando la hace Click Control depende del tipo de obra y se mira aparte. La oferta debe decir claramente que el valor es **instalación + configuración de equipos, sin obra civil**.
+
+**19c. Resto de capítulos:**
+- **Cerraduras: valor fijo por instalación, según el tipo de puerta:**
+  - Puerta de madera: **$120.000**
+  - Puerta metálica: **$180.000**
+  - Puerta blindada: **$280.000**
+- Propuestos y no objetados: Sonido 20%, Sensores y control IR 15%, Pantallas premium 15%, Red WiFi 15%. Los hubs van incluidos en el 15% de iluminación.
+- (Pendiente: si la instalación lleva IVA y si los valores de cerradura ya lo incluyen.)
