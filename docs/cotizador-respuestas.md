@@ -86,3 +86,8 @@ Además, la persona puede **agregar espacios propios** con el nombre que quiera,
   3. **Pantalla con sonido cableada a parlantes:** igual, pero va cableada a los parlantes.
   4. **Pantalla con 2 circuitos de iluminación.**
 - Si el cliente pone sonido en un espacio, se sugiere una pantalla con sonido (Bluetooth o cableada).
+
+**9c. Pantallas = complemento premium, nunca reemplazo:**
+- **Los interruptores siempre van, tal como los sugiere la regla.** No se quitan aunque la pantalla tenga contactos físicos (por ejemplo, la de 2 circuitos).
+- Las pantallas se ofrecen como un paso o tarjeta aparte: **«Convierte tu casa en premium: agrega una pantalla a tu habitación»**. Se muestran las opciones con lo que hace cada una («maneja 2 circuitos de iluminación», «maneja sonido», «Alexa integrada»…).
+- El cliente decide en qué espacios **agrega** pantalla, **además** de los interruptores. Así no se enreda la oferta.
