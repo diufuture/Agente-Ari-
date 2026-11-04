@@ -181,3 +181,7 @@ Posibles errores en la lista, por confirmar:
 **18b. IVA:** los precios de la lista están **antes de IVA**. El cotizador **suma el 19% a cada precio** antes de mostrarlo. Ejemplo: ST1, $262.400 en la lista → **$312.256** en la web.
 
 **Política de gancho en la oferta (nuevo):** la oferta que recibe el cliente lleva políticas de descuento para incentivar el cierre. Ejemplo: **«Si tomas la oferta dentro de los primeros 10 días, obtienes un 5% de descuento.»** Debe ser **configurable** desde Ari (porcentaje, días, texto) y verse en el PDF y en el mensaje, con la fecha límite calculada.
+
+**19. Instalación y configuración:**
+- Se cobra como **un porcentaje de lo cotizado** en equipos.
+- Se presenta como **un valor prácticamente final** de instalación y configuración, con una aclaración: **trabajos adicionales** (romper, pasar cables que no existan, casos muy específicos) **se evalúan en sitio**.
