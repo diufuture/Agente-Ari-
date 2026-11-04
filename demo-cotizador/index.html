@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head>
+<body>
+<title>Cotizador Click Control</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: asistente de un paso por pantalla; en escritorio, resumen fijo a la derecha.
+   Paleta PROVISIONAL: se reemplaza por la de clickcontrol.co cuando llegue el logo. */
+:root {
+  --bg: #f3f6f8;
+  --panel: #ffffff;
+  --panel-2: #eaf0f3;
+  --line: #d9e2e7;
+  --fg: #0f2230;
+  --fg-2: #4d6070;
+  --fg-3: #7d8e9a;
+  --accent: #0b6c93;
+  --accent-2: #08546f;
+  --accent-soft: #e1f0f6;
+  --spark: #f2a52b;
+  --ok: #1f8a5b;
+  --warn-bg: #fff4de;
+  --warn-fg: #7a4b00;
+  --wall: #e9e3da;
+  --wall-2: #ddd5ca;
+  --font-display: "Outfit", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c171e; --panel: #13222b; --panel-2: #1a2c37; --line: #26404e;
+    --fg: #e8f1f5; --fg-2: #a9bcc7; --fg-3: #7790a0;
+    --accent: #4cb8e0; --accent-2: #7ccdeb; --accent-soft: #143545;
+    --spark: #f5b54a; --ok: #4cc58c; --warn-bg: #3a2c10; --warn-fg: #f7d48f;
+    --wall: #3a352f; --wall-2: #322d28;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c171e; --panel: #13222b; --panel-2: #1a2c37; --line: #26404e;
+  --fg: #e8f1f5; --fg-2: #a9bcc7; --fg-3: #7790a0;
+  --accent: #4cb8e0; --accent-2: #7ccdeb; --accent-soft: #143545;
+  --spark: #f5b54a; --ok: #4cc58c; --warn-bg: #3a2c10; --warn-fg: #f7d48f;
+  --wall: #3a352f; --wall-2: #322d28;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--panel); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* Cabecera */
+.cab { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--panel); border-bottom: 1px solid var(--line); }
+.cab-in { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 16px; padding-block: 12px; }
+.marca { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: .01em; }
+.marca-logo { width: 32px; height: 32px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; color: #fff; }
+.marca small { display: block; font-family: var(--font-body); font-weight: 500; font-size: 12px; color: var(--fg-3); letter-spacing: .04em; text-transform: uppercase; }
+.demo-tag { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--warn-fg); background: var(--warn-bg); padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+.progreso { height: 4px; background: var(--panel-2); }
+.progreso > i { display: block; height: 100%; background: var(--accent); transition: width .3s ease; }
+
+/* Estructura */
+.layout { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; padding-block: 24px 140px; }
+@media (min-width: 980px) { .layout { grid-template-columns: minmax(0, 1fr) 340px; padding-bottom: 48px; } }
+
+.paso-meta { font-size: 13px; font-weight: 600; color: var(--accent); letter-spacing: .06em; text-transform: uppercase; }
+.paso h1 { font-size: clamp(26px, 5vw, 34px); margin-top: 6px; }
+.paso .lead { color: var(--fg-2); margin: 8px 0 0; max-width: 60ch; }
+.bloque { margin-top: 24px; display: grid; gap: 14px; }
+.bloque > h2 { font-size: 19px; }
+.bloque > .sub { color: var(--fg-2); font-size: 14.5px; margin: -8px 0 0; }
+
+/* Campos */
+.campos { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.campo { display: grid; gap: 6px; }
+.campo label { font-weight: 600; font-size: 14.5px; }
+.campo label em { font-style: normal; font-weight: 500; color: var(--fg-3); }
+.campo input, .campo select { width: 100%; padding: 14px 14px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--panel); font-size: 16px; }
+.campo input:focus, .campo select:focus { border-color: var(--accent); outline: none; }
+.check { display: flex; gap: 12px; align-items: flex-start; font-size: 14.5px; color: var(--fg-2); }
+.check input { width: 22px; height: 22px; margin-top: 1px; accent-color: var(--accent); flex: none; }
+.check a { color: var(--accent); }
+
+/* Opciones grandes tocables */
+.opciones { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.opciones.anchas { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.op { position: relative; display: grid; gap: 8px; align-content: start; text-align: left; padding: 16px; border-radius: var(--r); border: 1.5px solid var(--line); background: var(--panel); min-height: 64px; transition: border-color .15s, background .15s, transform .1s; }
+.op:hover { border-color: var(--accent); }
+.op:active { transform: scale(.98); }
+.op[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.op[aria-pressed="true"]::after { content: ""; position: absolute; top: 12px; right: 12px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5 9-10'/%3E%3C/svg%3E") center/14px no-repeat; }
+.op .ico { width: 34px; height: 34px; color: var(--accent); }
+.op b { font-size: 16px; font-weight: 700; }
+.op span { font-size: 13.5px; color: var(--fg-2); }
+.op .precio { font-weight: 700; color: var(--fg); font-size: 15px; font-variant-numeric: tabular-nums; }
+.op[disabled] { opacity: .5; cursor: not-allowed; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 10px 14px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--panel); font-weight: 600; font-size: 14.5px; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: #fff; }
+
+/* Pisos y contadores */
+.piso { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); overflow: hidden; }
+.piso-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; background: var(--panel-2); }
+.piso-cab h3 { font-size: 17px; }
+.piso-cab span { font-size: 13px; color: var(--fg-2); }
+.cont-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.cont { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line); }
+.cont .ico { width: 28px; height: 28px; color: var(--accent); flex: none; }
+.cont .nom { flex: 1; min-width: 0; font-weight: 600; font-size: 15px; }
+.cont .nom small { display: block; font-weight: 500; color: var(--fg-3); font-size: 12.5px; }
+.stepper { display: flex; align-items: center; gap: 4px; flex: none; }
+.stepper button { width: 38px; height: 38px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--panel); font-size: 20px; line-height: 1; display: grid; place-items: center; }
+.stepper button:hover { border-color: var(--accent); color: var(--accent); }
+.stepper output { min-width: 28px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cont.activo .nom { color: var(--fg); }
+.cont:not(.activo) .nom { color: var(--fg-2); }
+.agregar { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px dashed var(--line); flex-wrap: wrap; }
+.agregar input { flex: 1 1 180px; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--panel); }
+.btn-sec { padding: 10px 14px; border-radius: 10px; border: 1.5px solid var(--accent); color: var(--accent); background: transparent; font-weight: 700; }
+.btn-sec:hover { background: var(--accent-soft); }
+
+/* Avisos */
+.aviso { display: flex; gap: 12px; padding: 14px 16px; border-radius: 12px; background: var(--warn-bg); color: var(--warn-fg); font-size: 14.5px; }
+.aviso svg { flex: none; width: 22px; height: 22px; }
+.info { display: flex; gap: 12px; padding: 14px 16px; border-radius: 12px; background: var(--accent-soft); color: var(--fg); font-size: 14.5px; }
+.info svg { flex: none; width: 22px; height: 22px; color: var(--accent); }
+
+/* Líneas de interruptor */
+.lineas { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.linea { text-align: left; border-radius: var(--r); border: 1.5px solid var(--line); background: var(--panel); padding: 0; overflow: hidden; display: grid; position: relative; }
+.linea[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.linea[aria-pressed="true"]::after { content: "Elegida"; position: absolute; top: 10px; right: 10px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+.pared { aspect-ratio: 4 / 3; max-width: 100%; display: grid; place-items: center; background:
+  radial-gradient(circle at 30% 20%, rgba(255,255,255,.18), transparent 60%),
+  repeating-linear-gradient(90deg, var(--wall) 0 3px, var(--wall-2) 3px 4px); }
+.linea-txt { padding: 14px 16px 16px; display: grid; gap: 4px; }
+.linea-txt b { font-size: 16.5px; }
+.linea-txt span { font-size: 13.5px; color: var(--fg-2); }
+.linea-txt .desde { font-size: 14px; color: var(--fg); font-weight: 600; }
+.tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: var(--panel-2); color: var(--fg-2); }
+
+/* Placa del interruptor dibujada */
+.placa { position: relative; display: grid; gap: 7%; padding: 11%; border-radius: 9%; box-shadow: 0 8px 18px rgba(0,0,0,.18), 0 1px 0 rgba(255,255,255,.3) inset; }
+.placa.us { width: 34%; aspect-ratio: 0.6; }
+.placa.eu { width: 46%; aspect-ratio: 1; }
+.placa.mini.us { width: 34px; }
+.placa.mini.eu { width: 46px; }
+.placa.gris { background: linear-gradient(160deg, #6b7278, #4c5257); }
+.placa.vgris { background: linear-gradient(150deg, #3b4248 0%, #22272b 55%, #343a3f 100%); }
+.placa.vblanco { background: linear-gradient(150deg, #ffffff 0%, #eef0f1 55%, #f8f9f9 100%); }
+.placa.vgris::before, .placa.vblanco::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(120deg, rgba(255,255,255,.28), transparent 40%); pointer-events: none; }
+.placa .tecla { border-radius: 10%; position: relative; }
+.placa.gris .tecla { background: #5d6469; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+.placa.vgris .tecla { box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+.placa.vblanco .tecla { box-shadow: inset 0 0 0 1px rgba(0,0,0,.07); }
+.placa .tecla::after { content: ""; position: absolute; left: 50%; top: 50%; width: 9%; aspect-ratio: 1; min-width: 3px; transform: translate(-50%, -50%); border-radius: 50%; background: #7fd3ff; box-shadow: 0 0 6px #7fd3ff; }
+.placa .tecla.escena::after { background: #ffc46b; box-shadow: 0 0 6px #ffc46b; }
+
+/* Configuración por espacio */
+.esp-lista { display: grid; gap: 12px; }
+.esp { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
+.esp-cab { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.esp-cab .ico { width: 26px; height: 26px; color: var(--accent); flex: none; }
+.esp-cab h3 { font-size: 16.5px; flex: 1; min-width: 0; }
+.esp-cab .piso-n { font-size: 12.5px; color: var(--fg-3); font-weight: 600; }
+.esp-cab .tag-cort { font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 6px; }
+.sw-fila { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.sw-fila .placa-cel { width: 52px; display: grid; place-items: center; flex: none; }
+.sw-fila select { padding: 9px 10px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--panel); font-weight: 600; flex: 1 1 170px; min-width: 0; }
+.sw-fila .valor { font-weight: 700; font-variant-numeric: tabular-nums; min-width: 92px; text-align: right; margin-left: auto; }
+.sw-fila .quitar { border: none; background: none; color: var(--fg-3); font-size: 13px; text-decoration: underline; padding: 4px; }
+.esp-pie { padding: 10px 16px 14px; border-top: 1px solid var(--line); }
+.link-btn { border: none; background: none; color: var(--accent); font-weight: 700; padding: 4px 0; }
+
+.fila-op { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.fila-op .ico { width: 24px; height: 24px; color: var(--accent); flex: none; }
+.fila-op .nom { flex: 1 1 160px; min-width: 0; font-weight: 600; font-size: 15px; }
+.fila-op .nom small { display: block; color: var(--fg-3); font-weight: 500; font-size: 12.5px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { padding: 8px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--panel); font-weight: 600; font-size: 14px; }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.ejemplo { font-size: 12px; font-weight: 700; color: var(--warn-fg); background: var(--warn-bg); padding: 2px 8px; border-radius: 6px; }
+
+/* Resumen lateral */
+.resumen { align-self: start; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 84px); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: none; gap: 12px; }
+@media (min-width: 980px) { .resumen { display: grid; } }
+.resumen h2 { font-size: 18px; }
+.res-hola { color: var(--fg-2); font-size: 14px; margin: -6px 0 0; }
+.res-cap { display: flex; justify-content: space-between; gap: 10px; font-size: 14.5px; padding: 8px 0; border-top: 1px solid var(--line); }
+.res-cap span:last-child { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.res-total { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding-top: 12px; border-top: 2px solid var(--fg); }
+.res-total b { font-family: var(--font-display); font-size: 24px; font-variant-numeric: tabular-nums; }
+.res-nota { font-size: 12.5px; color: var(--fg-3); margin: 0; }
+.vacio { color: var(--fg-3); font-size: 14px; }
+
+/* Barra inferior */
+.barra { position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; background: var(--panel); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.barra-in { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; gap: 12px; padding-block: 12px; }
+.barra-total { flex: 1; min-width: 0; display: grid; }
+.barra-total small { font-size: 12px; color: var(--fg-3); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.barra-total b { font-family: var(--font-display); font-size: 20px; font-variant-numeric: tabular-nums; }
+.btn-atras { padding: 14px 16px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--panel); font-weight: 700; }
+.btn-sig { padding: 14px 22px; border-radius: 12px; border: none; background: var(--accent); color: #fff; font-weight: 700; font-size: 16px; white-space: nowrap; }
+.btn-sig:hover { background: var(--accent-2); }
+.btn-sig:disabled { opacity: .45; cursor: not-allowed; }
+@media (min-width: 980px) { .barra-total { visibility: hidden; } }
+
+/* Resumen final */
+.cap-final { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
+.cap-final-cab { display: flex; align-items: center; gap: 10px; padding: 14px 16px; }
+.cap-final-cab .ico { width: 24px; height: 24px; color: var(--accent); }
+.cap-final-cab h3 { font-size: 17px; flex: 1; }
+.cap-final-cab b { font-variant-numeric: tabular-nums; }
+.renglon { display: flex; justify-content: space-between; gap: 12px; padding: 8px 16px; border-top: 1px solid var(--line); font-size: 14.5px; }
+.renglon span:first-child { color: var(--fg-2); min-width: 0; }
+.renglon span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+.renglon.inst span:first-child { color: var(--fg); font-weight: 600; }
+.total-final { display: grid; gap: 10px; padding: 20px; border-radius: var(--r); background: var(--fg); color: var(--bg); }
+.total-final .t { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.total-final .t b { font-family: var(--font-display); font-size: clamp(28px, 6vw, 36px); font-variant-numeric: tabular-nums; }
+.total-final p { margin: 0; font-size: 13.5px; opacity: .8; }
+.gancho { display: flex; gap: 12px; align-items: center; padding: 16px; border-radius: var(--r); border: 2px dashed var(--spark); background: var(--panel); }
+.gancho .ico { width: 30px; height: 30px; color: var(--spark); flex: none; }
+.gancho b { display: block; }
+.gancho span { font-size: 14px; color: var(--fg-2); }
+
+/* Agendador */
+.dias { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; }
+.dia { flex: none; width: 74px; padding: 10px 6px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--panel); display: grid; justify-items: center; gap: 2px; }
+.dia small { font-size: 12px; color: var(--fg-3); font-weight: 600; text-transform: uppercase; }
+.dia b { font-family: var(--font-display); font-size: 22px; }
+.dia[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.dia[aria-pressed="true"] small { color: #fff; }
+
+.acciones { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.accion { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 15px; border-radius: 12px; font-weight: 700; border: 1.5px solid var(--line); background: var(--panel); text-decoration: none; color: var(--fg); }
+.accion.wa { background: #1f9d55; border-color: #1f9d55; color: #fff; }
+.accion svg { width: 20px; height: 20px; }
+
+.toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 12px 18px; border-radius: 12px; font-weight: 600; font-size: 14.5px; z-index: 40; max-width: calc(100% - 32px); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="cab">
+  <div class="cab-in wrap">
+    <div class="marca">
+      <div class="marca-logo" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-5h4v5"/></svg></div>
+      <div>Click Control<small>Cotizador de domótica</small></div>
+    </div>
+    <span class="demo-tag">Demo · datos de ejemplo</span>
+  </div>
+  <div class="progreso"><i id="barraProg" style="width:0%"></i></div>
+</header>
+
+<div class="layout wrap">
+  <main id="paso" class="paso" aria-live="polite"></main>
+  <aside class="resumen" id="resumen" aria-label="Resumen de tu cotización"></aside>
+</div>
+
+<nav class="barra" aria-label="Navegación">
+  <div class="barra-in wrap">
+    <button class="btn-atras" id="atras" type="button">Atrás</button>
+    <div class="barra-total"><small>Tu cotización</small><b id="barraTotal">$0</b></div>
+    <button class="btn-sig" id="siguiente" type="button">Siguiente</button>
+  </div>
+</nav>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function () {
+"use strict";
+
+/* ---------- Datos (de la lista de precios agosto 2026; precios antes de IVA) ---------- */
+const IVA = 0.19;
+const WA = "573215073310";
+
+const ESPACIOS = [
+  { k: "habppal", n: "Habitación principal", i: "bed", sw: [[2,1],[1,2]] },
+  { k: "hab", n: "Habitación", i: "bed", sw: [[2,1]] },
+  { k: "bano", n: "Baño", i: "bath", sw: [[2,1]] },
+  { k: "sala", n: "Sala", i: "sofa", sw: [[3,1]] },
+  { k: "salatv", n: "Sala TV", i: "tv", sw: [[2,1]] },
+  { k: "comedor", n: "Comedor", i: "dining", sw: [[1,1]] },
+  { k: "cocina", n: "Cocina", i: "kitchen", sw: [[3,1]] },
+  { k: "estudio", n: "Estudio u oficina", i: "desk", sw: [[2,1]] },
+  { k: "pasillo", n: "Pasillo o escalera", i: "stairs", sw: [[1,2]] },
+  { k: "terraza", n: "Terraza o balcón", i: "terrace", sw: [[1,1]] },
+  { k: "garaje", n: "Garaje", i: "car", sw: [[1,1]] },
+  { k: "ropas", n: "Zona de ropas", i: "laundry", sw: [[1,1]] },
+  { k: "exterior", n: "Exterior o jardín", i: "tree", sw: [[2,1]] }
+];
+const ESP = Object.fromEntries(ESPACIOS.map(e => [e.k, e]));
+
+const LINEAS = {
+  us_gris: { n: "Línea Americana", acabado: "Policarbonato gris", caja: "us", color: "gris",
+    refs: { 1: ["ST1", 262400], 2: ["ST2", 284800], 3: ["ST3", 310400], 4: ["ST4", 336800] },
+    txt: "Caja rectangular, la que ya tiene tu casa. Se cambia sin obra." },
+  eu_gris: { n: "Línea Cuadrada", acabado: "Policarbonato gris", caja: "eu", color: "gris",
+    refs: { 1: ["Z1", 233600], 2: ["Z2", 248000], 3: ["Z3", 262400], 4: ["Z4", 284000] },
+    txt: "Caja cuadrada 8×8, estilo europeo." },
+  eu_vgris: { n: "Cristal Grafito", acabado: "Vidrio gris", caja: "eu", color: "vgris",
+    refs: { 1: ["HS1", 262400], 2: ["HS2", 284800], 3: ["HS3", 310400], 4: ["HS4", 336800] },
+    txt: "Frente de vidrio templado, caja cuadrada 8×8." },
+  eu_vblanco: { n: "Cristal Blanco", acabado: "Vidrio blanco", caja: "eu", color: "vblanco",
+    refs: { 1: ["HSW1", 262400], 2: ["HSW2", 284800], 3: ["HSW3", 310400], 4: ["HSW4", 336800] },
+    txt: "Frente de vidrio blanco, caja cuadrada 8×8." }
+};
+const HUB1 = ["Hub cableado GW015", 261880];
+const HUBX = ["Hub inalámbrico GW018", 198240];
+
+const CERR = {
+  basica: { n: "Básica", ref: "CLICK 15", p: 554400, txt: "Huella, tarjeta, clave y app." },
+  medium: { n: "Medium", ref: "", p: 0, txt: "Próximamente", off: true },
+  premium: { n: "Premium", ref: "CLICK S1", p: 1880960, txt: "Huella, tarjeta, clave y app. Diseño de gama alta." }
+};
+const PUERTA = { madera: ["Madera", 120000], metalica: ["Metálica", 180000], blindada: ["Blindada", 280000] };
+
+const OPC = {
+  camara: { n: "Cámara de seguridad", ref: "WCP01", p: 244680, i: "camera", s: "2MP, giro 360°, visión nocturna" },
+  puerta: { n: "Sensor de puerta o ventana", ref: "DS4", p: 96760, i: "shield", s: "Te avisa cuando se abre" },
+  agua: { n: "Sensor de fuga de agua", ref: "WL08", p: 117400, i: "drop", s: "Ideal en baños, cocina y ropas" },
+  humedad: { n: "Sensor de humedad", ref: "HS03", p: 131160, i: "drop", s: "Monitorea la humedad del ambiente" },
+  ir: { n: "Control de aire y TV", ref: "IRRF", p: 165560, i: "remote", s: "Maneja aire, TV y ventiladores desde el celular" }
+};
+const PANT = {
+  d1: { n: 'Pantalla 4" con Alexa', ref: "D1", p: 1112000, s: "Control por voz y de toda la casa" },
+  d4: { n: 'Pantalla 4" con bocinas', ref: "D4", p: 1439200, s: "Música en el espacio y hub integrado" },
+  d3: { n: 'Pantalla 8" con amplificador', ref: "D3", p: 3384000, s: "Centro de música e interfono" },
+  d2: { n: 'Pantalla 10" todo en uno', ref: "D2", p: 3912000, s: "Hub, música y videoportero" }
+};
+/* Sonido y cine: productos nuevos pendientes. Precios de EJEMPLO para el demo. */
+const SON = {
+  basico: { n: "Básico", p: 1200000, s: "2 parlantes Bluetooth" },
+  medio: { n: "Medio", p: 2400000, s: "2 parlantes WiFi multiroom" },
+  pro: { n: "Profesional", p: 4500000, s: "2 parlantes de alta fidelidad + amplificador" }
+};
+const CINE = {
+  basico: { n: "Básico", p: 6500000, s: "Proyector Full HD, telón 100\" y barra de sonido" },
+  medio: { n: "Medio", p: 12000000, s: "Proyector 4K, telón 120\" y sonido 5.1" },
+  avanzado: { n: "Avanzado", p: 22000000, s: "Proyector 4K láser, telón acústico y sonido 7.1 Dolby Atmos" }
+};
+const PCT = { ilum: .15, sonido: .20, cine: .20, opc: .15, pant: .15, voz: .15 };
+const VISITA = { "Bogotá": 80000, "Chía": 120000, "Cajicá": 120000 };
+
+const SISTEMAS = [
+  { k: "ilum", n: "Iluminación", i: "bulb", s: "Interruptores inteligentes", fijo: true },
+  { k: "cortinas", n: "Cortinas", i: "curtain", s: "Te asesoramos aparte" },
+  { k: "sonido", n: "Sonido", i: "speaker", s: "Música en tus espacios" },
+  { k: "cine", n: "Cine en casa", i: "film", s: "Proyector y sonido envolvente" },
+  { k: "cerraduras", n: "Cerraduras", i: "lock", s: "Abre con huella o app" },
+  { k: "opc", n: "Cámaras y sensores", i: "camera", s: "Seguridad y control de aire/TV" },
+  { k: "pant", n: "Pantallas premium", i: "screen", s: "Control total desde la pared" },
+  { k: "wifi", n: "Red WiFi", i: "wifi", s: "Señal en toda la casa" },
+  { k: "voz", n: "Control por voz", i: "mic", s: "Alexa y Google" }
+];
+
+const PAQUETES = {
+  esencial: { n: "Esencial", s: "Iluminación inteligente en toda la casa", sis: [] },
+  confort: { n: "Confort", s: "Iluminación + cerradura + sonido en la sala", sis: ["cerraduras", "sonido"] },
+  premium: { n: "Premium", s: "Todo lo anterior + cámaras, pantalla y control por voz", sis: ["cerraduras", "sonido", "opc", "pant", "voz", "wifi"] }
+};
+
+/* ---------- Íconos ---------- */
+const P = {
+  bed: "M3 18v-7h18v7M3 14h18M6 11V8h5v3M3 18v2M21 18v2",
+  bath: "M4 12h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4zM6 12V6a2 2 0 0 1 4 0M7 19l-1 2M17 19l1 2",
+  sofa: "M5 11V8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3M3 11h3v4h12v-4h3v6H3zM5 17v2M19 17v2",
+  tv: "M3 6h18v11H3zM8 21h8M12 17v4",
+  dining: "M4 10h16M6 10v9M18 10v9M9 4v4M12 4v4M15 4v4",
+  kitchen: "M5 3h14v18H5zM5 9h14M8 6h2M8 12v4",
+  desk: "M3 11h18M5 11v8M19 11v8M14 11v4h5M7 4h6v5H7z",
+  stairs: "M3 20h5v-4h4v-4h4V8h5",
+  terrace: "M12 4v3M4 11h16l-8-6zM12 11v10M8 21h8",
+  car: "M5 16h14M3 16v-4l2-5h14l2 5v4M6 16v2M18 16v2",
+  laundry: "M5 3h14v18H5zM5 7h14M12 11a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7",
+  tree: "M12 21v-5M6 16h12L12 4z",
+  room: "M4 20V9l8-5 8 5v11zM10 20v-6h4v6",
+  bulb: "M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z",
+  curtain: "M3 4h18M5 4v16c3-3 4-9 4-16M19 4v16c-3-3-4-9-4-16",
+  speaker: "M6 3h12v18H6zM12 12a3 3 0 1 0 0 6a3 3 0 1 0 0-6M12 7h.01",
+  film: "M3 5h18v14H3zM7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4",
+  lock: "M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4M12 15v2",
+  camera: "M4 8h4l2-3h4l2 3h4v11H4zM12 10a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7",
+  screen: "M5 4h14v16H5zM8 7h8v7H8zM10 17h4",
+  wifi: "M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01",
+  mic: "M9 3h6v10H9zM5 11a7 7 0 0 0 14 0M12 18v3",
+  hub: "M4 14h16v5H4zM8 14l-2-5M16 14l2-5M12 14V6M8 16.5h.01",
+  shield: "M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z",
+  drop: "M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z",
+  remote: "M8 3h8v18H8zM12 7h.01M10 11h4M10 14h4",
+  home: "M4 11l8-7 8 7v9H4zM10 20v-5h4v5",
+  bolt: "M13 3L5 14h6l-1 7 8-11h-6z",
+  gift: "M4 10h16v11H4zM3 7h18v3H3zM12 7v14M12 7c-2-4-6-3-5 0M12 7c2-4 6-3 5 0",
+  warn: "M12 4l9 16H3zM12 10v4M12 17h.01",
+  infoi: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 11v5M12 8h.01",
+  pin: "M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11zM12 8a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
+  cal: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
+  chat: "M4 5h16v11H9l-5 4z",
+  doc: "M6 3h9l4 4v14H6zM14 3v5h5",
+  mail: "M3 6h18v12H3zM3 7l9 6 9-6",
+  link: "M10 14l4-4M8 12l-2 2a3 3 0 0 0 4 4l2-2M16 12l2-2a3 3 0 0 0-4-4l-2 2"
+};
+const ico = (k, cls = "ico") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${P[k] || P.room}"/></svg>`;
+
+/* ---------- Estado ---------- */
+const nuevo = () => ({
+  i: 0,
+  cli: { nombre: "", wa: "", correo: "", barrio: "", origen: "", acepta: false },
+  casa: { tipo: "", ciudad: "", otra: "", pisos: 0, estado: "" },
+  cuenta: {},            // { "1": { hab: 2, ... } }
+  propios: [],           // [{ piso, nombre, id }]
+  sis: { ilum: true },
+  paquete: "",
+  linea: "",
+  sw: {},                // id -> [{c, n}]
+  cort: {},              // id -> true
+  son: {},               // id -> nivel
+  cine: { nivel: "", esp: "" },
+  puertas: [{ id: "p1", n: "Entrada principal", tipo: "", linea: "" }],
+  opc: {},               // id -> { camara: n, ... }
+  pant: {},              // id -> modelo
+  voz: { modo: "", esp: {} },
+  wifi: false,
+  visita: { dia: "", hora: "", pago: "" }
+});
+let S;
+try { S = JSON.parse(localStorage.getItem("cc-cotizador-demo")) || nuevo(); } catch (e) { S = nuevo(); }
+if (!S || typeof S !== "object" || !S.cli) S = nuevo();
+const guardar = () => { try { localStorage.setItem("cc-cotizador-demo", JSON.stringify(S)); } catch (e) {} };
+
+/* ---------- Utilidades ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const cop = n => "$" + Math.round(n).toLocaleString("es-CO");
+const conIva = n => n * (1 + IVA);
+const primerNombre = () => (S.cli.nombre.trim().split(/\s+/)[0] || "");
+const toast = msg => { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 3200); };
+
+function espacios() {
+  const out = [];
+  for (let p = 1; p <= S.casa.pisos; p++) {
+    const c = S.cuenta[p] || {};
+    for (const e of ESPACIOS) {
+      const n = c[e.k] || 0;
+      for (let j = 1; j <= n; j++) out.push({ id: `${p}-${e.k}-${j}`, piso: p, k: e.k, i: e.i, n: n > 1 ? `${e.n} ${j}` : e.n });
+    }
+    for (const x of S.propios.filter(x => x.piso === p)) out.push({ id: x.id, piso: p, k: "propio", i: "room", n: x.nombre });
+  }
+  return out;
+}
+const linea = () => LINEAS[S.linea] || LINEAS.us_gris;
+function swDe(e) {
+  if (!S.sw[e.id]) {
+    const base = (ESP[e.k] ? ESP[e.k].sw : [[2,1]]).map(([c, n]) => ({ c, n }));
+    if (S.cort[e.id]) base[0].c = 4;
+    S.sw[e.id] = base;
+  }
+  return S.sw[e.id];
+}
+function nombreCanal(c) {
+  const L = linea();
+  if (c === 4) return L.caja === "eu" ? "4 canales + 2 escenas (6 botones)" : "4 botones";
+  return c === 1 ? "1 canal" : `${c} canales`;
+}
+
+/* ---------- Cálculo ---------- */
+function calcular() {
+  const esp = espacios(), caps = [];
+  // Iluminación
+  if (S.linea) {
+    const L = linea(), items = [];
+    let eq = 0;
+    for (const e of esp) for (const s of swDe(e)) if (s.n > 0) { const [ref, p] = L.refs[s.c]; eq += p * s.n; items.push([`${e.n}: ${s.n} × ${nombreCanal(s.c)} (${ref})`, p * s.n]); }
+    if (S.casa.pisos >= 1) { eq += HUB1[1]; items.push([`${HUB1[0]} · piso 1`, HUB1[1]]); }
+    for (let p = 2; p <= S.casa.pisos; p++) { eq += HUBX[1]; items.push([`${HUBX[0]} · piso ${p}`, HUBX[1]]); }
+    caps.push({ k: "ilum", n: "Iluminación", i: "bulb", eq, inst: eq * PCT.ilum, items, nota: "Instalación y configuración: 15%" });
+  }
+  if (S.sis.sonido) {
+    let eq = 0; const items = [];
+    for (const e of esp) { const v = S.son[e.id]; if (v) { eq += SON[v].p; items.push([`${e.n}: sonido ${SON[v].n} (estéreo)`, SON[v].p]); } }
+    if (eq) caps.push({ k: "sonido", n: "Sonido", i: "speaker", eq, inst: eq * PCT.sonido, items, ejemplo: true });
+  }
+  if (S.sis.cine && S.cine.nivel) {
+    const c = CINE[S.cine.nivel], e = esp.find(x => x.id === S.cine.esp);
+    caps.push({ k: "cine", n: "Cine en casa", i: "film", eq: c.p, inst: c.p * PCT.cine, items: [[`Paquete ${c.n}${e ? " · " + e.n : ""}`, c.p]], ejemplo: true });
+  }
+  if (S.sis.cerraduras) {
+    let eq = 0, inst = 0; const items = [];
+    for (const d of S.puertas) if (d.linea && d.tipo) { const c = CERR[d.linea]; eq += c.p; inst += PUERTA[d.tipo][1]; items.push([`${d.n}: cerradura ${c.n} (${c.ref}) · puerta ${PUERTA[d.tipo][0].toLowerCase()}`, c.p]); }
+    if (eq) caps.push({ k: "cerraduras", n: "Cerraduras", i: "lock", eq, inst, items, nota: "Instalación según tipo de puerta" });
+  }
+  if (S.sis.opc) {
+    let eq = 0; const items = [];
+    for (const e of esp) { const o = S.opc[e.id] || {}; for (const k in o) if (o[k] > 0) { eq += OPC[k].p * o[k]; items.push([`${e.n}: ${o[k]} × ${OPC[k].n}`, OPC[k].p * o[k]]); } }
+    if (eq) caps.push({ k: "opc", n: "Cámaras y sensores", i: "camera", eq, inst: eq * PCT.opc, items });
+  }
+  if (S.sis.pant) {
+    let eq = 0; const items = [];
+    for (const e of esp) { const m = S.pant[e.id]; if (m) { eq += PANT[m].p; items.push([`${e.n}: ${PANT[m].n} (${PANT[m].ref})`, PANT[m].p]); } }
+    if (eq) caps.push({ k: "pant", n: "Pantallas premium", i: "screen", eq, inst: eq * PCT.pant, items });
+  }
+  if (S.sis.voz && S.voz.modo === "d1") {
+    let eq = 0; const items = [];
+    for (const e of esp) if (S.voz.esp[e.id]) { eq += PANT.d1.p; items.push([`${e.n}: ${PANT.d1.n}`, PANT.d1.p]); }
+    if (eq) caps.push({ k: "voz", n: "Control por voz", i: "mic", eq, inst: eq * PCT.voz, items });
+  }
+  const total = caps.reduce((a, c) => a + conIva(c.eq + c.inst), 0);
+  return { caps, total };
+}
+function visitaValor() { const c = S.casa.ciudad; return c in VISITA ? VISITA[c] : null; }
+function duracionVisita() { return (espacios().length > 6 || S.casa.pisos > 1) ? 2 : 1; }
+
+/* ---------- Pasos ---------- */
+function pasos() {
+  const l = ["datos", "casa", "espacios", "sistemas"];
+  if (S.sis.cortinas) l.push("cortinas");
+  l.push("ilum");
+  if (S.sis.sonido) l.push("sonido");
+  if (S.sis.cine) l.push("cine");
+  if (S.sis.cerraduras) l.push("cerraduras");
+  if (S.sis.opc) l.push("opc");
+  if (S.sis.pant) l.push("pant");
+  if (S.sis.wifi) l.push("wifi");
+  if (S.sis.voz) l.push("voz");
+  l.push("resumen", "visita", "listo");
+  return l;
+}
+const pasoActual = () => { const l = pasos(); if (S.i >= l.length) S.i = l.length - 1; return l[S.i]; };
+
+function valido(p) {
+  if (p === "datos") return S.cli.nombre.trim().length > 1 && S.cli.wa.replace(/\D/g, "").length >= 10 && S.cli.acepta;
+  if (p === "casa") return S.casa.tipo && (S.casa.ciudad && (S.casa.ciudad !== "Otra" || S.casa.otra.trim())) && S.casa.pisos > 0 && S.casa.estado;
+  if (p === "espacios") return espacios().length > 0;
+  if (p === "ilum") return !!S.linea;
+  if (p === "visita") return true;
+  return true;
+}
+
+const VISTAS = {
+  datos() {
+    return `
+      <div class="paso-meta">Empecemos</div>
+      <h1>¡Hola! Cuéntanos quién eres</h1>
+      <p class="lead">En unos minutos armas la cotización de domótica de tu casa, espacio por espacio. Te la enviamos por WhatsApp y correo.</p>
+      <div class="bloque">
+        <div class="campos">
+          <div class="campo"><label for="f-nombre">Tu nombre</label><input id="f-nombre" data-f="cli.nombre" autocomplete="name" value="${esc(S.cli.nombre)}" placeholder="Ej. Juan Pérez"></div>
+          <div class="campo"><label for="f-wa">Tu WhatsApp</label><input id="f-wa" data-f="cli.wa" inputmode="tel" autocomplete="tel" value="${esc(S.cli.wa)}" placeholder="Ej. 310 555 4433"></div>
+          <div class="campo"><label for="f-correo">Correo <em>(opcional)</em></label><input id="f-correo" data-f="cli.correo" type="email" autocomplete="email" value="${esc(S.cli.correo)}" placeholder="tucorreo@ejemplo.com"></div>
+          <div class="campo"><label for="f-barrio">Barrio o dirección <em>(opcional)</em></label><input id="f-barrio" data-f="cli.barrio" value="${esc(S.cli.barrio)}" placeholder="Ej. Cedritos"></div>
+          <div class="campo"><label for="f-origen">¿Cómo nos conociste? <em>(opcional)</em></label>
+            <select id="f-origen" data-f="cli.origen">${["", "Instagram", "Facebook", "Google", "Un amigo o familiar", "Constructora", "Otro"].map(o => `<option ${S.cli.origen === o ? "selected" : ""} value="${o}">${o || "Elige una opción"}</option>`).join("")}</select></div>
+        </div>
+        <label class="check"><input type="checkbox" id="f-acepta" data-f="cli.acepta" ${S.cli.acepta ? "checked" : ""}>
+          <span>Acepto la <a href="#" data-act="politica">política de tratamiento de datos</a> de Click Control y autorizo que me contacten por WhatsApp y correo.</span></label>
+      </div>`;
+  },
+  casa() {
+    const tipos = [["Apartamento", "home"], ["Casa", "home"], ["Finca", "tree"], ["Oficina", "desk"]];
+    const ciudades = ["Bogotá", "Chía", "Cajicá", "Otra"];
+    return `
+      <div class="paso-meta">Tu vivienda</div>
+      <h1>${primerNombre() ? esc(primerNombre()) + ", ¿qué" : "¿Qué"} tipo de vivienda tienes?</h1>
+      <div class="bloque">
+        <div class="opciones">${tipos.map(([t, i]) => `<button type="button" class="op" data-act="set" data-k="casa.tipo" data-v="${t}" aria-pressed="${S.casa.tipo === t}">${ico(i)}<b>${t}</b></button>`).join("")}</div>
+      </div>
+      <div class="bloque"><h2>¿En qué ciudad está?</h2>
+        <div class="chips">${ciudades.map(c => `<button type="button" class="chip" data-act="set" data-k="casa.ciudad" data-v="${c}" aria-pressed="${S.casa.ciudad === c}">${c}</button>`).join("")}</div>
+        ${S.casa.ciudad === "Otra" ? `<div class="campo"><label for="f-otra">¿Cuál ciudad?</label><input id="f-otra" data-f="casa.otra" value="${esc(S.casa.otra)}" placeholder="Ej. Medellín"></div>` : ""}
+      </div>
+      <div class="bloque"><h2>¿Cuántos pisos o niveles tiene?</h2>
+        <div class="chips">${[1, 2, 3, 4].map(n => `<button type="button" class="chip" data-act="pisos" data-v="${n}" aria-pressed="${S.casa.pisos === n}">${n === 4 ? "4 o más" : n}</button>`).join("")}</div>
+      </div>
+      <div class="bloque"><h2>¿En qué estado está?</h2>
+        <div class="opciones anchas">
+          <button type="button" class="op" data-act="set" data-k="casa.estado" data-v="obra" aria-pressed="${S.casa.estado === "obra"}"><b>En obra o remodelación</b><span>Podemos cambiar cajas y pasar cableado.</span></button>
+          <button type="button" class="op" data-act="set" data-k="casa.estado" data-v="construida" aria-pressed="${S.casa.estado === "construida"}"><b>Ya construida y habitada</b><span>Usamos lo que ya tiene tu casa.</span></button>
+        </div>
+      </div>`;
+  },
+  espacios() {
+    let h = `
+      <div class="paso-meta">Tus espacios</div>
+      <h1>¿Qué espacios tiene cada piso?</h1>
+      <p class="lead">Suma los espacios que quieres automatizar. Si el tuyo no está en la lista, agrégalo al final de cada piso.</p>
+      <div class="bloque">`;
+    for (let p = 1; p <= S.casa.pisos; p++) {
+      const c = S.cuenta[p] || {}, n = Object.values(c).reduce((a, b) => a + b, 0) + S.propios.filter(x => x.piso === p).length;
+      h += `<section class="piso"><div class="piso-cab"><h3>Piso ${p}</h3><span>${n} ${n === 1 ? "espacio" : "espacios"}</span></div><div class="cont-lista">`;
+      for (const e of ESPACIOS) {
+        const v = c[e.k] || 0;
+        h += `<div class="cont ${v ? "activo" : ""}">${ico(e.i)}<div class="nom">${e.n}</div>
+          <div class="stepper"><button type="button" aria-label="Quitar ${e.n}" data-act="cnt" data-p="${p}" data-k="${e.k}" data-d="-1">−</button><output aria-live="polite">${v}</output><button type="button" aria-label="Agregar ${e.n}" data-act="cnt" data-p="${p}" data-k="${e.k}" data-d="1">+</button></div></div>`;
+      }
+      for (const x of S.propios.filter(x => x.piso === p)) {
+        h += `<div class="cont activo">${ico("room")}<div class="nom">${esc(x.nombre)}<small>Espacio propio</small></div><button type="button" class="link-btn" data-act="quitarPropio" data-id="${x.id}">Quitar</button></div>`;
+      }
+      h += `</div><div class="agregar"><input id="nuevo-${p}" placeholder="Otro espacio, ej. Gimnasio" aria-label="Nombre del espacio para el piso ${p}"><button type="button" class="btn-sec" data-act="agregarPropio" data-p="${p}">+ Agregar</button></div></section>`;
+    }
+    return h + `</div>`;
+  },
+  sistemas() {
+    return `
+      <div class="paso-meta">Lo que quieres</div>
+      <h1>¿Qué quieres automatizar?</h1>
+      <p class="lead">Elige un paquete para ir rápido, o marca tú mismo los sistemas. Todo lo puedes ajustar después.</p>
+      <div class="bloque"><h2>Paquetes rápidos</h2>
+        <div class="opciones anchas">${Object.entries(PAQUETES).map(([k, p]) => `<button type="button" class="op" data-act="paquete" data-v="${k}" aria-pressed="${S.paquete === k}">${ico("bolt")}<b>${p.n}</b><span>${p.s}</span></button>`).join("")}</div>
+      </div>
+      <div class="bloque"><h2>O elige sistema por sistema</h2>
+        <div class="opciones">${SISTEMAS.map(s => `<button type="button" class="op" data-act="sis" data-v="${s.k}" aria-pressed="${!!S.sis[s.k]}" ${s.fijo ? 'aria-disabled="true"' : ""}>${ico(s.i)}<b>${s.n}</b><span>${s.fijo ? "Siempre incluida" : s.s}</span></button>`).join("")}</div>
+      </div>`;
+  },
+  cortinas() {
+    const esp = espacios();
+    return `
+      <div class="paso-meta">Cortinas</div>
+      <h1>¿En qué espacios quieres cortinas automáticas?</h1>
+      <p class="lead">Las cortinas necesitan medidas y tela, así que <b>un asesor te llamará</b> para armar esa parte. Aquí solo nos dices dónde las quieres, para dejar el interruptor listo.</p>
+      <div class="bloque">
+        <div class="info">${ico("infoi")}<span>En los espacios con cortina te sugerimos un interruptor con más botones: maneja las luces y abre o cierra la cortina desde la pared.</span></div>
+        <div class="chips">${esp.map(e => `<button type="button" class="chip" data-act="cort" data-id="${e.id}" aria-pressed="${!!S.cort[e.id]}">${esc(e.n)}${S.casa.pisos > 1 ? ` · P${e.piso}` : ""}</button>`).join("")}</div>
+      </div>`;
+  },
+  ilum() {
+    const esp = espacios();
+    let h = `
+      <div class="paso-meta">Iluminación</div>
+      <h1>Elige cómo se ven tus interruptores</h1>
+      <p class="lead">Así se verían en tu pared. Todos se manejan desde el celular, por voz o con el dedo.</p>
+      <div class="bloque"><div class="lineas">${Object.entries(LINEAS).map(([k, L]) => `
+        <button type="button" class="linea" data-act="linea" data-v="${k}" aria-pressed="${S.linea === k}">
+          <div class="pared">${placa(k, 2)}</div>
+          <div class="linea-txt"><b>${L.n}</b><span>${L.acabado} · ${L.txt}</span>
+          <div><span class="tag">${L.caja === "us" ? "Caja rectangular" : "Caja cuadrada 8×8"}</span></div>
+          <span class="desde">Desde ${cop(conIva(L.refs[1][1]))}</span></div>
+        </button>`).join("")}</div>`;
+    if (S.linea && linea().caja === "eu" && S.casa.estado === "construida")
+      h += `<div class="aviso">${ico("warn")}<span><b>Este modelo usa caja cuadrada (8×8).</b> Como tu casa ya está construida, necesitas obra civil para cambiar las cajas y el cableado. La obra civil no está incluida en esta cotización.</span></div>`;
+    if (S.linea && linea().caja === "eu" && S.casa.estado === "obra")
+      h += `<div class="info">${ico("infoi")}<span>Buena elección para una casa en obra: deja instaladas cajas cuadradas de 8×8 en cada punto.</span></div>`;
+    h += `</div>`;
+    if (!S.linea) return h;
+    h += `<div class="bloque"><h2>Tus interruptores, espacio por espacio</h2><p class="sub">Te sugerimos lo más común. Si en algún espacio tienes más luces, súbele los canales o agrega otro interruptor.</p><div class="esp-lista">`;
+    for (const e of esp) {
+      const sws = swDe(e);
+      h += `<section class="esp"><div class="esp-cab">${ico(e.i)}<h3>${esc(e.n)}</h3>${S.cort[e.id] ? `<span class="tag-cort">Con cortina</span>` : ""}${S.casa.pisos > 1 ? `<span class="piso-n">Piso ${e.piso}</span>` : ""}</div>`;
+      sws.forEach((s, j) => {
+        const [ref, p] = linea().refs[s.c];
+        h += `<div class="sw-fila"><div class="placa-cel">${placa(S.linea, s.c, true)}</div>
+          <select aria-label="Tipo de interruptor" data-act="swc" data-id="${e.id}" data-j="${j}">${[1, 2, 3, 4].map(c => `<option value="${c}" ${s.c === c ? "selected" : ""}>${nombreCanal(c)}</option>`).join("")}</select>
+          <div class="stepper"><button type="button" aria-label="Menos" data-act="swn" data-id="${e.id}" data-j="${j}" data-d="-1">−</button><output>${s.n}</output><button type="button" aria-label="Más" data-act="swn" data-id="${e.id}" data-j="${j}" data-d="1">+</button></div>
+          <span class="valor">${cop(conIva(p * s.n))}</span>
+          ${sws.length > 1 ? `<button type="button" class="quitar" data-act="swq" data-id="${e.id}" data-j="${j}">Quitar</button>` : ""}</div>`;
+      });
+      h += `<div class="esp-pie"><button type="button" class="link-btn" data-act="swa" data-id="${e.id}">+ Agregar otro interruptor</button></div></section>`;
+    }
+    h += `</div>
+      <div class="info">${ico("hub")}<span>Incluimos el cerebro del sistema: <b>1 hub cableado</b> en el piso 1${S.casa.pisos > 1 ? ` y <b>${S.casa.pisos - 1} hub${S.casa.pisos > 2 ? "s" : ""} inalámbrico${S.casa.pisos > 2 ? "s" : ""}</b> para los demás pisos` : ""}.</span></div></div>`;
+    return h;
+  },
+  sonido() {
+    const esp = espacios();
+    return `
+      <div class="paso-meta">Sonido</div>
+      <h1>¿Dónde quieres música?</h1>
+      <p class="lead">Cada espacio lleva sonido estéreo (2 parlantes) y todos se conectan entre sí: pones la misma canción en toda la casa o una distinta en cada espacio.</p>
+      <div class="bloque">
+        <div class="opciones anchas">${Object.values(SON).map(s => `<div class="op" style="cursor:default"><b>${s.n}</b><span>${s.s}</span><span class="precio">${cop(conIva(s.p))} por espacio</span></div>`).join("")}</div>
+        <p class="sub"><span class="ejemplo">Precios de ejemplo</span> Los paquetes reales salen del catálogo cuando subas los productos nuevos.</p>
+        <section class="esp">${esp.map(e => `<div class="fila-op">${ico(e.i)}<div class="nom">${esc(e.n)}${S.casa.pisos > 1 ? `<small>Piso ${e.piso}</small>` : ""}</div>
+          <div class="seg">${[["", "Sin sonido"], ...Object.entries(SON).map(([k, s]) => [k, s.n])].map(([k, n]) => `<button type="button" data-act="son" data-id="${e.id}" data-v="${k}" aria-pressed="${(S.son[e.id] || "") === k}">${n}</button>`).join("")}</div></div>`).join("")}</section>
+        <div class="info">${ico("screen")}<span>¿Quieres manejar la música desde la pared? Más adelante puedes agregar una pantalla con sonido en ese espacio.</span></div>
+      </div>`;
+  },
+  cine() {
+    const esp = espacios();
+    return `
+      <div class="paso-meta">Cine en casa</div>
+      <h1>Elige tu cine en casa</h1>
+      <p class="lead">Tres paquetes listos. Si buscas algo muy específico, lo ajustamos contigo en la visita.</p>
+      <div class="bloque">
+        <div class="opciones anchas">${Object.entries(CINE).map(([k, c]) => `<button type="button" class="op" data-act="set" data-k="cine.nivel" data-v="${k}" aria-pressed="${S.cine.nivel === k}">${ico("film")}<b>Cine ${c.n}</b><span>${c.s}</span><span class="precio">${cop(conIva(c.p))}</span></button>`).join("")}</div>
+        <p class="sub"><span class="ejemplo">Precios y contenido de ejemplo</span></p>
+      </div>
+      <div class="bloque"><h2>¿En qué espacio va?</h2>
+        <div class="chips">${esp.map(e => `<button type="button" class="chip" data-act="set" data-k="cine.esp" data-v="${e.id}" aria-pressed="${S.cine.esp === e.id}">${esc(e.n)}</button>`).join("")}</div>
+      </div>`;
+  },
+  cerraduras() {
+    return `
+      <div class="paso-meta">Cerraduras</div>
+      <h1>¿En qué puertas quieres cerradura inteligente?</h1>
+      <p class="lead">Para cada puerta dinos de qué es y elige la línea. La instalación depende del tipo de puerta.</p>
+      <div class="bloque">${S.puertas.map((d, j) => `
+        <section class="esp">
+          <div class="esp-cab">${ico("lock")}<h3><input aria-label="Nombre de la puerta" data-puerta="${j}" value="${esc(d.n)}" style="border:none;background:transparent;font:inherit;font-weight:700;width:100%;padding:0"></h3>${S.puertas.length > 1 ? `<button type="button" class="quitar link-btn" data-act="pq" data-j="${j}">Quitar</button>` : ""}</div>
+          <div class="fila-op"><div class="nom">Tipo de puerta</div><div class="seg">${Object.entries(PUERTA).map(([k, [n]]) => `<button type="button" data-act="pt" data-j="${j}" data-v="${k}" aria-pressed="${d.tipo === k}">${n}</button>`).join("")}</div></div>
+          <div class="fila-op"><div class="nom">Línea</div><div class="seg">${Object.entries(CERR).map(([k, c]) => `<button type="button" data-act="pl" data-j="${j}" data-v="${k}" aria-pressed="${d.linea === k}" ${c.off ? "disabled" : ""}>${c.n}${c.off ? " · pronto" : ` · ${cop(conIva(c.p))}`}</button>`).join("")}</div></div>
+          ${d.tipo ? `<div class="fila-op"><div class="nom"><small>Instalación en puerta ${PUERTA[d.tipo][0].toLowerCase()}: ${cop(conIva(PUERTA[d.tipo][1]))}</small></div></div>` : ""}
+        </section>`).join("")}
+        <div><button type="button" class="btn-sec" data-act="pa">+ Agregar otra puerta</button></div>
+      </div>`;
+  },
+  opc() {
+    const esp = espacios();
+    return `
+      <div class="paso-meta">Cámaras y sensores</div>
+      <h1>Agrega lo que quieras en cada espacio</h1>
+      <p class="lead">Toca + en lo que quieras agregar. Si no necesitas nada en un espacio, déjalo así.</p>
+      <div class="bloque">${esp.map(e => { const o = S.opc[e.id] || {}; return `
+        <section class="esp"><div class="esp-cab">${ico(e.i)}<h3>${esc(e.n)}</h3>${S.casa.pisos > 1 ? `<span class="piso-n">Piso ${e.piso}</span>` : ""}</div>
+        ${Object.entries(OPC).map(([k, x]) => `<div class="fila-op">${ico(x.i)}<div class="nom">${x.n}<small>${x.s} · ${cop(conIva(x.p))}</small></div>
+          <div class="stepper"><button type="button" aria-label="Menos" data-act="opc" data-id="${e.id}" data-k="${k}" data-d="-1">−</button><output>${o[k] || 0}</output><button type="button" aria-label="Más" data-act="opc" data-id="${e.id}" data-k="${k}" data-d="1">+</button></div></div>`).join("")}
+        </section>`; }).join("")}</div>`;
+  },
+  pant() {
+    const esp = espacios();
+    return `
+      <div class="paso-meta">Pantallas premium</div>
+      <h1>Convierte tu casa en premium</h1>
+      <p class="lead">Una pantalla en la pared maneja luces, música y escenas, y tiene Alexa integrada. Se suma a tus interruptores, no los reemplaza.</p>
+      <div class="bloque">
+        <div class="opciones anchas">${Object.values(PANT).map(x => `<div class="op" style="cursor:default">${ico("screen")}<b>${x.n}</b><span>${x.s}</span><span class="precio">${cop(conIva(x.p))}</span></div>`).join("")}</div>
+        <section class="esp">${esp.map(e => `<div class="fila-op">${ico(e.i)}<div class="nom">${esc(e.n)}</div>
+          <div class="seg">${[["", "Sin pantalla"], ...Object.entries(PANT).map(([k, x]) => [k, x.ref])].map(([k, n]) => `<button type="button" data-act="pant" data-id="${e.id}" data-v="${k}" aria-pressed="${(S.pant[e.id] || "") === k}">${n}</button>`).join("")}</div></div>`).join("")}</section>
+      </div>`;
+  },
+  wifi() {
+    return `
+      <div class="paso-meta">Red WiFi</div>
+      <h1>Señal fuerte en toda tu casa</h1>
+      <p class="lead">Todo tu sistema depende de una buena red. Diseñamos la tuya con un router y los puntos de acceso que necesite cada piso.</p>
+      <div class="bloque">
+        <div class="opciones anchas">
+          <button type="button" class="op" data-act="wifi" data-v="1" aria-pressed="${S.wifi === true}">${ico("wifi")}<b>Sí, quiero la red WiFi</b><span>Un asesor la dimensiona según tus pisos y espacios.</span></button>
+          <button type="button" class="op" data-act="wifi" data-v="0" aria-pressed="${S.wifi === false && S.wifiResp}">${ico("home")}<b>Ya tengo buena señal</b><span>Lo revisamos en la visita técnica.</span></button>
+        </div>
+        <p class="sub"><span class="ejemplo">En estudio</span> La regla de cuántos equipos van se define al armar este módulo.</p>
+      </div>`;
+  },
+  voz() {
+    const esp = espacios();
+    return `
+      <div class="paso-meta">Control por voz</div>
+      <h1>¿Quieres manejar tu casa con la voz?</h1>
+      <p class="lead">Todo lo que cotizaste funciona con Alexa y Google: "Alexa, apaga la sala".</p>
+      <div class="bloque">
+        <div class="opciones anchas">
+          <button type="button" class="op" data-act="set" data-k="voz.modo" data-v="propio" aria-pressed="${S.voz.modo === "propio"}">${ico("mic")}<b>Ya tengo Alexa o Google</b><span>Lo dejamos conectado sin costo adicional.</span></button>
+          <button type="button" class="op" data-act="set" data-k="voz.modo" data-v="d1" aria-pressed="${S.voz.modo === "d1"}">${ico("screen")}<b>Agregar pantalla con Alexa</b><span>${PANT.d1.n} · ${cop(conIva(PANT.d1.p))} cada una</span></button>
+        </div>
+        ${S.voz.modo === "d1" ? `<h2>¿En qué espacios?</h2><div class="chips">${esp.map(e => `<button type="button" class="chip" data-act="vozesp" data-id="${e.id}" aria-pressed="${!!S.voz.esp[e.id]}">${esc(e.n)}</button>`).join("")}</div>` : ""}
+      </div>`;
+  },
+  resumen() {
+    const { caps, total } = calcular(), v = visitaValor(), limite = new Date(Date.now() + 10 * 864e5);
+    let h = `
+      <div class="paso-meta">Tu cotización</div>
+      <h1>${primerNombre() ? esc(primerNombre()) + ", esta" : "Esta"} es tu cotización</h1>
+      <p class="lead">Precios con IVA incluido. Revisa cada capítulo; puedes volver atrás y cambiar lo que quieras.</p>
+      <div class="bloque">`;
+    for (const c of caps) {
+      h += `<section class="cap-final"><div class="cap-final-cab">${ico(c.i)}<h3>${c.n}${c.ejemplo ? ' <span class="ejemplo">ejemplo</span>' : ""}</h3><b>${cop(conIva(c.eq + c.inst))}</b></div>
+        ${c.items.map(([t, p]) => `<div class="renglon"><span>${esc(t)}</span><span>${cop(conIva(p))}</span></div>`).join("")}
+        <div class="renglon inst"><span>Instalación y configuración</span><span>${cop(conIva(c.inst))}</span></div></section>`;
+    }
+    if (S.sis.cortinas) h += `<section class="cap-final"><div class="cap-final-cab">${ico("curtain")}<h3>Cortinas</h3><b>Con asesor</b></div><div class="renglon"><span>${(n => n === 0 ? "Sin espacios marcados" : n === 1 ? "1 espacio marcado" : n + " espacios marcados")(Object.keys(S.cort).filter(k => S.cort[k]).length)} · un asesor te llamará con la oferta</span><span></span></div></section>`;
+    if (S.sis.wifi && S.wifi) h += `<section class="cap-final"><div class="cap-final-cab">${ico("wifi")}<h3>Red WiFi</h3><b>Por definir</b></div><div class="renglon"><span>La dimensionamos según tus pisos y espacios</span><span></span></div></section>`;
+    h += `
+        <div class="total-final"><div class="t"><span>Total con IVA</span><b>${cop(total)}</b></div>
+          <p>La instalación no incluye obra civil (regatas, cajas nuevas o cableado que no exista). Esos trabajos se cotizan en la visita.</p></div>
+        <div class="gancho">${ico("gift")}<div><b>Toma tu oferta antes del ${limite.toLocaleDateString("es-CO", { day: "numeric", month: "long" })} y obtén 5% de descuento</b><span>Pagarías ${cop(total * .95)}.</span></div></div>
+        <div class="info">${ico("pin")}<span><b>Visita técnica: ${v ? cop(v) : "valor por confirmar"}</b>${S.casa.ciudad && !v ? " (fuera de Bogotá, Chía y Cajicá se suman viáticos)" : ""}. Se descuenta del total cuando tomas tu proyecto.</span></div>
+      </div>`;
+    return h;
+  },
+  visita() {
+    const dur = duracionVisita(), dias = franjas(dur), v = visitaValor();
+    const sel = dias.find(d => d.key === S.visita.dia);
+    return `
+      <div class="paso-meta">Visita técnica</div>
+      <h1>Agenda tu visita técnica</h1>
+      <p class="lead">Vamos a tu casa, confirmamos medidas y dejamos la oferta final. Dura unas ${dur} hora${dur > 1 ? "s" : ""} y cuesta ${v ? cop(v) : "un valor por confirmar"}; se descuenta de tu proyecto.</p>
+      <div class="bloque"><h2>Elige el día</h2>
+        <div class="dias" role="group" aria-label="Días disponibles">${dias.map(d => `<button type="button" class="dia" data-act="dia" data-v="${d.key}" aria-pressed="${S.visita.dia === d.key}"><small>${d.dsem}</small><b>${d.num}</b><small>${d.mes}</small></button>`).join("")}</div>
+        ${sel ? `<h2>Elige la hora</h2><div class="chips">${sel.horas.map(h => `<button type="button" class="chip" data-act="set" data-k="visita.hora" data-v="${h}" aria-pressed="${S.visita.hora === h}">${h}</button>`).join("")}</div>` : ""}
+        <p class="sub"><span class="ejemplo">Franjas de ejemplo</span> En la versión real las abres tú desde Ari. Se agenda con al menos 48 horas.</p>
+      </div>
+      <div class="bloque"><h2>¿Cómo quieres pagar la visita?</h2>
+        <div class="opciones anchas">
+          <button type="button" class="op" data-act="set" data-k="visita.pago" data-v="linea" aria-pressed="${S.visita.pago === "linea"}"><b>Pago en línea</b><span>Tarjeta, PSE o Nequi. (En el demo no se cobra.)</span></button>
+          <button type="button" class="op" data-act="set" data-k="visita.pago" data-v="transf" aria-pressed="${S.visita.pago === "transf"}"><b>Transferencia o Nequi</b><span>Te mostramos los datos y nos envías el soporte por WhatsApp.</span></button>
+          <button type="button" class="op" data-act="set" data-k="visita.pago" data-v="efectivo" aria-pressed="${S.visita.pago === "efectivo"}"><b>Efectivo</b><span>Pagas el día de la visita.</span></button>
+        </div>
+        ${S.visita.pago === "transf" ? `<div class="info">${ico("infoi")}<span>Nequi: <b>número por definir</b> · Banco: <b>por definir</b>. Envía el soporte al WhatsApp <b>321 507 3310</b>.</span></div>` : ""}
+      </div>
+      <div><button type="button" class="link-btn" data-act="sinvisita">Prefiero que me llamen primero</button></div>`;
+  },
+  listo() {
+    const { total } = calcular(), d = franjas(duracionVisita()).find(x => x.key === S.visita.dia);
+    const msg = `Hola Click Control, soy ${S.cli.nombre}. Acabo de armar mi cotización de domótica en clickcontrol.co/cotizador por ${cop(total)} (IVA incluido).` + (d && S.visita.hora ? ` Agendé la visita técnica para el ${d.largo} a las ${S.visita.hora}.` : "");
+    return `
+      <div class="paso-meta">¡Listo!</div>
+      <h1>${primerNombre() ? esc(primerNombre()) + ", tu" : "Tu"} cotización está lista</h1>
+      <p class="lead">${d && S.visita.hora ? `Tu visita quedó para el <b>${d.largo} a las ${S.visita.hora}</b>. ` : ""}Envíanos tu cotización por WhatsApp y te respondemos de una.</p>
+      <div class="bloque">
+        <div class="total-final"><div class="t"><span>Total con IVA</span><b>${cop(total)}</b></div><p>Con 5% de descuento si la tomas en los próximos 10 días: ${cop(total * .95)}.</p></div>
+        <div class="acciones">
+          <a class="accion wa" href="https://wa.me/${WA}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">${ico("chat", "")}Enviar a WhatsApp</a>
+          <button type="button" class="accion" data-act="demo" data-v="El PDF de la oferta se genera en la versión real.">${ico("doc", "")}Descargar PDF</button>
+          <button type="button" class="accion" data-act="demo" data-v="El correo se envía en la versión real${S.cli.correo ? " a " + S.cli.correo : ""}.">${ico("mail", "")}Enviar a mi correo</button>
+          <button type="button" class="accion" data-act="demo" data-v="En la versión real te llega un link para retomar o compartir.">${ico("link", "")}Guardar y compartir</button>
+        </div>
+        <p class="sub">WhatsApp de Click Control: <b>321 507 3310</b>. Si el botón no abre la app, escríbenos a ese número.</p>
+        <div><button type="button" class="link-btn" data-act="reiniciar">Empezar una cotización nueva</button></div>
+      </div>`;
+  }
+};
+
+/* Placa dibujada: el número de canales define las teclas */
+function placa(lineaK, c, mini) {
+  const L = LINEAS[lineaK]; let teclas = "", grid;
+  if (L.caja === "us") {
+    grid = `grid-template-rows:repeat(${c},1fr)`;
+    for (let i = 0; i < c; i++) teclas += `<span class="tecla"></span>`;
+  } else if (c === 4) {
+    grid = "grid-template-columns:1fr 1fr;grid-template-rows:repeat(3,1fr)";
+    for (let i = 0; i < 6; i++) teclas += `<span class="tecla ${i >= 4 ? "escena" : ""}"></span>`;
+  } else {
+    grid = `grid-template-columns:repeat(${c},1fr)`;
+    for (let i = 0; i < c; i++) teclas += `<span class="tecla"></span>`;
+  }
+  return `<div class="placa ${L.caja} ${L.color} ${mini ? "mini" : ""}" style="${grid}" aria-hidden="true">${teclas}</div>`;
+}
+
+/* Franjas de ejemplo: martes y jueves en la mañana, sábado temprano; mínimo 48 h */
+function franjas(dur) {
+  const out = [], min = Date.now() + 48 * 36e5, base = new Date(); base.setHours(0, 0, 0, 0);
+  const dsem = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  for (let i = 1; i <= 16 && out.length < 6; i++) {
+    const d = new Date(base.getTime() + i * 864e5), w = d.getDay();
+    let hs = w === 2 || w === 4 ? (dur > 1 ? ["9:00 a. m.", "11:00 a. m.", "2:00 p. m."] : ["9:00 a. m.", "10:00 a. m.", "11:00 a. m.", "2:00 p. m.", "3:00 p. m."]) : w === 6 ? ["8:00 a. m.", "10:00 a. m."] : null;
+    if (!hs) continue;
+    const t0 = new Date(d); t0.setHours(8);
+    if (t0.getTime() < min) continue;
+    out.push({ key: d.toISOString().slice(0, 10), dsem: dsem[w], num: d.getDate(), mes: d.toLocaleDateString("es-CO", { month: "short" }).replace(".", ""), largo: d.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" }), horas: hs });
+  }
+  return out;
+}
+
+/* ---------- Resumen lateral ---------- */
+function pintarResumen() {
+  const { caps, total } = calcular(), n = espacios().length;
+  $("#barraTotal").textContent = cop(total);
+  let h = `<h2>Tu cotización</h2>`;
+  if (primerNombre()) h += `<p class="res-hola">${esc(primerNombre())}${S.casa.tipo ? ` · ${S.casa.tipo.toLowerCase()}` : ""}${S.casa.ciudad ? ` en ${esc(S.casa.ciudad === "Otra" ? S.casa.otra || "otra ciudad" : S.casa.ciudad)}` : ""}${n ? ` · ${n} espacios` : ""}</p>`;
+  if (!caps.length) h += `<p class="vacio">Aquí verás el valor de cada capítulo a medida que eliges.</p>`;
+  for (const c of caps) h += `<div class="res-cap"><span>${c.n}</span><span>${cop(conIva(c.eq + c.inst))}</span></div>`;
+  if (S.sis.cortinas) h += `<div class="res-cap"><span>Cortinas</span><span>Con asesor</span></div>`;
+  h += `<div class="res-total"><span>Total con IVA</span><b>${cop(total)}</b></div><p class="res-nota">Incluye instalación y configuración. No incluye obra civil.</p>`;
+  $("#resumen").innerHTML = h;
+}
+
+/* ---------- Render ---------- */
+function render(foco) {
+  const l = pasos(), p = pasoActual();
+  $("#paso").innerHTML = VISTAS[p]();
+  $("#barraProg").style.width = Math.round((S.i / (l.length - 1)) * 100) + "%";
+  $("#atras").hidden = S.i === 0;
+  const sig = $("#siguiente");
+  sig.hidden = p === "listo";
+  sig.textContent = p === "datos" ? "Empezar" : p === "resumen" ? "Agendar visita" : p === "visita" ? "Confirmar" : "Siguiente";
+  sig.disabled = !valido(p);
+  pintarResumen();
+  guardar();
+  if (foco) { window.scrollTo({ top: 0 }); const h = $("#paso h1"); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } }
+}
+function ir(d) { const l = pasos(); S.i = Math.max(0, Math.min(l.length - 1, S.i + d)); render(true); }
+
+function setPath(path, v) { const ks = path.split("."); let o = S; while (ks.length > 1) o = o[ks.shift()]; o[ks[0]] = v; }
+
+document.addEventListener("input", e => {
+  const t = e.target;
+  if (t.dataset.f) { setPath(t.dataset.f, t.type === "checkbox" ? t.checked : t.value); $("#siguiente").disabled = !valido(pasoActual()); pintarResumen(); guardar(); }
+  if (t.dataset.puerta) { S.puertas[+t.dataset.puerta].n = t.value; guardar(); }
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.f) { setPath(t.dataset.f, t.type === "checkbox" ? t.checked : t.value); $("#siguiente").disabled = !valido(pasoActual()); guardar(); }
+  if (t.dataset.act === "swc") { S.sw[t.dataset.id][+t.dataset.j].c = +t.value; render(); }
+});
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const a = b.dataset.act, v = b.dataset.v;
+  if (b.tagName === "A") e.preventDefault();
+  switch (a) {
+    case "set": setPath(b.dataset.k, v); if (b.dataset.k === "visita.dia") S.visita.hora = ""; break;
+    case "pisos": S.casa.pisos = +v; if (!S.cuenta[1]) S.cuenta[1] = {}; break;
+    case "cnt": { const c = S.cuenta[b.dataset.p] = S.cuenta[b.dataset.p] || {}; c[b.dataset.k] = Math.max(0, Math.min(12, (c[b.dataset.k] || 0) + +b.dataset.d)); break; }
+    case "agregarPropio": { const inp = $("#nuevo-" + b.dataset.p), n = inp.value.trim(); if (!n) { inp.focus(); return; } S.propios.push({ piso: +b.dataset.p, nombre: n, id: "x" + Date.now() }); break; }
+    case "quitarPropio": S.propios = S.propios.filter(x => x.id !== b.dataset.id); break;
+    case "paquete": {
+      S.paquete = v; S.sis = { ilum: true }; PAQUETES[v].sis.forEach(k => S.sis[k] = true);
+      const esp = espacios(), sala = esp.find(x => x.k === "sala") || esp[0], hp = esp.find(x => x.k === "habppal");
+      if (S.sis.sonido && sala) { S.son = {}; S.son[sala.id] = v === "premium" ? "medio" : "basico"; if (v === "premium" && hp) S.son[hp.id] = "medio"; }
+      if (v === "premium" && sala) { S.pant = { [sala.id]: "d4" }; S.voz = { modo: "propio", esp: {} }; S.opc = { [sala.id]: { camara: 1, puerta: 1 } }; S.wifi = true; }
+      if (S.sis.cerraduras && !S.puertas[0].linea) S.puertas[0].linea = v === "premium" ? "premium" : "basica";
+      break;
+    }
+    case "sis": if (v === "ilum") return; S.sis[v] = !S.sis[v]; S.paquete = ""; break;
+    case "cort": { const id = b.dataset.id; S.cort[id] = !S.cort[id]; if (S.sw[id]) S.sw[id][0].c = S.cort[id] ? 4 : (ESP[id.split("-")[1]]?.sw[0][0] || 2); break; }
+    case "linea": S.linea = v; break;
+    case "swn": { const s = S.sw[b.dataset.id][+b.dataset.j]; s.n = Math.max(0, Math.min(9, s.n + +b.dataset.d)); break; }
+    case "swa": S.sw[b.dataset.id].push({ c: 1, n: 1 }); break;
+    case "swq": S.sw[b.dataset.id].splice(+b.dataset.j, 1); break;
+    case "son": if (v) S.son[b.dataset.id] = v; else delete S.son[b.dataset.id]; break;
+    case "pt": S.puertas[+b.dataset.j].tipo = v; break;
+    case "pl": S.puertas[+b.dataset.j].linea = v; break;
+    case "pa": S.puertas.push({ id: "p" + Date.now(), n: S.puertas.length === 1 ? "Puerta de servicio" : "Otra puerta", tipo: "", linea: "" }); break;
+    case "pq": S.puertas.splice(+b.dataset.j, 1); break;
+    case "opc": { const o = S.opc[b.dataset.id] = S.opc[b.dataset.id] || {}; o[b.dataset.k] = Math.max(0, Math.min(9, (o[b.dataset.k] || 0) + +b.dataset.d)); break; }
+    case "pant": if (v) S.pant[b.dataset.id] = v; else delete S.pant[b.dataset.id]; break;
+    case "wifi": S.wifi = v === "1"; S.wifiResp = true; break;
+    case "vozesp": S.voz.esp[b.dataset.id] = !S.voz.esp[b.dataset.id]; break;
+    case "dia": S.visita.dia = v; S.visita.hora = ""; break;
+    case "sinvisita": S.visita = { dia: "", hora: "", pago: "" }; ir(1); return;
+    case "politica": toast("El borrador de la política se redacta aparte y lo revisa un abogado."); return;
+    case "demo": toast(v); return;
+    case "reiniciar": S = nuevo(); render(true); return;
+  }
+  const y = window.scrollY; render(); window.scrollTo({ top: y });
+});
+
+$("#siguiente").addEventListener("click", () => {
+  const p = pasoActual();
+  if (!valido(p)) return;
+  if (p === "visita" && (!S.visita.dia || !S.visita.hora || !S.visita.pago)) { toast("Elige día, hora y forma de pago, o toca «Prefiero que me llamen primero»."); return; }
+  ir(1);
+});
+$("#atras").addEventListener("click", () => ir(-1));
+
+render();
+})();
+</script>
+
+</body>
+</html>
