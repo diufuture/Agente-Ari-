@@ -298,3 +298,11 @@ Posibles errores en la lista, por confirmar:
   - Bancolombia, ahorros 93292434012, Ariel Bravo Benavides, C.C. 79.950.402, llave 3215073310.
 - **Marca:** logo recibido (azul noche #00182B y cian #6EE3FB).
 - **Datos de la empresa (RUT):** CLICK CONTROL S.A.S., NIT 900.884.929-4, Cra 15 # 140-22, Bogotá D.C., gerencia@clickcontrol.co. Con ellos se redactó el borrador de política en `docs/politica-tratamiento-datos.md`.
+
+## Revisión del demo 2 (estilo visual)
+
+- **Paquetes y niveles con jerarquía de color** para llevar al cliente a lo más alto: **Premium/Pro/Avanzado** en dorado (corona, «Recomendado»), **Confort/Medio** en cian (estrella, «Más elegido»), **Esencial/Básico** sobrio. Aplica a paquetes rápidos, sonido, cine y cerraduras.
+- **Colores por sistema** y por tipo de vivienda y estado (íconos con color propio).
+- **Fotos de producto** sin fondo blanco, sobre un fondo tipo estudio acorde al tema (claro u oscuro), con sombra suave.
+- **Una sola foto por estilo** de interruptor; los canales se eligen en 4 botones iguales (1 · 2 · 3 · 4), que no se descuadran con la línea europea.
+- **Collage por paquete:** cada paquete (sonido, cine…) muestra una imagen o collage de lo que incluye. En Ari, la sección Paquetes debe permitir **subir la imagen del paquete**, o armarla sola con las fotos de sus productos. En el demo se ve con los parlantes y el amplificador de la lista de agosto.
