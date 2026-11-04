@@ -185,3 +185,13 @@ Posibles errores en la lista, por confirmar:
 **19. Instalación y configuración:**
 - Se cobra como **un porcentaje de lo cotizado** en equipos.
 - Se presenta como **un valor prácticamente final** de instalación y configuración, con una aclaración: **trabajos adicionales** (romper, pasar cables que no existan, casos muy específicos) **se evalúan en sitio**.
+
+**19b. Porcentaje de instalación por capítulo** (calculado sobre el precio **antes de IVA**):
+
+| Capítulo | % instalación y configuración |
+|---|---|
+| Interruptores (iluminación) | **15%** |
+| Cine en casa | **20%** (va a techo, con cableado) |
+| Cámaras | **15%** |
+
+- **La obra civil NO está incluida** en la instalación. Muchas veces la hace el cliente, y cuando la hace Click Control depende del tipo de obra y se mira aparte. La oferta debe decir claramente que el valor es **instalación + configuración de equipos, sin obra civil**.
