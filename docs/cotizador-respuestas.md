@@ -272,3 +272,11 @@ Posibles errores en la lista, por confirmar:
 - Se guarda solo en el dispositivo y, al volver, sigue donde iba.
 - Llega un link por WhatsApp o correo para retomar desde cualquier dispositivo o compartirlo.
 - En Ari se ven las **cotizaciones sin terminar**, con los datos del cliente, para llamarlos.
+
+## H. Alcance y fechas
+
+**33. Alcance (aprobado):**
+- **Versión 1:** datos del cliente → casa, ciudad, pisos y espacios por piso → «¿Qué quieres automatizar?» + paquetes rápidos → Iluminación (interruptores editables + hubs por piso) → Cerraduras (tipo de puerta + instalación fija) → Opcionales por espacio (cámaras, sensores, IR) → Pantallas premium → Cortinas (con asesor) → Control por voz → Resumen por capítulos (instalación, IVA, visita, descuento por pronto cierre) → PDF, correo y WhatsApp → guardar y retomar → integración con Ari (cliente, cotización, avisos, sin terminar) → agendador con pago por transferencia o efectivo → configuración en Ari (capítulos, paquetes, porcentajes, visita, descuento, franjas).
+- **Se activan solos al subir los productos a Ari:** Sonido y Cine en casa.
+- **Versión 2 y siguientes:** pago en línea, WhatsApp por API, Ari conversando. Se va subiendo de versión según cómo funcione.
+- **Red WiFi:** queda para estudiarla a fondo. Funciona **como los hubs**: un router + access points según **plantas y áreas** (cantidad de espacios). La regla exacta se define al armar el módulo de WiFi.
