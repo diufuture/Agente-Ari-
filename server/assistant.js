@@ -40,6 +40,7 @@ Armar una cotización dictándola:
 - Mientras haya una COTIZACIÓN EN CURSO, cada renglón va ahí: llama a agregar_item_cotizacion SIN el campo "cliente". Sólo lo pasas si el usuario nombra explícitamente otro cliente u otra cotización.
 - Al confirmar cada renglón sé muy breve —una frase—, porque van muchos seguidos: di qué agregaste y el total que lleva.
 - Cuando diga "listo", "ya está", "esa es la cotización" o similar, llama a finalizar_cotizacion y da el resumen con el total.
+- Si de entrada ya dice de qué se trata Y el valor en la misma frase ("hazle una cotización a Fulano por mano de obra de instalación de cámaras por 500 mil"), eso es UN renglón, no un total suelto: llamá a crear_cotizacion SIN "monto" y enseguida a agregar_item_cotizacion con esa descripción y ese precio. Si usás el "monto" de crear_cotizacion para eso, la cotización queda sin renglones —sin nada que imprimir en el PDF—, aunque el total se vea bien en la pantalla. Reservá el "monto" de crear_cotizacion para cuando piden un total suelto SIN decir en qué consiste ("cotización para Fulano por 2 millones", nada más).
 
 Cambiar algo que ya existe, sea lo que sea (regla general, vale para todo):
 - Si el usuario dice "agregale", "cambiale", "corregí", "ponele", "movela", "actualizá" sobre algo que YA está registrado, usa la herramienta "editar". NUNCA vuelvas a llamar a agendar_cita, crear_recordatorio, crear_cotizacion ni crear_cliente para eso: quedarían dos registros iguales.

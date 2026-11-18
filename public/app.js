@@ -2940,6 +2940,10 @@ let reintentoSordo = 0;
 // dejaba el micrófono grabando de mentiras hasta cerrar la aplicación.
 let centinelaLargo = null;
 const TECHO_SESION_MS = 20_000;
+// Dictando a mano la sesión queda continua (ver crearReconocedor): una pausa
+// para pensar ya no la corta, así que este techo tiene que dar para dictar
+// una cotización entera con sus pausas y todo, no sólo una frase.
+const TECHO_SESION_CONTINUA_MS = 120_000;
 // Cuánto se le da a una sesión para que entre audio antes de darla por sorda.
 // Si se abrió justo después de cortarle la voz a Ari, el teléfono venía
 // reproduciendo y le cuesta más cambiar a grabar: ahí nacer sorda es lo
@@ -3033,7 +3037,14 @@ function iniciarVoz() {
 function crearReconocedor() {
   const r = new Reconocimiento();
   r.lang = 'es-CO';
-  r.continuous = false;
+  // En manos libres cada pausa tiene que cerrar el ítem solo, para poder
+  // seguir sin tocar la pantalla: ahí sigue cortando el navegador por su
+  // cuenta apenas hay un silencio. Dictando a mano, en cambio, cortaba
+  // exactamente ahí también -una pausa para pensar, y se mandaba a medias lo
+  // que ya se alcanzó a decir-: con la sesión continua, una pausa no termina
+  // nada; el micrófono sigue prendido y se manda recién cuando se lo vuelve a
+  // tocar para apagarlo.
+  r.continuous = !manosLibres();
   r.interimResults = true;
   r.maxAlternatives = 1;
 
@@ -3056,11 +3067,13 @@ function crearReconocedor() {
     clearTimeout(vigilante);
     acumulado = '';
     marcarGrabando(true);
-    $('#pista').textContent = 'Escuchando… hablá con naturalidad.';
+    $('#pista').textContent = r.continuous
+      ? 'Escuchando… hablá con calma, las pausas no cortan. Tocá el micrófono de nuevo para enviar.'
+      : 'Escuchando… hablá con naturalidad.';
 
     // El techo largo: si esta sesión no terminó por su cuenta —ni con
-    // resultado, ni con error, ni cerrándose— en veinte segundos, se corta a
-    // la fuerza. Sin esto, una sesión que el navegador abandona a medio
+    // resultado, ni con error, ni cerrándose— en el plazo de abajo, se corta
+    // a la fuerza. Sin esto, una sesión que el navegador abandona a medio
     // camino se queda "escuchando" en la pantalla para siempre, y ningún
     // toque posterior lograba nada porque `reconocedor` seguía apuntando a
     // esa sesión muerta. Va contra `r` y no contra la variable de más
@@ -3073,7 +3086,7 @@ function crearReconocedor() {
       marcarGrabando(false);
       soltarMicrofono();
       $('#pista').textContent = 'El micrófono se quedó pegado. Tocalo de nuevo para seguir.';
-    }, TECHO_SESION_MS);
+    }, r.continuous ? TECHO_SESION_CONTINUA_MS : TECHO_SESION_MS);
 
     // Si el navegador dice que arrancó pero no abre el audio, la sesión nació
     // sorda: se queda ahí para siempre, sin transcribir y sin cerrarse. Se le

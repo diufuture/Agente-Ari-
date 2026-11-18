@@ -247,6 +247,23 @@ Mientras está en curso, un aviso fijo arriba muestra el título, cuántos
 renglones lleva y el total corriendo, con botones para verla o finalizarla a
 mano.
 
+**Una pausa para pensar ya no corta el dictado.** Dictando a mano (tocando el
+micrófono vos mismo, sin manos libres), la sesión queda abierta mientras lo
+necesites: una pausa larga para pensar la frase ya no manda a medias lo que
+se alcanzó a decir. Se envía recién cuando volvés a tocar el micrófono para
+apagarlo —el cuadro de texto va mostrando todo lo dictado mientras tanto, por
+si querés revisarlo antes de mandarlo—. Con **manos libres** sigue siendo al
+revés a propósito: ahí una pausa tiene que cerrar el ítem sola, porque es lo
+que permite pasar al siguiente sin tocar nada.
+
+**Describir el renglón y su valor en la misma frase.** Si de entrada decís de
+qué se trata Y cuánto vale ("hacele una cotización a Fulano por mano de obra
+de instalación de cámaras por 500 mil"), eso entra como un renglón de
+verdad —no sólo como un total pegado a la cotización—, así que ya sale con su
+botón de PDF y queda lista para imprimir. El total suelto sin renglones queda
+reservado para cuando de verdad no se dice en qué consiste ("cotización para
+Fulano por 2 millones", sin más detalle).
+
 El interruptor **manos libres** (junto al de voz) cierra el círculo: después de
 cada respuesta el micrófono se reabre solo, así se puede seguir dictando sin
 tocar el teléfono. Tolera tres silencios seguidos —el tiempo de pasar de una

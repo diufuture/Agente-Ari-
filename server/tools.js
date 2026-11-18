@@ -140,7 +140,13 @@ export const HERRAMIENTAS = [
       properties: {
         cliente: clienteProp,
         titulo: { type: 'string', description: 'Qué se está cotizando.' },
-        monto: { type: 'number', description: 'Valor total. Si no lo dicen, omítelo.' },
+        monto: {
+          type: 'number',
+          description: 'SÓLO para un total suelto, sin decir en qué consiste ("cotización para Fulano por 2 millones", nada más). '
+            + 'Si el usuario describe el servicio o producto junto con su valor en la misma frase, ESO ES UN RENGLÓN: omití este campo '
+            + 'y agregalo enseguida con agregar_item_cotizacion (descripcion + precio_unitario) — si no, la cotización queda sin '
+            + 'renglones y sin nada que imprimir en el PDF, aunque el total se vea bien en la pantalla.',
+        },
         moneda: { type: 'string', description: 'Por defecto COP.' },
         descripcion: { type: 'string' },
         vence_en: { type: 'string', description: 'Fecha de vencimiento YYYY-MM-DD.' },
